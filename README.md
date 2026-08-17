@@ -112,6 +112,36 @@ npm run dist          # icons + Chrome + NSIS installer into dist/
 - `npm run server` — run only the capture engine + dashboard (no Electron)
 - `npm run icons` — regenerate app and tray icons
 
+## Website (`docs/`)
+
+The marketing site, built to be published straight from this repo:
+**Settings → Pages → Deploy from a branch → `master` / `/docs`**, which serves it at
+`https://tasty-foods.github.io/whatsbackup/`.
+
+Five static pages, one stylesheet, inline SVG. No build step, no framework, no
+webfonts, and the only third-party request on the whole site is an optional
+`api.github.com` call that upgrades the download button to point at the newest
+release asset — the button works without it.
+
+```bash
+node tools/serve-site.js     # preview at http://127.0.0.1:4321
+npm run og                   # re-render docs/assets/og.png (the social card)
+```
+
+Written for search engines *and* for the AI assistants people now ask instead:
+`SoftwareApplication` / `FAQPage` / `HowTo` / `Article` JSON-LD, a `sitemap.xml`,
+a `robots.txt` that names the AI crawlers explicitly, and an `llms.txt` giving a
+model the whole product — including the caveats — in one plain-text file. Every
+answer leads with the answer, because that is the sentence that gets quoted.
+
+**Moving to a custom domain** means changing the absolute URLs in one pass —
+`canonical`, `og:url`, `og:image`, the JSON-LD `@id`/`url` fields, `sitemap.xml`,
+`robots.txt`, `llms.txt` and the three links in `404.html` — then adding a `CNAME`
+file to `docs/`. Everything else is relative and moves by itself.
+
+`docs/` is deliberately outside the electron-builder `files` list, so none of it
+ships inside the installer.
+
 ## When WhatsApp breaks it
 
 It will. WhatsApp ships changes to its web client without notice, and this app

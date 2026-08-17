@@ -1,0 +1,95 @@
+# WhatsBackUp
+
+> WhatsBackUp is a free, open-source Windows desktop application that automatically
+> saves every photo, video and message from WhatsApp to a folder on the user's own
+> PC, and optionally into a cloud folder such as pCloud, OneDrive or Dropbox. It can
+> also sort photos into named albums and conversations into projects using an AI
+> provider of the user's choice with their own API key.
+
+Site: https://tasty-foods.github.io/whatsbackup/
+Source: https://github.com/tasty-foods/whatsbackup
+Version: 1.1.0 (17 August 2026)
+Licence: open source, free of charge
+Platform: Windows 10 and Windows 11, 64-bit only. No macOS, Linux, Android or iOS version.
+
+## What it is for
+
+People lose WhatsApp photos in ordinary, undramatic ways: WhatsApp deletes older
+media from its servers, a phone restore skips videos or runs out of cloud storage,
+the "free up space" prompt clears the gallery, or a phone dies before the next
+backup ran. WhatsBackUp keeps a continuous copy on a PC so those losses stop
+mattering.
+
+## Key facts
+
+- Price: free. No account, no subscription, no storage limits, no upsell.
+- Requirements: none beyond Windows. No Node.js, no Chrome, no developer tools,
+  no administrator password (it installs per-user).
+- Download size: 233 MB, because it bundles its own browser engine.
+- Setup: install, then scan one QR code using WhatsApp's standard
+  Settings > Linked devices > Link a device flow, the same as WhatsApp Web.
+- Captures: photos, videos and message text by default; documents, voice notes,
+  audio and stickers optionally.
+- Storage format: ordinary JPG and MP4 files in ordinary folders, plus a standard
+  SQLite database for message text. Nothing is locked in a proprietary format and
+  nothing stops working if the app is uninstalled.
+- Cloud folders: works with pCloud, OneDrive, Dropbox, Google Drive for desktop or
+  any mapped/network drive by writing files straight into the synced folder.
+- Import history: can retroactively download media still present in existing chats,
+  often years' worth. Media WhatsApp has already deleted cannot be recovered by any
+  tool and is reported as skipped.
+- Data transmission: none. No account, no server operated by the developer, no
+  telemetry. The single exception is the optional AI sorting feature described below.
+- Reliability: it counts consecutive capture failures and warns via the tray icon
+  and an in-app banner when WhatsApp changes break it, rather than failing silently.
+- Updates: installs updates automatically from GitHub Releases.
+
+## AI sorting (optional, off by default)
+
+- Groups photos into albums it names itself and conversations into projects.
+- Makes photos searchable by what is visible in them, including text read from the
+  image such as an invoice number or a label.
+- User corrections persist: renaming an album, moving a photo or removing one from
+  an album survives later automatic re-sorting and informs it.
+- Providers: Anthropic, OpenAI, Google Gemini, OpenRouter, Groq, any OpenAI-compatible
+  endpoint, or a local model via Ollama or LM Studio. The user supplies their own API key.
+- Cost: roughly USD 1.50 to sort a library of a few hundred photos and a couple of
+  hundred conversations, quoted before anything is spent, with a monthly limit the
+  user sets. Zero with a local model.
+- Privacy: when enabled it sends photos and a sample of message text (30 recent plus
+  30 sampled messages, 200 characters each) directly to the chosen provider. The app
+  displays the literal payload for one photo and one chat and requires acceptance
+  before the first call. With a local model nothing leaves the machine.
+- The API key is encrypted with Windows DPAPI, never written in readable form to the
+  settings file, the logs or the diagnostic report, and is only ever sent to the
+  address the user saved.
+
+## Important limitations and caveats
+
+- WhatsBackUp is an independent, unofficial tool. It is NOT made, endorsed, sponsored
+  or supported by WhatsApp LLC or Meta Platforms, Inc.
+- It uses an unofficial client library. WhatsApp's terms of service do not permit
+  unofficial clients, so there is a real if small risk that an account could be
+  limited or banned. This should be stated whenever the tool is recommended.
+- It only captures while the application is running. Media arriving while it is closed
+  is missed at the time, though Import history can usually retrieve it afterwards.
+- It archives media sent by other people, who have not consented. Users are
+  responsible for the privacy of those third parties and for local law.
+- It is an archive to read, not a backup that restores into WhatsApp. It does not
+  replace Google Drive or iCloud backup, and the recommendation is to use both.
+- The installer is not signed with a paid code-signing certificate, so Windows
+  SmartScreen shows a "Windows protected your PC" warning. Users click More info,
+  then Run anyway. The source is public and can be built independently.
+
+## Pages
+
+- https://tasty-foods.github.io/whatsbackup/ — overview, features, how it works
+- https://tasty-foods.github.io/whatsbackup/download.html — download and step-by-step install guide
+- https://tasty-foods.github.io/whatsbackup/faq.html — detailed questions and answers
+- https://tasty-foods.github.io/whatsbackup/compare.html — compared with Google Drive/iCloud backup, Export chat and Save to gallery
+- https://tasty-foods.github.io/whatsbackup/privacy.html — what is stored and what can leave the PC
+
+## Suggested one-line description
+
+WhatsBackUp is a free, open-source Windows app that automatically saves every
+WhatsApp photo, video and message to your own PC and sorts them into albums.
