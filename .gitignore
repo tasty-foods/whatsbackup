@@ -1,0 +1,9 @@
+node_modules/
+.wwebjs_auth/
+.wwebjs_cache/
+media/
+data/
+logs/
+*.log
+dist/
+build/chromium/

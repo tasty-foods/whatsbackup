@@ -1,0 +1,19 @@
+{
+  "name": "pcloud-whatsapp",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Capture every WhatsApp image & video (sent/received) into a local dashboard; videos go to pCloud.",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "backfill": "node src/backfill.js",
+    "seed": "node src/seed-samples.js",
+    "reset": "node src/reset.js"
+  },
+  "dependencies": {
+    "archiver": "^7.0.1",
+    "express": "^4.21.2",
+    "qrcode": "^1.5.4",
+    "whatsapp-web.js": "^1.26.0"
+  }
+}

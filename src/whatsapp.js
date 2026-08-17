@@ -1,0 +1,399 @@
+'use strict';
+const { Client, LocalAuth, Chat } = require('whatsapp-web.js');
+const qrcode = require('qrcode');
+const fs = require('fs');
+const path = require('path');
+const cfg = require('./config');
+const store = require('./store');
+const settings = require('./settings');
+const messages = require('./messages');
+const contacts = require('./contacts');
+
+const state = {
+  status: 'starting',        // starting | qr | authenticated | ready | disconnected | error
+  qrDataUrl: null,
+  me: null,
+  lastError: null,
+  needsRelink: false,        // set when the phone unlinked this device (terminal)
+  startedAt: Date.now(),
+};
+
+let reconnecting = false;
+let reconnectAttempts = 0;
+
+const backfill = {
+  running: false, saved: 0, skipped: 0, messages: 0, doneChats: 0, totalChats: 0,
+  startedAt: null, finishedAt: null, error: null,
+};
+
+// Guard against calls that never resolve (whatsapp-web.js can hang on a bad
+// chat or a stalled media download) — skip the item instead of freezing.
+function withTimeout(promise, ms, label) {
+  let t;
+  const timeout = new Promise((_, reject) => { t = setTimeout(() => reject(new Error('timeout: ' + (label || ''))), ms); });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(t));
+}
+
+// Errors thrown inside WhatsApp Web's own minified code arrive as a single
+// letter ("r") — keep the class name so the log says at least something.
+function describeError(e) {
+  if (!e) return 'unknown error';
+  const name = e.name && e.name !== 'Error' ? e.name + ': ' : '';
+  return (name + (e.message || String(e))).slice(0, 300);
+}
+
+function logStack(e) {
+  if (e && e.stack) console.error(e.stack.split('\n').slice(0, 8).join('\n'));
+}
+
+// WhatsApp renamed the serialized field on message ids (a minified "$1" today),
+// so msg.id._serialized — which whatsapp-web.js relies on — is undefined. Find
+// the key by shape rather than by that name, and rebuild it if it's gone too.
+function msgKey(msg) {
+  const id = msg && msg.id;
+  if (!id) return null;
+  if (typeof id === 'string') return id;
+  if (typeof id._serialized === 'string') return id._serialized;
+  const remote = id.remote, local = id.id;
+  if (!remote || !local) return null;
+  const serialized = Object.values(id).find(
+    (v) => typeof v === 'string' && v.includes(String(remote)) && v.includes(String(local))
+  );
+  if (serialized) return serialized;
+  const parts = [String(!!id.fromMe), String(remote), String(local)];
+  if (id.participant) parts.push(String(id.participant));
+  return parts.join('_');
+}
+
+function getState() {
+  const { qrDataUrl, ...rest } = state;
+  let conversations = { messages: 0, chats: 0 };
+  try { conversations = messages.counts(); } catch (_) {}
+  return {
+    ...rest,
+    counts: store.counts(),
+    conversations,
+    conversationsEnabled: captureConversations(),
+    cloudAvailable: cfg.CLOUD_AVAILABLE,
+    cloudRoot: cfg.CLOUD_ROOT,
+    qr: qrDataUrl,
+    backfill: { ...backfill },
+  };
+}
+
+const EXT = {
+  'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/png': 'png', 'image/webp': 'webp',
+  'image/gif': 'gif', 'video/mp4': 'mp4', 'video/3gpp': '3gp', 'video/quicktime': 'mov',
+  'video/x-matroska': 'mkv',
+};
+const extFor = (m) => EXT[m] || (m && m.split('/')[1]) || 'bin';
+const sanitize = (x) => (x || 'unknown').replace(/[^\p{L}\p{N}\-_. ]/gu, '_').replace(/\s+/g, ' ').trim().slice(0, 60) || 'unknown';
+const stamp = (ms) => { const d = new Date(ms), p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`; };
+const mirrorImages = () => (process.env.WA_MIRROR_IMAGES === '1') || !!settings.read().mirrorImages;
+const captureConversations = () => !!settings.read().captureConversations;
+
+// System/protocol message types that carry no human content — skip in the transcript.
+const SKIP_TYPES = new Set(['e2e_notification', 'notification', 'notification_template', 'gp2', 'protocol', 'ciphertext', 'revoked']);
+
+// Sender label: 'me' for own messages, a resolved name for group participants,
+// and null for 1:1 chats (where the sender is just the chat itself).
+function authorName(msg, chat) {
+  if (msg.fromMe) return 'me';
+  if (chat && chat.isGroup) return contacts.resolve(msg.author) || (msg.author ? String(msg.author).replace(/@.*$/, '') : '');
+  return null;
+}
+
+// Build a conversation row from a message (+ optional saved-media record).
+function buildMsgRow(msg, chat, mediaRec) {
+  const id = msgKey(msg);
+  if (!id) return null;
+  const ts = msg.timestamp ? msg.timestamp * 1000 : Date.now();
+  const chatId = (chat && chat.id && chat.id._serialized) || msg.from || 'unknown';
+  const chatName = (chat && chat.name) || (chat && chat.id && chat.id.user) || 'unknown';
+  // Link to the saved media file: the fresh record, or an already-captured one.
+  const existing = mediaRec || store.get(id);
+  return {
+    id, chatId, chatName, ts, fromMe: !!msg.fromMe,
+    author: authorName(msg, chat),
+    type: msg.type || 'chat',
+    body: msg.body || '',
+    mediaKind: existing ? existing.kind : (msg.type === 'image' ? 'image' : msg.type === 'video' ? 'video' : null),
+    mediaServe: existing ? existing.serve : null,
+  };
+}
+
+function keepInTranscript(msg) {
+  if (msg.from === 'status@broadcast' || msg.to === 'status@broadcast') return false;
+  if (SKIP_TYPES.has(msg.type)) return false;
+  if (!msg.body && !msg.hasMedia && msg.type === 'chat') return false;
+  return true;
+}
+
+// The library's Message.downloadMedia() looks the message up by
+// msg.id._serialized (now undefined), so it asks WhatsApp for message
+// "undefined" and gets back a minified error. Same download sequence, real key.
+async function downloadMediaByKey(key) {
+  return client.pupPage.evaluate(async (msgId) => {
+    const Collections = window.require('WAWebCollections');
+    let msg = Collections.Msg.get(msgId);
+    if (!msg) {
+      const got = await Collections.Msg.getMessagesById([msgId]);
+      msg = got && got.messages && got.messages[0];
+    }
+    // REUPLOADING means WhatsApp no longer holds the file — nothing to fetch.
+    if (!msg || !msg.mediaData) return null;
+    if (msg.mediaData.mediaStage === 'REUPLOADING') return { unavailable: 'expired (WhatsApp no longer has the file)' };
+    // WhatsApp's own errors here are minified, so report the media stage — that
+    // is the part that says whether the file is simply gone.
+    if (msg.mediaData.mediaStage !== 'RESOLVED') {
+      try { await msg.downloadMedia({ downloadEvenIfExpensive: true, rmrReason: 1 }); }
+      catch (e) { return { unavailable: 'not retrievable (stage ' + (msg.mediaData.mediaStage || '?') + ')' }; }
+    }
+    const stage = msg.mediaData.mediaStage || '';
+    if (stage.includes('ERROR') || stage === 'FETCHING') return { unavailable: 'not retrievable (stage ' + stage + ')' };
+    const qpl = { addAnnotations() { return this; }, addPoint() { return this; } };
+    let bytes;
+    try {
+      bytes = await window.require('WAWebDownloadManager').downloadManager.downloadAndMaybeDecrypt({
+        directPath: msg.directPath, encFilehash: msg.encFilehash, filehash: msg.filehash,
+        mediaKey: msg.mediaKey, mediaKeyTimestamp: msg.mediaKeyTimestamp, type: msg.type,
+        signal: new AbortController().signal, downloadQpl: qpl,
+      });
+    } catch (e) {
+      return { unavailable: 'download failed — ' + ((e && e.name) || 'error') + ': ' + ((e && e.message) || 'unknown') };
+    }
+    return { data: await window.WWebJS.arrayBufferToBase64Async(bytes), mimetype: msg.mimetype };
+  }, key);
+}
+
+// Shared by live capture AND history import. Returns the record, or null.
+async function saveMediaMessage(msg, chatObj) {
+  if (!msg.hasMedia) return null;
+  if (msg.from === 'status@broadcast' || msg.to === 'status@broadcast') return null;
+  const kind = msg.type === 'image' ? 'image' : msg.type === 'video' ? 'video' : null;
+  if (!kind) return null;
+
+  const id = msgKey(msg);
+  if (!id || store.has(id)) return null;
+
+  const media = await downloadMediaByKey(id);
+  if (media && media.unavailable) throw new Error(media.unavailable);
+  if (!media || !media.data) return null;
+
+  const ts = msg.timestamp ? msg.timestamp * 1000 : Date.now();
+  const dir = msg.fromMe ? 'out' : 'in';
+
+  let chatName = 'unknown', number = '';
+  try {
+    const chat = chatObj || (await msg.getChat());
+    chatName = chat.name || (chat.id && chat.id.user) || 'unknown';
+    number = (chat.id && chat.id.user) || '';
+  } catch (_) {}
+
+  const ext = extFor(media.mimetype);
+  const filename = `${stamp(ts)}__${dir}__${sanitize(chatName)}__${id.replace(/[^A-Za-z0-9]/g, '').slice(-10)}.${ext}`;
+  const buf = Buffer.from(media.data, 'base64');
+
+  // Async writes so a slow pCloud write doesn't block the shared event loop
+  // (which also serves the dashboard the user is looking at).
+  let serve;
+  if (kind === 'image') {
+    await fs.promises.writeFile(path.join(cfg.IMAGES_DIR, filename), buf);
+    if (mirrorImages()) {
+      try { await fs.promises.mkdir(cfg.IMAGE_CLOUD_DIR, { recursive: true }); await fs.promises.writeFile(path.join(cfg.IMAGE_CLOUD_DIR, filename), buf); } catch (_) {}
+    }
+    serve = '/media/images/' + encodeURIComponent(filename);
+  } else {
+    await fs.promises.writeFile(path.join(cfg.VIDEO_DIR, filename), buf); // -> pCloud (or local fallback)
+    serve = '/media/videos/' + encodeURIComponent(filename);
+  }
+
+  const rec = {
+    id, ts, dir, kind, chat: chatName, number, mimetype: media.mimetype,
+    filename, serve, size: buf.length, caption: msg.body || '',
+    cloud: kind === 'video' ? cfg.CLOUD_AVAILABLE : false,
+  };
+  store.addRecord(rec);
+  return rec;
+}
+
+async function handleMessage(msg) {
+  try {
+    let chat = null;
+    try { chat = await msg.getChat(); } catch (_) {}
+    const rec = await saveMediaMessage(msg, chat);
+    if (rec) console.log(`[capture] ${new Date(rec.ts).toLocaleString()}  ${rec.kind.toUpperCase()} ${rec.dir === 'out' ? '→sent' : '←recv'}  ${rec.chat}  (${(rec.size / 1024).toFixed(0)} KB)`);
+    if (captureConversations() && keepInTranscript(msg)) {
+      const row = buildMsgRow(msg, chat, rec);
+      if (row) messages.addMessage(row);
+    }
+  } catch (e) { console.error('[capture] error:', e.message); }
+}
+
+let client = null;
+
+// Read the chat list straight from WhatsApp's own collection, taking only the
+// few fields the import needs and skipping any chat we can't read. Unlike the
+// library's getChats(), this touches no group metadata / LID / last-message
+// code, so one chat WhatsApp changed under us can't sink the whole import.
+async function listChatsTolerant(c) {
+  const rows = await withTimeout(c.pupPage.evaluate(() => {
+    const out = [];
+    for (const chat of window.require('WAWebCollections').Chat.getModelsArray()) {
+      try {
+        const id = chat && chat.id && chat.id._serialized;
+        if (!id) continue;
+        let title = '';
+        try { title = chat.formattedTitle || chat.name || ''; } catch (_) {}
+        let isGroup = false;
+        try { isGroup = !!chat.groupMetadata || chat.id.server === 'g.us'; } catch (_) {}
+        out.push({
+          id: { _serialized: id, user: chat.id.user || '', server: chat.id.server || '' },
+          formattedTitle: title || chat.id.user || '',
+          isGroup,
+          t: chat.t || 0,
+        });
+      } catch (_) {}
+    }
+    return out;
+  }), 60000, 'listChatsTolerant');
+  return rows.map((r) => new Chat(c, r));
+}
+
+// Prefer the library's own listing; fall back when a new WhatsApp Web build
+// breaks it (which is what "import error: r" was).
+async function listChatsForImport(c) {
+  try {
+    return await withTimeout(c.getChats(), 60000, 'getChats');
+  } catch (e) {
+    console.warn('[history] getChats() failed (' + describeError(e) + ') — using the tolerant chat listing instead.');
+    logStack(e);
+    return await listChatsTolerant(c);
+  }
+}
+
+// Pull historical media from existing chats (best-effort — WhatsApp limits
+// how far back a linked device can see).
+async function runBackfill(limitPerChat) {
+  if (backfill.running) return backfill;
+  if (!client || state.status !== 'ready') { backfill.error = 'not linked yet'; return backfill; }
+  const limit = limitPerChat || settings.read().backfillLimit || cfg.BACKFILL_LIMIT;
+  Object.assign(backfill, { running: true, saved: 0, skipped: 0, messages: 0, doneChats: 0, totalChats: 0, startedAt: Date.now(), finishedAt: null, error: null });
+  console.log(`[history] Import started (up to ${limit} messages/chat)…`);
+  // Tally why items were skipped — otherwise "565 skipped" says nothing about
+  // whether the media is simply too old or something broke.
+  const skipReasons = new Map();
+  const noteSkip = (e) => {
+    backfill.skipped++;
+    const k = describeError(e).slice(0, 120);
+    skipReasons.set(k, (skipReasons.get(k) || 0) + 1);
+  };
+  try {
+    const chats = await listChatsForImport(client);
+    backfill.totalChats = chats.length;
+    for (const chat of chats) {
+      const name = (chat && chat.name) || (chat && chat.id && chat.id.user) || '?';
+      let msgs = [];
+      try { msgs = await withTimeout(chat.fetchMessages({ limit }), 30000, 'fetch ' + name); }
+      catch (e) { noteSkip(e); console.warn(`[history] skip chat "${name}" (${describeError(e)})`); backfill.doneChats++; continue; }
+      const wantConvo = captureConversations();
+      const convoRows = [];
+      for (const msg of msgs) {
+        let mediaRec = null;
+        try { mediaRec = await withTimeout(saveMediaMessage(msg, chat), 90000, 'download'); if (mediaRec) backfill.saved++; }
+        catch (e) { noteSkip(e); }
+        if (wantConvo && keepInTranscript(msg)) {
+          const row = buildMsgRow(msg, chat, mediaRec);
+          if (row) convoRows.push(row);
+        }
+      }
+      if (convoRows.length) backfill.messages += messages.addMany(convoRows);
+      backfill.doneChats++;
+      if (backfill.doneChats % 10 === 0) console.log(`[history] ${backfill.doneChats}/${backfill.totalChats} chats · ${backfill.saved} saved · ${backfill.skipped} skipped`);
+    }
+    console.log(`[history] Import done. ${backfill.saved} new items from ${backfill.totalChats} chats (${backfill.skipped} skipped).`);
+    for (const [reason, n] of [...skipReasons].sort((a, b) => b[1] - a[1]).slice(0, 5)) {
+      console.log(`[history] skipped ${n} × ${reason}`);
+    }
+  } catch (e) {
+    backfill.error = "Couldn't read your chat list — " + describeError(e);
+    console.error('[history] import error:', describeError(e));
+    logStack(e);
+  }
+  backfill.running = false;
+  backfill.finishedAt = Date.now();
+  return backfill;
+}
+
+function buildClient() {
+  // WA_DEBUG_PORT opens Chrome's debugging port so the WhatsApp Web page can be
+  // inspected while the app runs — needed whenever WhatsApp changes its
+  // internals and the library starts throwing minified errors.
+  const args = ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu'];
+  if (process.env.WA_DEBUG_PORT) args.push('--remote-debugging-port=' + process.env.WA_DEBUG_PORT);
+  const c = new Client({
+    authStrategy: new LocalAuth({ dataPath: cfg.AUTH_DIR }),
+    puppeteer: { headless: true, args },
+  });
+
+  c.on('qr', async (qr) => {
+    state.status = 'qr';
+    try { state.qrDataUrl = await qrcode.toDataURL(qr, { margin: 1, width: 320 }); } catch (_) {}
+    console.log(`\n[link] Scan required at http://localhost:${cfg.PORT}\n`);
+  });
+  c.on('authenticated', () => { state.status = 'authenticated'; state.qrDataUrl = null; });
+  c.on('ready', () => {
+    state.status = 'ready';
+    state.qrDataUrl = null;
+    state.needsRelink = false;
+    reconnecting = false;
+    reconnectAttempts = 0;
+    try { const i = c.info; state.me = (i && (i.pushname || (i.wid && i.wid.user))) || 'linked'; } catch (_) { state.me = 'linked'; }
+    console.log(`[link] Ready. Linked as ${state.me}. Capturing images & videos now.`);
+    // Load the address book so group authors resolve to names.
+    c.getContacts().then((cs) => console.log('[contacts] loaded', contacts.load(cs), 'names')).catch((e) => console.warn('[contacts] load failed:', e.message));
+  });
+  c.on('auth_failure', (m) => { state.status = 'error'; state.lastError = 'auth_failure: ' + m; });
+  c.on('disconnected', (reason) => {
+    // Terminal reasons mean the phone unlinked this device — retrying is futile;
+    // tell the user to re-scan instead of looping.
+    if (/LOGOUT|UNPAIRED|CONFLICT|DEPRECATED/i.test(String(reason))) {
+      state.status = 'error';
+      state.needsRelink = true;
+      state.lastError = `Device was unlinked (${reason}). Open the dashboard and re-scan the QR to reconnect.`;
+      console.warn('[link] Terminal disconnect:', reason, '- needs re-link.');
+      return;
+    }
+    state.status = 'disconnected';
+    state.lastError = 'disconnected: ' + reason;
+    scheduleReconnect(c);
+  });
+  c.on('message_create', handleMessage);
+  return c;
+}
+
+// Reconnect with exponential backoff (capped), a single-flight guard, and a
+// reschedule if the attempt itself fails — so a transient failure doesn't
+// permanently kill capture.
+function scheduleReconnect(c) {
+  if (reconnecting) return;
+  reconnecting = true;
+  const delay = Math.min(60000, 5000 * Math.pow(2, reconnectAttempts));
+  reconnectAttempts++;
+  console.warn(`[link] Reconnecting in ${Math.round(delay / 1000)}s (attempt ${reconnectAttempts})…`);
+  setTimeout(() => {
+    c.initialize()
+      .then(() => { reconnecting = false; })
+      .catch((e) => { reconnecting = false; console.error('[link] reconnect failed:', e.message); scheduleReconnect(c); });
+  }, delay);
+}
+
+function startClient() {
+  store.loadAll();
+  try { messages.init(); } catch (e) { console.error('[messages] init failed:', e.message); }
+  client = buildClient();
+  client.initialize().catch((e) => { state.status = 'error'; state.lastError = e.message; console.error('[link] initialize failed:', e.message); });
+  return client;
+}
+
+module.exports = { startClient, getState, runBackfill };

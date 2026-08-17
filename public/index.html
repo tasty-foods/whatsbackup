@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WhatsApp Media</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖼️</text></svg>" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">🖼️</span>
+      <div>
+        <div class="title">WhatsApp Media</div>
+        <div class="sub" id="sub">Loading…</div>
+      </div>
+    </div>
+    <div class="controls">
+      <div class="tabs viewtoggle" id="viewtoggle">
+        <button data-v="media" class="active">🖼 Media</button>
+        <button data-v="convo">💬 Conversations</button>
+      </div>
+      <input id="search" type="search" placeholder="Filter by chat / contact…" autocomplete="off" />
+      <div class="tabs media-only" id="tabs">
+        <button data-f="all" class="active">All</button>
+        <button data-f="image">Images</button>
+        <button data-f="video">Videos</button>
+        <button data-f="in">Received</button>
+        <button data-f="out">Sent</button>
+      </div>
+      <a id="zip" class="btn media-only" href="/api/zip" title="Videos stay in your pCloud folder">⭳ Download all images</a>
+      <button id="open-settings" class="btn icon" title="Settings">⚙︎</button>
+    </div>
+  </header>
+
+  <!-- ===== Media view ===== -->
+  <div id="view-media">
+    <section id="link" class="link hidden">
+      <div class="link-card">
+        <h2 id="link-title">Link your WhatsApp</h2>
+        <div id="qrwrap"><div class="spinner"></div></div>
+        <ol>
+          <li>Open <b>WhatsApp Business</b> on your phone</li>
+          <li>Tap <b>Settings → Linked devices → Link a device</b></li>
+          <li>Scan the code above</li>
+        </ol>
+        <p class="hint">You only do this once. After linking, every image and video you send or receive shows up here automatically.</p>
+      </div>
+    </section>
+    <main id="gallery" class="gallery"></main>
+    <div id="empty" class="empty hidden">No media yet. New images and videos appear here the moment they arrive — or open <b>⚙︎ Settings → Import history</b> to pull in older ones.</div>
+  </div>
+
+  <!-- ===== Conversations view ===== -->
+  <div id="view-convo" class="convo hidden">
+    <aside class="chatlist">
+      <div class="chatlist-head">
+        <input id="convo-search" type="search" placeholder="Search messages…" autocomplete="off" />
+      </div>
+      <div id="chats" class="chats"></div>
+    </aside>
+    <section class="thread">
+      <div class="thread-head" id="thread-head"><span class="th-name">Select a conversation</span></div>
+      <div class="thread-body" id="thread-body">
+        <div class="thread-placeholder">Pick a chat on the left to read the conversation. Text stays on this PC; media opens from your gallery / pCloud.</div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Lightbox -->
+  <div id="lightbox" class="lightbox hidden">
+    <button class="lb-close" id="lb-close">✕</button>
+    <button class="lb-nav lb-prev" id="lb-prev">‹</button>
+    <div class="lb-stage" id="lb-stage"></div>
+    <button class="lb-nav lb-next" id="lb-next">›</button>
+    <div class="lb-meta" id="lb-meta"></div>
+  </div>
+
+  <!-- Settings -->
+  <div id="settings" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2>Settings</h2>
+        <button class="modal-close" id="settings-close">✕</button>
+      </div>
+      <div class="modal-body">
+
+        <div class="sec">
+          <div class="sec-title">Connection</div>
+          <div class="row"><span id="conn-status" class="muted">…</span></div>
+        </div>
+
+        <div class="sec">
+          <div class="sec-title">Import old images, videos &amp; conversations</div>
+          <p class="muted small">Pulls media and message history already in your chats (as far back as WhatsApp lets a linked device see). Safe to run anytime.</p>
+          <div class="row">
+            <label class="lbl">Scan up to
+              <input id="backfill-limit" type="number" min="50" max="5000" step="50" class="num" /> messages per chat
+            </label>
+          </div>
+          <div class="row">
+            <button id="btn-backfill" class="btn primary">⧉ Import history now</button>
+            <span id="backfill-status" class="muted small"></span>
+          </div>
+          <div class="progress hidden" id="backfill-progress"><div class="bar" id="backfill-bar"></div></div>
+        </div>
+
+        <div class="sec">
+          <div class="sec-title">Conversations</div>
+          <label class="row toggle">
+            <input type="checkbox" id="capture-convos" />
+            <span class="switch"></span>
+            <span>Capture &amp; store message text (so you can read and search conversations)</span>
+          </label>
+          <p class="muted small">Message text is kept <b>only on this PC</b> (not uploaded to pCloud).</p>
+          <div class="row wrap">
+            <button id="btn-export" class="btn">Export full transcript (local HTML)</button>
+            <span id="export-status" class="muted small"></span>
+          </div>
+        </div>
+
+        <div class="sec">
+          <div class="sec-title">Cloud backup (pCloud)</div>
+          <p class="muted small">Videos always save to pCloud. Turn this on to also back up images there, so the pCloud folder alone can rebuild your media.</p>
+          <label class="row toggle">
+            <input type="checkbox" id="mirror-images" />
+            <span class="switch"></span>
+            <span>Also back up every <b>image</b> to pCloud</span>
+          </label>
+          <div class="row">
+            <input id="cloud-root" type="text" class="txt" placeholder="P:/WhatsApp Media" />
+            <button id="btn-checkpath" class="btn">Check</button>
+          </div>
+          <div class="row"><span id="path-status" class="muted small"></span></div>
+        </div>
+
+        <div class="sec">
+          <div class="sec-title">Where everything lives</div>
+          <table class="paths" id="paths"></table>
+        </div>
+
+        <div class="sec">
+          <div class="sec-title">Maintenance</div>
+          <div class="row wrap">
+            <button id="btn-remove-samples" class="btn">Remove sample images</button>
+            <button id="btn-restart" class="btn">Restart app</button>
+          </div>
+          <p class="muted small" id="restart-note"></p>
+        </div>
+
+      </div>
+      <div class="modal-foot">
+        <span id="save-status" class="muted small"></span>
+        <button id="settings-save" class="btn primary">Save settings</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
