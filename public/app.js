@@ -260,7 +260,7 @@ async function loadItems(initial) {
   } catch (e) { /* transient */ }
 }
 /* ---------- Desktop bridge (absent when opened in a plain browser) ---------- */
-const desktop = window.desktop && window.desktop.available ? window.desktop : null;
+const bridge = window.desktop && window.desktop.available ? window.desktop : null;
 let appInfo = null;
 
 /* ---------- Settings ---------- */
@@ -345,12 +345,12 @@ async function loadSettings() {
       ['WhatsApp link', p.auth], ['Dashboard address', 'http://localhost:' + d.port],
     ].map(([k, v]) => `<tr><td class="k">${k}</td><td class="v">${escapeHtml(v)}</td></tr>`).join('');
 
-    if (desktop && !appInfo) appInfo = await desktop.info();
+    if (bridge && !appInfo) appInfo = await bridge.info();
     if (appInfo) {
       S.version.textContent = `Version ${appInfo.version}${appInfo.packaged ? '' : ' (running from source)'}`;
       writeField('startWithWindows', 'bool', appInfo.startWithWindows);
     } else {
-      S.version.textContent = 'Running in a browser — desktop features are in the app window.';
+      S.version.textContent = 'Running in a browser — bridge features are in the app window.';
     }
   } catch (e) { S.saveStatus.textContent = 'Could not load settings'; }
 }
@@ -377,7 +377,7 @@ S.save.addEventListener('click', async () => {
     if (v !== undefined) body[key] = v;
   }
   try {
-    if (desktop) await desktop.setStartup(body.startWithWindows);
+    if (bridge) await bridge.setStartup(body.startWithWindows);
     const r = await (await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json();
     S.saveStatus.innerHTML = '<span class="ok-text">Saved ✓</span>';
     S.restartNote.textContent = r.restartRequired
@@ -390,15 +390,15 @@ S.save.addEventListener('click', async () => {
 /* ---------- Folder pickers ---------- */
 async function pickInto(inputId, title) {
   const el = $(inputId);
-  if (!desktop) { el.focus(); return; }
-  const dir = await desktop.pickFolder({ title, defaultPath: el.value || undefined });
+  if (!bridge) { el.focus(); return; }
+  const dir = await bridge.pickFolder({ title, defaultPath: el.value || undefined });
   if (dir) el.value = dir;
 }
 $('btn-browse-media').addEventListener('click', () => pickInto('set-mediaRoot', 'Where should media be saved?'));
 $('btn-browse-cloud').addEventListener('click', () => pickInto('set-cloudRoot', 'Choose your cloud folder'));
 $('btn-open-media').addEventListener('click', async () => {
   const target = $('set-mediaRoot').value.trim() || (appInfo && appInfo.paths.images);
-  if (desktop && target) desktop.openPath(target);
+  if (bridge && target) bridge.openPath(target);
 });
 $('btn-checkpath').addEventListener('click', async () => {
   const value = $('set-cloudRoot').value.trim();
@@ -423,21 +423,21 @@ $('btn-unlink').addEventListener('click', async () => {
 
 /* ---------- App actions ---------- */
 $('btn-check-updates').addEventListener('click', () => {
-  if (desktop) desktop.checkUpdates();
-  else alert('Updates are handled by the desktop app.');
+  if (bridge) bridge.checkUpdates();
+  else alert('Updates are handled by the bridge app.');
 });
 $('btn-open-logs').addEventListener('click', async () => {
-  if (!desktop) return;
-  const info = appInfo || (appInfo = await desktop.info());
-  desktop.openPath(info.paths.logs);
+  if (!bridge) return;
+  const info = appInfo || (appInfo = await bridge.info());
+  bridge.openPath(info.paths.logs);
 });
 $('btn-copy-diag').addEventListener('click', async () => {
-  if (desktop) { await desktop.copyDiagnostics(); S.restartNote.textContent = 'Diagnostic report copied to the clipboard — paste it into an email.'; }
+  if (bridge) { await bridge.copyDiagnostics(); S.restartNote.textContent = 'Diagnostic report copied to the clipboard — paste it into an email.'; }
 });
 $('btn-restart').addEventListener('click', async () => {
   if (!confirm('Restart the capture engine? It reconnects using your saved link (no re-scan).')) return;
   S.restartNote.textContent = 'Restarting… the dashboard reconnects in a few seconds.';
-  if (desktop) desktop.restart();
+  if (bridge) bridge.restart();
   else { try { await fetch('/api/restart', { method: 'POST' }); } catch (e) {} }
 });
 $('btn-remove-samples').addEventListener('click', async () => {
@@ -493,7 +493,7 @@ S.btnExport.addEventListener('click', async () => {
     S.exportStatus.innerHTML = r.ok
       ? `<span class="ok-text">Saved ${r.messages} messages from ${r.chats} chats →</span> <span class="small">${escapeHtml(r.dir)}</span>`
       : `<span class="bad-text">${escapeHtml(r.error || 'failed')}</span>`;
-    if (r.ok && desktop) desktop.openPath(r.dir);
+    if (r.ok && bridge) bridge.openPath(r.dir);
   } catch (e) { S.exportStatus.textContent = 'Export failed'; }
   S.btnExport.disabled = false;
 });
@@ -502,7 +502,7 @@ S.btnExport.addEventListener('click', async () => {
 const healthBanner = $('health-banner');
 let healthDismissed = false;
 $('health-dismiss').addEventListener('click', () => { healthDismissed = true; healthBanner.classList.add('hidden'); });
-$('health-update').addEventListener('click', () => { if (desktop) desktop.checkUpdates(); });
+$('health-update').addEventListener('click', () => { if (bridge) bridge.checkUpdates(); });
 
 function updateConn(s) {
   if (S.conn) {
@@ -541,7 +541,7 @@ async function maybeRunWizard() {
   try { d = await (await fetch('/api/settings')).json(); } catch (e) { return; }
   if (d.settings.setupComplete) return;
 
-  if (desktop) appInfo = appInfo || await desktop.info();
+  if (bridge) appInfo = appInfo || await bridge.info();
   $('wz-default-path').textContent = appInfo ? appInfo.paths.mediaRoot : '';
 
   WZ.show('welcome');
@@ -564,8 +564,8 @@ async function maybeRunWizard() {
     btn.disabled = true;
     const status = $('wz-import-status');
     status.innerHTML = 'Copying… this can take a few minutes for the WhatsApp link.';
-    if (desktop.onMigrateProgress) desktop.onMigrateProgress((m) => { status.textContent = `Copying ${m.step}…`; });
-    const r = await desktop.migrate(appInfo.oldInstall.path);
+    if (bridge.onMigrateProgress) bridge.onMigrateProgress((m) => { status.textContent = `Copying ${m.step}…`; });
+    const r = await bridge.migrate(appInfo.oldInstall.path);
     btn.disabled = false;
     status.innerHTML = r.ok ? `<span class="ok-text">${escapeHtml(r.message)}</span>` : `<span class="bad-text">${escapeHtml(r.message)}</span>`;
     if (r.ok) {
@@ -578,8 +578,8 @@ async function maybeRunWizard() {
     $('wz-custom-row').style.display = document.querySelector('input[name="wz-loc"]:checked').value === 'custom' ? '' : 'none';
   }));
   $('wz-browse-media').addEventListener('click', async () => {
-    if (!desktop) return;
-    const dir = await desktop.pickFolder({ title: 'Where should media be saved?' });
+    if (!bridge) return;
+    const dir = await bridge.pickFolder({ title: 'Where should media be saved?' });
     if (dir) $('wz-media-root').value = dir;
   });
   $('wz-storage-next').addEventListener('click', async () => {
@@ -595,8 +595,8 @@ async function maybeRunWizard() {
   });
 
   $('wz-browse-cloud').addEventListener('click', async () => {
-    if (!desktop) return;
-    const dir = await desktop.pickFolder({ title: 'Choose your cloud folder' });
+    if (!bridge) return;
+    const dir = await bridge.pickFolder({ title: 'Choose your cloud folder' });
     if (dir) $('wz-cloud-root').value = dir;
   });
   $('wz-cloud-skip').addEventListener('click', async () => { await saveWizard({ cloudRoot: '', mirrorImages: false }); WZ.show('startup'); });
@@ -612,14 +612,14 @@ async function maybeRunWizard() {
 
   $('wz-finish').addEventListener('click', async () => {
     const startup = $('wz-startup').checked;
-    if (desktop) await desktop.setStartup(startup);
+    if (bridge) await bridge.setStartup(startup);
     await saveWizard({
       startWithWindows: startup,
       captureConversations: $('wz-convos').checked,
       setupComplete: true,
     });
     WZ.done();
-    if (desktop) desktop.restart();     // folders only take effect on a fresh start
+    if (bridge) bridge.restart();     // folders only take effect on a fresh start
   });
 }
 

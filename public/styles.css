@@ -280,8 +280,11 @@ table.paths td.v { color: var(--text); font-family: ui-monospace, Consolas, mono
 .wizard { position: fixed; inset: 0; z-index: 90; background: var(--bg);
   display: flex; align-items: flex-start; justify-content: center; padding: 48px 16px; overflow-y: auto; }
 .wizard.hidden { display: none; }
+/* auto margins centre it when there's room, without clipping a tall step on a
+   short window the way align-items:center would */
 .wizard-card { width: 100%; max-width: 620px; background: var(--panel);
-  border: 1px solid var(--line); border-radius: 18px; padding: 32px 34px; box-shadow: var(--shadow); }
+  border: 1px solid var(--line); border-radius: 18px; padding: 32px 34px; box-shadow: var(--shadow);
+  margin: auto 0; }
 .wz-step.hidden { display: none; }
 .wizard h1 { margin: 0 0 8px; font-size: 24px; }
 .wizard .lead { color: var(--muted); margin: 0 0 20px; }
