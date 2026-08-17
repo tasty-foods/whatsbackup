@@ -1,7 +1,7 @@
 {
   "name": "whatsbackup",
   "productName": "WhatsBackUp",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Saves every WhatsApp image, video and message to your PC — and to your cloud folder.",
   "author": {
@@ -50,11 +50,24 @@
       "!node_modules/**/{test,__tests__,docs,example,examples}/**"
     ],
     "extraResources": [
-      { "from": "build/chromium", "to": "chromium" },
-      { "from": "build/icons", "to": "icons" }
+      {
+        "from": "build/chromium",
+        "to": "chromium"
+      },
+      {
+        "from": "build/icons",
+        "to": "icons"
+      }
     ],
     "win": {
-      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "icon": "build/icon.ico",
       "artifactName": "WhatsBackUp-Setup-${version}.${ext}"
     },

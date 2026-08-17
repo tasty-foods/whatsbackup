@@ -179,6 +179,18 @@ function updateTray() {
   ]));
 }
 
+// Windows matches login items by the exact command line, so the same path and
+// args have to go into the read as went into the write — otherwise it reports
+// "off" for an entry it just wrote, and the settings toggle flips itself back.
+const LOGIN_ITEM = { path: process.execPath, args: ['--hidden'] };
+const startupEnabled = () => {
+  try { return app.getLoginItemSettings(LOGIN_ITEM).openAtLogin; } catch (_) { return false; }
+};
+const setStartup = (enabled) => {
+  app.setLoginItemSettings({ ...LOGIN_ITEM, openAtLogin: !!enabled });
+  return startupEnabled();
+};
+
 function currentPaths() {
   const s = settings.read();
   const mediaRoot = (s.mediaRoot && s.mediaRoot.trim()) || path.join(HOME, 'media');
@@ -279,7 +291,7 @@ function registerIpc() {
     packaged: isPackaged,
     home: HOME,
     paths: currentPaths(),
-    startWithWindows: app.getLoginItemSettings().openAtLogin,
+    startWithWindows: startupEnabled(),
     oldInstall: migrate.findOldInstall(ROOT),
   }));
 
@@ -299,9 +311,9 @@ function registerIpc() {
   });
 
   ipcMain.handle('wb:setStartup', (_e, enabled) => {
-    app.setLoginItemSettings({ openAtLogin: !!enabled, args: ['--hidden'] });
-    settings.write({ startWithWindows: !!enabled });
-    return app.getLoginItemSettings().openAtLogin;
+    const now = setStartup(enabled);
+    settings.write({ startWithWindows: now });
+    return now;
   });
 
   ipcMain.handle('wb:restart', () => { restartEngine(); return true; });
@@ -346,9 +358,7 @@ if (!app.requestSingleInstanceLock()) {
     // Keep the login-item registration in step with the saved setting, in case
     // the app was moved or reinstalled.
     const s = settings.read();
-    if (s.startWithWindows !== app.getLoginItemSettings().openAtLogin) {
-      app.setLoginItemSettings({ openAtLogin: !!s.startWithWindows, args: ['--hidden'] });
-    }
+    if (s.startWithWindows !== startupEnabled()) setStartup(s.startWithWindows);
 
     startEngine();
     watchHealth();
