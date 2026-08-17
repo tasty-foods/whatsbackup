@@ -131,4 +131,16 @@ function costOf(provider, model, tokensIn, tokensOut) {
   return (tokensIn / 1e6) * p.in + (tokensOut / 1e6) * p.out;
 }
 
-module.exports = { PRESETS, PRICES, priceFor, costOf };
+// Used only by the spending cap. Reporting an unknown price as $0 is honest;
+// letting the cap treat it as free is not — that would make "unlisted model"
+// a way to buy an unlimited budget. Unknown work is counted at the dearest
+// rate we know of, so the cap errs towards stopping too early.
+const CAP_FALLBACK = { in: 5, out: 25 };
+
+function capCostOf(provider, model, tokensIn, tokensOut) {
+  if (PRESETS[provider] && PRESETS[provider].local) return 0;
+  const p = PRICES[model] || CAP_FALLBACK;
+  return (tokensIn / 1e6) * p.in + (tokensOut / 1e6) * p.out;
+}
+
+module.exports = { PRESETS, PRICES, priceFor, costOf, capCostOf };

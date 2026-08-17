@@ -73,6 +73,7 @@ function housRules() {
     let line = null;
     if (r.action === 'rename' && d.name) line = `A group the user renamed to "${d.name}" must keep that exact name.`;
     else if (r.action === 'move' && d.groupName) line = `The user placed "${(d.summary || '').slice(0, 60)}" in "${d.groupName}" — respect that kind of placement.`;
+    else if (r.action === 'unfile' && d.summary) line = `The user took "${(d.summary || '').slice(0, 60)}" out of every group — leave that kind of item unsorted.`;
     else if (r.action === 'reject' && d.name) line = `Do not recreate a group called "${d.name}" — the user removed it.`;
     if (line && !seen.has(line)) { seen.add(line); lines.push(line); }
   }
@@ -127,6 +128,18 @@ async function arrange(cfg, kind, entries, { signal } = {}) {
 
   const { groups, placed } = validate(res.json, entries.length);
 
+  // "Nothing groups well" is a legitimate answer, and so is one where every
+  // proposal was too thin to keep. Either way the rewrite below would empty
+  // every album and then delete it — including one the user named. Keep what
+  // is already there instead; the call is still billed because it happened.
+  if (!groups.length) {
+    return {
+      groups: 0, placed: 0, unsorted: entries.length, coverage: 0,
+      usage: res.usage, cost: res.cost, costCap: res.costCap,
+      note: 'the model proposed no usable groups — the existing albums were left alone',
+    };
+  }
+
   // Existing user placements are re-applied after the AI's, so a correction is
   // never undone by a later re-arrange.
   const userPlaced = ai.db().prepare(`SELECT kind, ref_id, group_id FROM ai_group_members WHERE source = 'user' AND kind IN (${kindFilter(kind)})`).all();
@@ -172,6 +185,7 @@ async function arrange(cfg, kind, entries, { signal } = {}) {
     coverage: entries.length ? Math.round((placed / entries.length) * 100) : 0,
     usage: res.usage,
     cost: res.cost,
+    costCap: res.costCap,
   };
 }
 

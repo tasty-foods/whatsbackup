@@ -24,7 +24,7 @@ let state = {
   running: false,
   phase: 'idle',          // idle | labelling | arranging
   done: 0, total: 0, failed: 0, skipped: 0,
-  cost: 0, tokensIn: 0, tokensOut: 0,
+  cost: 0, costCap: 0, tokensIn: 0, tokensOut: 0,
   message: '',
   error: null,
   startedAt: null,
@@ -70,6 +70,9 @@ function status() {
     ...state,
     jobs: counts,
     spendThisMonth: ai.spendSince(monthStart.getTime()),
+    // What the cap is actually counting — the same number unless a model with
+    // no published price was used, in which case it is the dearest-rate guess.
+    budgetUsed: ai.spendCapSince(monthStart.getTime()),
     budget: s.aiMonthlyBudget || 0,
     groups: { media: ai.listGroups('media').length, chat: ai.listGroups('chat').length },
     lastRun: ai.lastRun(),
@@ -173,11 +176,15 @@ async function runOneJob(cfg, job) {
   return { skipped: 'unknown job type' };
 }
 
+// The cap has to bite even when the model has no published price, or picking an
+// unlisted model would quietly buy an unlimited budget. Unpriced work is
+// charged against the cap at the dearest rate we know; what gets *reported* as
+// spent stays honest and only counts what we can actually price.
 function budgetExceeded() {
   const s = settings.read();
   if (!s.aiMonthlyBudget) return false;
   const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
-  return ai.spendSince(monthStart.getTime()) + state.cost >= s.aiMonthlyBudget;
+  return ai.spendCapSince(monthStart.getTime()) + Math.max(state.cost, state.costCap) >= s.aiMonthlyBudget;
 }
 
 async function drainQueue(cfg) {
@@ -197,6 +204,7 @@ async function drainQueue(cfg) {
           state.done++;
           if (r.usage) { state.tokensIn += r.usage.in; state.tokensOut += r.usage.out; }
           if (r.cost) state.cost += r.cost;
+          if (r.costCap) state.costCap += r.costCap;
         }
       } catch (e) {
         const retryable = e instanceof AiError ? e.retryable : true;
@@ -206,16 +214,19 @@ async function drainQueue(cfg) {
         } else {
           ai.finishJob(job.id, 'error', e.message);
           state.failed++;
-          // An auth or certificate problem will fail every remaining item the
-          // same way — stop rather than burn the queue down.
-          if (e instanceof AiError && (e.kind === 'auth' || e.kind === 'cert')) {
+          // An auth problem, a certificate problem or a model name the service
+          // doesn't recognise will fail every remaining item the same way —
+          // stop rather than burn the queue down.
+          if (e instanceof AiError && (e.kind === 'auth' || e.kind === 'cert' || e.kind === 'model')) {
             state.error = e.message;
             cancelRequested = true;
           }
-          // A model that refuses one image will refuse all of them. Note it
-          // once and let the rest of the photos skip past for free; the chats
-          // are text and can still be sorted.
-          if (job.type === 'label_image' && e instanceof AiError && (e.kind === 'model' || e.status === 400)) {
+          // A model that refuses one image refuses all of them. Note it once
+          // and let the rest of the photos skip past for free; the chats are
+          // text and can still be sorted. Only a rejection of the request
+          // itself counts — a wrong model name is a 404 and is handled above,
+          // and must not be reported as "this model cannot see".
+          if (job.type === 'label_image' && e instanceof AiError && [400, 413, 415, 422].includes(e.status)) {
             noteVisionOff(cfg);
             state.message = 'This model cannot read images — photos were left unsorted. Conversations are unaffected.';
           }
@@ -254,7 +265,7 @@ async function run({ arrangeOnly = false } = {}) {
   cancelRequested = false;
   state = {
     running: true, phase: 'labelling', done: 0, total: 0, failed: 0, skipped: 0,
-    cost: 0, tokensIn: 0, tokensOut: 0, message: '', error: null, startedAt: Date.now(), runId: null,
+    cost: 0, costCap: 0, tokensIn: 0, tokensOut: 0, message: '', error: null, startedAt: Date.now(), runId: null,
   };
   state.runId = ai.startRun('full', cfg.model, cfg.provider);
 
@@ -269,18 +280,26 @@ async function run({ arrangeOnly = false } = {}) {
         if (why === 'cancelled') state.message = state.error || 'Stopped.';
       }
 
-      if (!cancelRequested) {
+      // The two arrange calls are the largest of the whole run. Announcing that
+      // spending has stopped and then making them would be a lie, and the
+      // "just re-arrange" button never goes through drainQueue at all — so the
+      // cap is checked here too, not only in the labelling loop.
+      if (budgetExceeded()) {
+        state.message = 'Stopped: the monthly budget cap was reached.';
+      } else if (!cancelRequested) {
         state.phase = 'arranging';
         if (s.aiAnalyseImages !== false) {
           const r = await arrange.arrange(cfg, 'media', entriesFor('media'));
           if (r.cost) state.cost += r.cost;
-          console.log(`[ai] albums: ${r.groups} groups, ${r.coverage}% of items placed`);
-          state.message = `${r.groups} albums · ${r.coverage}% sorted`;
+          if (r.costCap) state.costCap += r.costCap;
+          console.log(`[ai] albums: ${r.groups} groups, ${r.coverage}% of items placed${r.note ? ' — ' + r.note : ''}`);
+          state.message = r.note || `${r.groups} albums · ${r.coverage}% sorted`;
         }
         if (s.aiAnalyseChats !== false) {
           const r = await arrange.arrange(cfg, 'chat', entriesFor('chat'));
           if (r.cost) state.cost += r.cost;
-          console.log(`[ai] projects: ${r.groups} groups, ${r.coverage}% of chats placed`);
+          if (r.costCap) state.costCap += r.costCap;
+          console.log(`[ai] projects: ${r.groups} groups, ${r.coverage}% of chats placed${r.note ? ' — ' + r.note : ''}`);
           state.message += `${state.message ? ' · ' : ''}${r.groups} projects`;
         }
       }
@@ -292,7 +311,8 @@ async function run({ arrangeOnly = false } = {}) {
         items: state.done + state.failed + state.skipped,
         ok: state.done, failed: state.failed, skipped: state.skipped,
         tokens_in: state.tokensIn, tokens_out: state.tokensOut,
-        cost_usd: state.cost, finished_at: Date.now(), error: state.error,
+        cost_usd: state.cost, cost_cap_usd: state.costCap,
+        finished_at: Date.now(), error: state.error,
       });
       state.running = false;
       state.phase = 'idle';
@@ -305,6 +325,12 @@ async function run({ arrangeOnly = false } = {}) {
 const cancel = () => { cancelRequested = true; return { ok: true }; };
 
 // Background trickle for newly captured items in assist/auto mode.
+//
+// It takes the same `state.running` lock a manual run does. Without that, a
+// drain started by the 60-second timer and a run started by the Sort now button
+// would both be reading the queue, and both would rewrite the albums — the
+// second one snapshotting the user's manual placements after the first had
+// already overwritten them.
 let kicking = false;
 async function kick() {
   const s = settings.read();
@@ -312,7 +338,18 @@ async function kick() {
   if (!ai.jobCounts().queued) return;
   const cfg = config();
   if (cfg.keyRequired && !hasKey()) return;
+  if (budgetExceeded()) return;
   kicking = true;
+  cancelRequested = false;
+  state = {
+    running: true, phase: 'labelling', done: 0, total: ai.jobCounts().queued, failed: 0, skipped: 0,
+    cost: 0, costCap: 0, tokensIn: 0, tokensOut: 0, message: '', error: null, startedAt: Date.now(), runId: null,
+  };
+  // Background work spends real money, so it gets a real row in the ledger.
+  // Left out, a week of automatic labelling would be invisible to both the
+  // monthly total and the cap, and wiped by the next manual run.
+  const runId = ai.startRun('background', cfg.model, cfg.provider);
+  state.runId = runId;
   try {
     await drainQueue(cfg);
     // New items are placed one at a time; a full re-arrange waits until enough
@@ -320,14 +357,30 @@ async function kick() {
     const unplaced = ai.db().prepare(`SELECT l.kind, l.ref_id FROM ai_labels l
       LEFT JOIN ai_group_members m ON m.kind = l.kind AND m.ref_id = l.ref_id
       WHERE m.ref_id IS NULL`).all();
-    if (unplaced.length >= 25 && s.aiMode === 'auto') {
+    if (unplaced.length >= 25 && s.aiMode === 'auto' && !budgetExceeded()) {
       state.phase = 'arranging';
-      if (s.aiAnalyseImages !== false) await arrange.arrange(cfg, 'media', entriesFor('media'));
-      if (s.aiAnalyseChats !== false) await arrange.arrange(cfg, 'chat', entriesFor('chat'));
+      for (const kind of ['media', 'chat']) {
+        if (kind === 'media' && s.aiAnalyseImages === false) continue;
+        if (kind === 'chat' && s.aiAnalyseChats === false) continue;
+        const r = await arrange.arrange(cfg, kind, entriesFor(kind));
+        if (r.cost) state.cost += r.cost;
+        if (r.costCap) state.costCap += r.costCap;
+      }
     }
   } catch (e) {
     console.warn('[ai] background pass stopped:', e.message);
-  } finally { kicking = false; state.phase = 'idle'; }
+  } finally {
+    ai.updateRun(runId, {
+      items: state.done + state.failed + state.skipped,
+      ok: state.done, failed: state.failed, skipped: state.skipped,
+      tokens_in: state.tokensIn, tokens_out: state.tokensOut,
+      cost_usd: state.cost, cost_cap_usd: state.costCap, finished_at: Date.now(),
+    });
+    state.cost = 0; state.costCap = 0; state.tokensIn = 0; state.tokensOut = 0;
+    kicking = false;
+    state.running = false;
+    state.phase = 'idle';
+  }
 }
 
 module.exports = {
@@ -335,8 +388,21 @@ module.exports = {
   run, cancel, kick, queueBacklog, noteNewMedia, noteNewMessages,
   // Testing the connection is also how the runner finds out whether it may
   // send photos at all — a probe here saves a queue of doomed calls later.
+  //
+  // The saved key is only ever sent to the saved address. A caller that wants
+  // to test a different endpoint has to supply its own key, so no request can
+  // talk this into posting the user's Anthropic key at an address it chose.
   probe: async (override) => {
-    const cfg = { ...config(), ...(override || {}) };
+    const saved = config();
+    const o = override || {};
+    const elsewhere = (o.baseUrl && o.baseUrl !== saved.baseUrl) || (o.provider && o.provider !== saved.provider);
+    const cfg = {
+      ...saved,
+      ...(o.provider ? { provider: o.provider } : {}),
+      ...(o.baseUrl ? { baseUrl: o.baseUrl } : {}),
+      ...(o.model ? { model: o.model } : {}),
+      apiKey: elsewhere ? (o.key || '') : saved.apiKey,
+    };
     const r = await probe(cfg);
     if (r.vision && r.vision.ok) noteVisionOk(cfg); else if (r.reachable && r.reachable.ok) noteVisionOff(cfg);
     return r;

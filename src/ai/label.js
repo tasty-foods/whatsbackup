@@ -74,7 +74,7 @@ function fileFor(rec) {
 // they were all photographs is how a headline price ends up wrong.
 // One walk over the media, used by both the estimate and the queue, so the two
 // can never disagree about what will be sent. The skip test runs for every
-// record — including already-labelled ones — because that is what fills the
+// record â€” including already-labelled ones â€” because that is what fills the
 // duplicate set; testing it only for unlabelled records makes a second copy of
 // an already-labelled photo look like a fresh one.
 function eachCandidate(onItem) {
@@ -114,10 +114,16 @@ function census({ analyseImages = true, analyseChats = true } = {}) {
   return out;
 }
 
+// Documents, voice notes and audio are captured too when those settings are on.
+// No vision model can read any of them, and posting a PDF or an .ogg as a
+// base64 "image" is a charged call that can only fail.
+const VISIBLE_KINDS = new Set(['image', 'sticker']);
+
 // A free local pass that keeps money from being spent on things that cannot
 // produce a useful group.
 function skipReason(rec, seen) {
   if (rec.sample) return 'sample image';
+  if (!VISIBLE_KINDS.has(rec.kind)) return 'not a picture';
   if ((rec.size || 0) > MAX_IMAGE_BYTES) return 'too large to send';
   if ((rec.size || 0) < MIN_USEFUL_BYTES) return 'thumbnail-sized';
   if (rec.kind === 'sticker') return 'sticker';
@@ -150,7 +156,7 @@ async function labelImage(cfg, rec) {
     schema: IMAGE_SCHEMA, schemaName: 'image_label', maxTokens: 400,
   });
   ai.putLabel({ kind: 'image', refId: rec.id, contentHash: hash, label: res.json, model: cfg.model, provider: cfg.provider, usage: res.usage, cost: res.cost });
-  return { usage: res.usage, cost: res.cost };
+  return { usage: res.usage, cost: res.cost, costCap: res.costCap };
 }
 
 // A video can't be shown to a vision model without extracting a frame, which
@@ -170,7 +176,7 @@ async function labelVideo(cfg, rec) {
   });
   const label = { ...res.json, caption: res.json.summary, tags: res.json.topics, visual: false };
   ai.putLabel({ kind: 'video', refId: rec.id, contentHash: hash, label, model: cfg.model, provider: cfg.provider, usage: res.usage, cost: res.cost });
-  return { usage: res.usage, cost: res.cost };
+  return { usage: res.usage, cost: res.cost, costCap: res.costCap };
 }
 
 async function labelChat(cfg, chat) {
@@ -187,7 +193,7 @@ async function labelChat(cfg, chat) {
     schema: CHAT_SCHEMA, schemaName: 'chat_label', maxTokens: 400,
   });
   ai.putLabel({ kind: 'chat', refId: chat.chatId, contentHash: hash, label: res.json, model: cfg.model, provider: cfg.provider, usage: res.usage, cost: res.cost });
-  return { usage: res.usage, cost: res.cost };
+  return { usage: res.usage, cost: res.cost, costCap: res.costCap };
 }
 
-module.exports = { census, eachCandidate, skipReason, fileFor, kindOf, labelImage, labelVideo, labelChat, IMAGE_SCHEMA, CHAT_SCHEMA };
+module.exports = { census, eachCandidate, skipReason, fileFor, kindOf, VISIBLE_KINDS, labelImage, labelVideo, labelChat, IMAGE_SCHEMA, CHAT_SCHEMA };

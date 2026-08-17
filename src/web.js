@@ -202,8 +202,8 @@ function createApp() {
       patch[key] = clean;
       if (spec.restart && JSON.stringify(clean) !== JSON.stringify(current[key])) restartRequired = true;
     }
-    const saved = settings.write(patch);
-    res.json({ ok: true, settings: saved, restartRequired, rejected });
+    settings.write(patch);
+    res.json({ ok: true, settings: publicSettings(), restartRequired, rejected });
   });
 
   app.post('/api/check-path', sameOrigin, (req, res) => {
@@ -346,14 +346,16 @@ function createApp() {
   });
   app.post('/api/ai/group/assign', sameOrigin, (req, res) => {
     const { kind, refId, groupId } = req.body || {};
-    if (!kind || !refId) return res.status(400).json({ ok: false });
-    ai.store.setMember(kind, refId, groupId || null, 'user');
-    const g = groupId ? ai.store.listGroups(kind === 'chat' ? 'chat' : 'media').find((x) => x.id === groupId) : null;
+    if (kind !== 'image' && kind !== 'video' && kind !== 'chat') return res.status(400).json({ ok: false, message: 'unknown kind' });
+    if (!refId) return res.status(400).json({ ok: false });
+    const groups = ai.store.listGroups(kind === 'chat' ? 'chat' : 'media');
+    const g = groupId ? groups.find((x) => x.id === groupId) : null;
+    // An id that names no album would otherwise leave a row pointing at nothing.
+    if (groupId && !g) return res.status(400).json({ ok: false, message: 'no such album' });
+    ai.store.setMember(kind, refId, g ? g.id : ai.store.UNFILED, 'user');
     const lbl = ai.store.getLabel(kind, refId);
-    ai.store.addCorrection(kind, 'move', JSON.stringify({
-      groupName: g ? g.name : null,
-      summary: lbl && lbl.label ? (lbl.label.caption || lbl.label.summary || '') : '',
-    }));
+    const summary = lbl && lbl.label ? (lbl.label.caption || lbl.label.summary || '') : '';
+    ai.store.addCorrection(kind, g ? 'move' : 'unfile', JSON.stringify({ groupName: g ? g.name : null, summary }));
     res.json({ ok: true });
   });
   app.post('/api/ai/group/delete', sameOrigin, (req, res) => {

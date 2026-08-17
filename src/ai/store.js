@@ -66,7 +66,11 @@ function db() {
     // Databases written before albums could be renamed.
     const cols = handle.prepare('PRAGMA table_info(ai_groups)').all().map((c) => c.name);
     if (!cols.includes('prev_names')) handle.exec('ALTER TABLE ai_groups ADD COLUMN prev_names TEXT');
+    const runCols = handle.prepare('PRAGMA table_info(ai_runs)').all().map((c) => c.name);
+    if (!runCols.includes('cost_cap_usd')) handle.exec('ALTER TABLE ai_runs ADD COLUMN cost_cap_usd REAL DEFAULT 0');
     ready = true;
+    // Anything the last process was mid-way through is ours to finish.
+    requeueStale();
   }
   return handle;
 }
@@ -138,6 +142,12 @@ function renameGroup(id, name) {
 
 const aliasesOf = (g) => { try { return JSON.parse(g.prev_names) || []; } catch (_) { return []; } };
 
+// Taking something out of an album is a decision too. It is stored as a real
+// row pointing at a group that does not exist, so the next arrange sees it in
+// the user-placed set and puts it back to "no album" rather than re-filing it.
+// No group ever has this id, so it shows as unsorted everywhere else.
+const UNFILED = '-';
+
 function setMember(kind, refId, groupId, source = 'ai') {
   if (!groupId) {
     db().prepare('DELETE FROM ai_group_members WHERE kind = ? AND ref_id = ?').run(kind, refId);
@@ -189,23 +199,47 @@ const recentCorrections = (limit = 40) => db()
   .prepare('SELECT action, detail FROM ai_corrections ORDER BY id DESC LIMIT ?').all(limit);
 
 /* ---------------- jobs ---------------- */
+// A job that ended badly must be able to come back. Someone who mistypes a
+// model name gets every photo marked 'skipped'; without this, fixing the name
+// would never re-queue them, while the estimate went on pricing them as work to
+// do. Re-queueing an already-done item is free: the labellers check the content
+// hash first and return `cached` without calling anyone.
 function enqueue(type, refId) {
   db().prepare(`INSERT INTO ai_jobs (type, ref_id, state, updated_at) VALUES (?,?, 'queued', ?)
-    ON CONFLICT(type, ref_id) DO NOTHING`).run(type, refId, Date.now());
+    ON CONFLICT(type, ref_id) DO UPDATE SET
+      state = 'queued', attempts = 0, error = NULL, updated_at = excluded.updated_at
+    WHERE ai_jobs.state <> 'queued'`).run(type, refId, Date.now());
 }
-const claim = (n) => db().prepare(`SELECT * FROM ai_jobs WHERE state = 'queued' ORDER BY id LIMIT ?`).all(n);
+
+// Claiming marks the rows as taken in the same synchronous turn it reads them.
+// node:sqlite is synchronous, so nothing can interleave between the SELECT and
+// the UPDATE — which is what keeps two drains from paying for the same job.
+function claim(n) {
+  const rows = db().prepare(`SELECT * FROM ai_jobs WHERE state = 'queued' ORDER BY id LIMIT ?`).all(n);
+  const mark = db().prepare(`UPDATE ai_jobs SET state = 'running', updated_at = ? WHERE id = ?`);
+  const now = Date.now();
+  for (const r of rows) mark.run(now, r.id);
+  return rows;
+}
+
+// A process that died mid-batch leaves rows stuck in 'running'.
+const requeueStale = () => db().prepare(`UPDATE ai_jobs SET state = 'queued' WHERE state = 'running'`).run();
+
 function finishJob(id, state, error) {
   db().prepare('UPDATE ai_jobs SET state = ?, error = ?, attempts = attempts + 1, updated_at = ? WHERE id = ?')
     .run(state, error || null, Date.now(), id);
 }
 function retryJob(id, error) {
-  db().prepare('UPDATE ai_jobs SET attempts = attempts + 1, error = ?, updated_at = ? WHERE id = ?')
+  db().prepare(`UPDATE ai_jobs SET state = 'queued', attempts = attempts + 1, error = ?, updated_at = ? WHERE id = ?`)
     .run(error || null, Date.now(), id);
 }
 const jobCounts = () => {
   const rows = db().prepare('SELECT state, COUNT(*) c FROM ai_jobs GROUP BY state').all();
   const out = { queued: 0, done: 0, error: 0, skipped: 0 };
-  for (const r of rows) out[r.state] = r.c;
+  for (const r of rows) {
+    if (r.state === 'running') out.queued += r.c;      // still outstanding work
+    else out[r.state] = r.c;
+  }
   return out;
 };
 const clearJobs = () => db().exec('DELETE FROM ai_jobs');
@@ -223,7 +257,11 @@ function updateRun(id, patch) {
     .run(...keys.map((k) => patch[k]), id);
 }
 const lastRun = () => db().prepare('SELECT * FROM ai_runs ORDER BY id DESC LIMIT 1').get() || null;
+// What was actually spent, as far as we can price it.
 const spendSince = (ts) => (db().prepare('SELECT SUM(cost_usd) s FROM ai_runs WHERE started_at >= ?').get(ts) || {}).s || 0;
+// What the budget cap counts: the same figure, except that a model with no
+// published price is charged at the dearest rate we know rather than as free.
+const spendCapSince = (ts) => (db().prepare('SELECT SUM(MAX(COALESCE(cost_usd,0), COALESCE(cost_cap_usd,0))) s FROM ai_runs WHERE started_at >= ?').get(ts) || {}).s || 0;
 
 function wipe() {
   db().exec(`DELETE FROM ai_labels; DELETE FROM ai_group_members; DELETE FROM ai_groups;
@@ -231,12 +269,12 @@ function wipe() {
 }
 
 module.exports = {
-  db, sha1, newId,
+  db, sha1, newId, UNFILED,
   getLabel, isLabelled, putLabel, labelsOfKinds,
   listGroups, groupOf, membersOf, createGroup, renameGroup, aliasesOf, setMember, clearAiMembers,
   pruneEmptyGroups, mergeDuplicateNames,
   addCorrection, recentCorrections,
-  enqueue, claim, finishJob, retryJob, jobCounts, clearJobs,
-  startRun, updateRun, lastRun, spendSince,
+  enqueue, claim, requeueStale, finishJob, retryJob, jobCounts, clearJobs,
+  startRun, updateRun, lastRun, spendSince, spendCapSince,
   wipe,
 };

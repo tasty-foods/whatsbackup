@@ -2,7 +2,7 @@
 // One function, two implementations. Everything above this file asks for
 // `complete({...})` and gets back parsed JSON plus token counts; it never
 // learns which vendor answered.
-const { PRESETS, costOf } = require('./presets');
+const { PRESETS, costOf, capCostOf } = require('./presets');
 
 const TIMEOUT_MS = 90000;
 
@@ -102,9 +102,14 @@ async function completeOpenAi(cfg, req) {
     parts.push({ type: 'image_url', image_url: { url: `data:${img.mediaType};base64,${img.data}`, detail: 'low' } });
   }
 
+  // OpenAI's own reasoning models reject `max_tokens` outright and want
+  // `max_completion_tokens`; everything else that speaks this dialect —
+  // Ollama, LM Studio, Groq, OpenRouter — still expects the older name.
+  const openAiProper = /(^|\.)openai\.com$/i.test(label);
+  const limit = req.maxTokens || 512;
   const body = {
     model: cfg.model,
-    max_tokens: req.maxTokens || 512,
+    ...(openAiProper ? { max_completion_tokens: limit } : { max_tokens: limit }),
     messages: [
       { role: 'system', content: req.system },
       { role: 'user', content: parts },
@@ -121,20 +126,26 @@ async function completeOpenAi(cfg, req) {
   }
 
   const headers = { 'content-type': 'application/json' };
-  if (cfg.apiKey) headers.authorization = `Bearer ${cfg.apiKey}`;
+  // A model on this machine has no key to check, and handing one over anyway
+  // would give a local program a secret it never asked for.
+  if (cfg.apiKey && !cfg.local) headers.authorization = `Bearer ${cfg.apiKey}`;
 
+  // The timeout has to cover reading the body as well as getting the headers,
+  // and it has to survive a caller passing its own cancel signal — otherwise a
+  // server that accepts the connection and then goes quiet hangs the run.
   const timer = new AbortController();
   const to = setTimeout(() => timer.abort(), TIMEOUT_MS);
-  let res;
+  if (req.signal) req.signal.addEventListener('abort', () => timer.abort(), { once: true });
+  let res, raw;
   try {
     res = await fetch(`${base}/chat/completions`, {
-      method: 'POST', headers, body: JSON.stringify(body), signal: req.signal || timer.signal,
+      method: 'POST', headers, body: JSON.stringify(body), signal: timer.signal,
     });
+    raw = await res.text();
   } catch (e) {
     throw wrapNetworkError(e, label);
   } finally { clearTimeout(to); }
 
-  const raw = await res.text();
   if (!res.ok) throw statusToError(res.status, raw, label);
 
   let payload;
@@ -159,11 +170,14 @@ async function complete(cfg, req) {
   if (api === 'anthropic' && !cfg.apiKey) throw new AiError('No API key has been set.', { kind: 'auth' });
 
   const started = Date.now();
+  // `local` is a property of the provider, not of whatever the caller passed —
+  // reading it off cfg let an overridden provider look remote and be handed a key.
   const out = api === 'demo' ? await require('./demo').complete(cfg, req)
     : api === 'anthropic' ? await completeAnthropic(cfg, req)
-      : await completeOpenAi({ ...preset, ...cfg }, req);
+      : await completeOpenAi({ ...preset, ...cfg, local: !!preset.local }, req);
   out.ms = Date.now() - started;
   out.cost = costOf(cfg.provider, cfg.model, out.usage.in, out.usage.out);
+  out.costCap = capCostOf(cfg.provider, cfg.model, out.usage.in, out.usage.out);
   return out;
 }
 
