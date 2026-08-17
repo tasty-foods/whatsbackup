@@ -1,19 +1,80 @@
 {
-  "name": "pcloud-whatsapp",
+  "name": "whatsbackup",
+  "productName": "WhatsBackUp",
   "version": "1.0.0",
   "private": true,
-  "description": "Capture every WhatsApp image & video (sent/received) into a local dashboard; videos go to pCloud.",
-  "main": "src/index.js",
+  "description": "Saves every WhatsApp image, video and message to your PC — and to your cloud folder.",
+  "author": {
+    "name": "Tasty Foods",
+    "email": "info@tasty-foods.be"
+  },
+  "main": "electron/main.js",
   "scripts": {
-    "start": "node src/index.js",
+    "start": "electron .",
+    "server": "node src/index.js",
+    "icons": "node tools/make-icons.js",
+    "fetch-chrome": "node tools/fetch-chrome.js",
+    "prepack": "npm run icons && npm run fetch-chrome",
+    "dist": "npm run prepack && electron-builder --win --publish never",
+    "release": "npm run prepack && electron-builder --win --publish always",
     "backfill": "node src/backfill.js",
-    "seed": "node src/seed-samples.js",
     "reset": "node src/reset.js"
   },
   "dependencies": {
     "archiver": "^7.0.1",
+    "electron-updater": "^6.8.9",
     "express": "^4.21.2",
     "qrcode": "^1.5.4",
     "whatsapp-web.js": "^1.26.0"
+  },
+  "devDependencies": {
+    "electron": "^43.4.0",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "be.tastyfoods.whatsbackup",
+    "productName": "WhatsBackUp",
+    "copyright": "Copyright © 2026 Tasty Foods",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "asar": false,
+    "files": [
+      "electron/**/*",
+      "src/**/*",
+      "public/**/*",
+      "node_modules/**/*",
+      "package.json",
+      "!**/*.map",
+      "!node_modules/**/{test,__tests__,docs,example,examples}/**"
+    ],
+    "extraResources": [
+      { "from": "build/chromium", "to": "chromium" },
+      { "from": "build/icons", "to": "icons" }
+    ],
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "icon": "build/icon.ico",
+      "artifactName": "WhatsBackUp-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "WhatsBackUp",
+      "deleteAppDataOnUninstall": false,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "tasty-foods",
+        "repo": "whatsbackup"
+      }
+    ]
   }
 }

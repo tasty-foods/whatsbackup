@@ -1,30 +1,73 @@
 'use strict';
-// Persistent, user-editable settings. Written by the Settings panel in the UI,
-// read by config.js at startup. Lives at data/settings.json.
+// Persistent, user-editable settings. Written by the Settings panel and the
+// first-run wizard, read by config.js at startup. Lives at <appHome>/data.
 const fs = require('fs');
 const path = require('path');
+const paths = require('./paths');
 
-const DATA_DIR = path.join(__dirname, '..', 'data');
-const FILE = path.join(DATA_DIR, 'settings.json');
+const FILE = path.join(paths.DATA_DIR, 'settings.json');
 
 const DEFAULTS = {
+  // Dashboard
   port: 8788,
-  cloudRoot: 'P:/WhatsApp Media',   // your pCloud drive folder for videos
-  mirrorImages: true,               // also copy images into pCloud (complete media backup)
-  captureConversations: true,       // store message text so conversations can be viewed/searched
-  backfillLimit: 400,               // messages scanned per chat when importing history
+
+  // Where things are kept. Empty mediaRoot means "<appHome>\media"; empty
+  // cloudRoot means no cloud copy at all — a fresh PC has no pCloud drive.
+  mediaRoot: '',
+  cloudRoot: '',
+  mirrorImages: false,
+
+  // What to capture
+  captureImages: true,
+  captureVideos: true,
+  captureVoice: false,
+  captureAudio: false,
+  captureDocuments: false,
+  captureStickers: false,
+  captureSent: true,
+  captureReceived: true,
+  captureGroups: true,
+  excludedChats: [],
+  captureConversations: true,
+
+  // History import
+  backfillLimit: 400,
+  downloadTimeoutSec: 90,
+
+  // Desktop behaviour
+  startWithWindows: false,
+  startMinimized: false,
+  closeToTray: true,
+  notifyOnProblem: true,
+  autoUpdate: true,
+
+  // Housekeeping
+  logMaxMB: 5,
+  retentionDays: 0,          // 0 = keep everything
+
+  // First run
+  setupComplete: false,
+  consentAccepted: false,
 };
 
 function read() {
   let s = {};
-  try { s = JSON.parse(fs.readFileSync(FILE, 'utf8')); } catch (_) {}
+  let existed = false;
+  try { s = JSON.parse(fs.readFileSync(FILE, 'utf8')); existed = true; } catch (_) {}
+  // Someone already running the pre-desktop version has a settings file but no
+  // setupComplete flag — they've long since linked, so don't send them through
+  // the first-run wizard.
+  if (existed && s.setupComplete === undefined) s.setupComplete = true;
+  if (existed && s.consentAccepted === undefined) s.consentAccepted = true;
   return { ...DEFAULTS, ...s };
 }
 
 function write(patch) {
   const next = { ...read(), ...patch };
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.writeFileSync(FILE, JSON.stringify(next, null, 2));
+  fs.mkdirSync(paths.DATA_DIR, { recursive: true });
+  const tmp = FILE + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(next, null, 2));
+  fs.renameSync(tmp, FILE);   // atomic — a crash mid-write can't truncate settings
   return next;
 }
 

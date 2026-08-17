@@ -26,6 +26,31 @@ const backfill = {
   startedAt: null, finishedAt: null, error: null,
 };
 
+// Capture health. WhatsApp changes its internals without warning, and when that
+// happens every download starts failing while everything else still looks fine —
+// that is exactly how this app lost a month of capture. Fresh media should
+// always be downloadable, so repeated live failures mean something is broken.
+const UNHEALTHY_AFTER = 3;
+const health = {
+  consecutiveFailures: 0,
+  lastError: null,
+  lastErrorAt: null,
+  lastCaptureAt: null,
+  totalCaptured: 0,
+};
+function noteCaptureOk() {
+  health.consecutiveFailures = 0;
+  health.lastError = null;
+  health.lastCaptureAt = Date.now();
+  health.totalCaptured++;
+}
+function noteCaptureFail(e) {
+  health.consecutiveFailures++;
+  health.lastError = describeError(e);
+  health.lastErrorAt = Date.now();
+}
+const captureBroken = () => health.consecutiveFailures >= UNHEALTHY_AFTER;
+
 // Guard against calls that never resolve (whatsapp-web.js can hang on a bad
 // chat or a stalled media download) — skip the item instead of freezing.
 function withTimeout(promise, ms, label) {
@@ -74,23 +99,54 @@ function getState() {
     counts: store.counts(),
     conversations,
     conversationsEnabled: captureConversations(),
+    cloudConfigured: cfg.CLOUD_CONFIGURED,
     cloudAvailable: cfg.CLOUD_AVAILABLE,
     cloudRoot: cfg.CLOUD_ROOT,
     qr: qrDataUrl,
     backfill: { ...backfill },
+    health: { ...health, ok: !captureBroken() },
   };
 }
 
 const EXT = {
   'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/png': 'png', 'image/webp': 'webp',
   'image/gif': 'gif', 'video/mp4': 'mp4', 'video/3gpp': '3gp', 'video/quicktime': 'mov',
-  'video/x-matroska': 'mkv',
+  'video/x-matroska': 'mkv', 'audio/ogg': 'ogg', 'audio/mpeg': 'mp3', 'audio/mp4': 'm4a',
+  'audio/aac': 'aac', 'audio/wav': 'wav', 'application/pdf': 'pdf',
 };
-const extFor = (m) => EXT[m] || (m && m.split('/')[1]) || 'bin';
+const extFor = (m) => EXT[(m || '').split(';')[0]] || ((m || '').split(';')[0].split('/')[1]) || 'bin';
 const sanitize = (x) => (x || 'unknown').replace(/[^\p{L}\p{N}\-_. ]/gu, '_').replace(/\s+/g, ' ').trim().slice(0, 60) || 'unknown';
 const stamp = (ms) => { const d = new Date(ms), p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`; };
 const mirrorImages = () => (process.env.WA_MIRROR_IMAGES === '1') || !!settings.read().mirrorImages;
 const captureConversations = () => !!settings.read().captureConversations;
+
+// What WhatsApp calls a message type → the kind we file it under, and the
+// setting that switches that kind on. Anything not listed is never captured.
+const KIND_BY_TYPE = { image: 'image', video: 'video', ptt: 'voice', audio: 'audio', document: 'document', sticker: 'sticker' };
+const KIND_SETTING = {
+  image: 'captureImages', video: 'captureVideos', voice: 'captureVoice',
+  audio: 'captureAudio', document: 'captureDocuments', sticker: 'captureStickers',
+};
+// Images and stickers sit together in the gallery; voice notes, audio and
+// documents share a files folder; videos are the ones that go to the cloud.
+const AREA_BY_KIND = { image: 'images', sticker: 'images', video: 'videos', voice: 'files', audio: 'files', document: 'files' };
+
+// Decided before downloading, so an excluded chat never costs bandwidth.
+function shouldCapture(msg, chat, kind) {
+  if (!kind) return false;
+  const s = settings.read();
+  if (!s[KIND_SETTING[kind]]) return false;
+  if (msg.fromMe && !s.captureSent) return false;
+  if (!msg.fromMe && !s.captureReceived) return false;
+  if (chat && chat.isGroup && !s.captureGroups) return false;
+  const excluded = s.excludedChats || [];
+  if (excluded.length && chat) {
+    const id = (chat.id && chat.id._serialized) || '';
+    const name = (chat.name || '').toLowerCase();
+    if (excluded.some((x) => x && (x === id || String(x).toLowerCase() === name))) return false;
+  }
+  return true;
+}
 
 // System/protocol message types that carry no human content — skip in the transcript.
 const SKIP_TYPES = new Set(['e2e_notification', 'notification', 'notification_template', 'gp2', 'protocol', 'ciphertext', 'revoked']);
@@ -170,8 +226,12 @@ async function downloadMediaByKey(key) {
 async function saveMediaMessage(msg, chatObj) {
   if (!msg.hasMedia) return null;
   if (msg.from === 'status@broadcast' || msg.to === 'status@broadcast') return null;
-  const kind = msg.type === 'image' ? 'image' : msg.type === 'video' ? 'video' : null;
+  const kind = KIND_BY_TYPE[msg.type];
   if (!kind) return null;
+
+  let chat = chatObj;
+  if (!chat) { try { chat = await msg.getChat(); } catch (_) { chat = null; } }
+  if (!shouldCapture(msg, chat, kind)) return null;
 
   const id = msgKey(msg);
   if (!id || store.has(id)) return null;
@@ -182,52 +242,59 @@ async function saveMediaMessage(msg, chatObj) {
 
   const ts = msg.timestamp ? msg.timestamp * 1000 : Date.now();
   const dir = msg.fromMe ? 'out' : 'in';
-
-  let chatName = 'unknown', number = '';
-  try {
-    const chat = chatObj || (await msg.getChat());
-    chatName = chat.name || (chat.id && chat.id.user) || 'unknown';
-    number = (chat.id && chat.id.user) || '';
-  } catch (_) {}
+  const chatName = (chat && (chat.name || (chat.id && chat.id.user))) || 'unknown';
+  const number = (chat && chat.id && chat.id.user) || '';
 
   const ext = extFor(media.mimetype);
   const filename = `${stamp(ts)}__${dir}__${sanitize(chatName)}__${id.replace(/[^A-Za-z0-9]/g, '').slice(-10)}.${ext}`;
   const buf = Buffer.from(media.data, 'base64');
 
-  // Async writes so a slow pCloud write doesn't block the shared event loop
+  // Async writes so a slow cloud-drive write doesn't block the shared event loop
   // (which also serves the dashboard the user is looking at).
-  let serve;
-  if (kind === 'image') {
-    await fs.promises.writeFile(path.join(cfg.IMAGES_DIR, filename), buf);
-    if (mirrorImages()) {
-      try { await fs.promises.mkdir(cfg.IMAGE_CLOUD_DIR, { recursive: true }); await fs.promises.writeFile(path.join(cfg.IMAGE_CLOUD_DIR, filename), buf); } catch (_) {}
-    }
-    serve = '/media/images/' + encodeURIComponent(filename);
-  } else {
-    await fs.promises.writeFile(path.join(cfg.VIDEO_DIR, filename), buf); // -> pCloud (or local fallback)
-    serve = '/media/videos/' + encodeURIComponent(filename);
+  const area = AREA_BY_KIND[kind];
+  const target = area === 'videos' ? cfg.VIDEO_DIR : area === 'files' ? cfg.FILES_DIR : cfg.IMAGES_DIR;
+  await fs.promises.mkdir(target, { recursive: true });
+  await fs.promises.writeFile(path.join(target, filename), buf);
+  if (area === 'images' && mirrorImages()) {
+    try {
+      await fs.promises.mkdir(cfg.IMAGE_CLOUD_DIR, { recursive: true });
+      await fs.promises.writeFile(path.join(cfg.IMAGE_CLOUD_DIR, filename), buf);
+    } catch (_) {}
   }
+  const serve = `/media/${area}/` + encodeURIComponent(filename);
 
   const rec = {
     id, ts, dir, kind, chat: chatName, number, mimetype: media.mimetype,
     filename, serve, size: buf.length, caption: msg.body || '',
-    cloud: kind === 'video' ? cfg.CLOUD_AVAILABLE : false,
+    docName: msg.type === 'document' ? (msg._data && msg._data.filename) || '' : '',
+    cloud: area === 'videos' ? cfg.CLOUD_AVAILABLE : false,
   };
   store.addRecord(rec);
   return rec;
 }
 
 async function handleMessage(msg) {
+  let chat = null;
+  try { chat = await msg.getChat(); } catch (_) {}
+  // Media and transcript are tracked separately: a failed download must not
+  // cost us the message text, and only download failures count against health.
   try {
-    let chat = null;
-    try { chat = await msg.getChat(); } catch (_) {}
     const rec = await saveMediaMessage(msg, chat);
-    if (rec) console.log(`[capture] ${new Date(rec.ts).toLocaleString()}  ${rec.kind.toUpperCase()} ${rec.dir === 'out' ? '→sent' : '←recv'}  ${rec.chat}  (${(rec.size / 1024).toFixed(0)} KB)`);
+    if (rec) {
+      noteCaptureOk();
+      console.log(`[capture] ${new Date(rec.ts).toLocaleString()}  ${rec.kind.toUpperCase()} ${rec.dir === 'out' ? '→sent' : '←recv'}  ${rec.chat}  (${(rec.size / 1024).toFixed(0)} KB)`);
+    }
+  } catch (e) {
+    noteCaptureFail(e);
+    console.error('[capture] download failed:', describeError(e), `(${health.consecutiveFailures} in a row)`);
+    if (captureBroken()) console.error('[capture] capture looks broken — WhatsApp may have changed again. Check for an update.');
+  }
+  try {
     if (captureConversations() && keepInTranscript(msg)) {
-      const row = buildMsgRow(msg, chat, rec);
+      const row = buildMsgRow(msg, chat, null);
       if (row) messages.addMessage(row);
     }
-  } catch (e) { console.error('[capture] error:', e.message); }
+  } catch (e) { console.error('[capture] transcript error:', describeError(e)); }
 }
 
 let client = null;
@@ -300,7 +367,7 @@ async function runBackfill(limitPerChat) {
       const convoRows = [];
       for (const msg of msgs) {
         let mediaRec = null;
-        try { mediaRec = await withTimeout(saveMediaMessage(msg, chat), 90000, 'download'); if (mediaRec) backfill.saved++; }
+        try { mediaRec = await withTimeout(saveMediaMessage(msg, chat), cfg.DOWNLOAD_TIMEOUT_MS, 'download'); if (mediaRec) backfill.saved++; }
         catch (e) { noteSkip(e); }
         if (wantConvo && keepInTranscript(msg)) {
           const row = buildMsgRow(msg, chat, mediaRec);
@@ -326,14 +393,23 @@ async function runBackfill(limitPerChat) {
 }
 
 function buildClient() {
+  // Chromium's sandbox works out of the box on Windows — the --no-sandbox pair
+  // this used to carry are Linux/CI habits, and running unsandboxed while
+  // rendering media from strangers is exposure we don't need. WB_NO_SANDBOX is
+  // the escape hatch if some machine turns out to need it.
+  const args = ['--disable-gpu'];
+  if (process.env.WB_NO_SANDBOX === '1') args.push('--no-sandbox', '--disable-setuid-sandbox');
   // WA_DEBUG_PORT opens Chrome's debugging port so the WhatsApp Web page can be
   // inspected while the app runs — needed whenever WhatsApp changes its
   // internals and the library starts throwing minified errors.
-  const args = ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu'];
   if (process.env.WA_DEBUG_PORT) args.push('--remote-debugging-port=' + process.env.WA_DEBUG_PORT);
+
+  const puppeteerOpts = { headless: true, args };
+  if (cfg.CHROME_PATH) puppeteerOpts.executablePath = cfg.CHROME_PATH;  // the Chrome we ship
+
   const c = new Client({
     authStrategy: new LocalAuth({ dataPath: cfg.AUTH_DIR }),
-    puppeteer: { headless: true, args },
+    puppeteer: puppeteerOpts,
   });
 
   c.on('qr', async (qr) => {
@@ -396,4 +472,30 @@ function startClient() {
   return client;
 }
 
-module.exports = { startClient, getState, runBackfill };
+// Unlink this device and come back with a fresh QR. logout() tells the phone,
+// which is the polite path; if it fails we still drop the local session so the
+// user isn't stuck with a half-linked app.
+async function unlink() {
+  const c = client;
+  if (!c) return { ok: false, message: 'Not running' };
+  try { await c.logout(); }
+  catch (e) { console.warn('[link] logout failed, dropping local session anyway:', describeError(e)); }
+  state.status = 'starting';
+  state.me = null;
+  state.needsRelink = false;
+  try { await c.destroy(); } catch (_) {}
+  client = buildClient();
+  client.initialize().catch((e) => { state.status = 'error'; state.lastError = describeError(e); });
+  return { ok: true };
+}
+
+// Ask for a reconnect now instead of waiting out the backoff.
+function reconnectNow() {
+  if (!client) return { ok: false, message: 'Not running' };
+  reconnecting = false;
+  reconnectAttempts = 0;
+  scheduleReconnect(client);
+  return { ok: true };
+}
+
+module.exports = { startClient, getState, runBackfill, unlink, reconnectNow };

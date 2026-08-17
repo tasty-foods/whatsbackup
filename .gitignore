@@ -6,4 +6,4 @@ data/
 logs/
 *.log
 dist/
-build/chromium/
+build/

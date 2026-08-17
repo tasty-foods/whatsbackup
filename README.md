@@ -1,75 +1,93 @@
-# WhatsApp Media Dashboard
+# WhatsBackUp
 
-Automatically captures **every image and video you send or receive on WhatsApp**
-(works with WhatsApp Business) and gives you a private, scrollable dashboard on
-your own PC.
+A Windows desktop app that saves every photo, video and message from your WhatsApp — to a local folder, and to a cloud folder if you point it at one.
 
-- 📸 **Images** → saved instantly to a local gallery you can scroll, enlarge, and download
-  (and mirrored to **pCloud** as a backup).
-- 🎥 **Videos** → saved straight to **pCloud** (`P:\WhatsApp Media\Videos`) so they're in the cloud.
-- 💬 **Conversations** → optionally captures message **text** too, so you can read and **search** every
-  chat in a WhatsApp-style thread view, updated live. Message text stays **only on this PC** (never uploaded).
-- 🖥️ **Dashboard** → opens in its own app window — two views: **🖼 Media** (photo-wall, filter by chat /
-  Sent / Received, enlarge, download, **Download all images** as a zip) and **💬 Conversations** (chat list →
-  thread, with photos/videos inline, full-text search). Only reachable from this PC (bound to localhost).
-- ⚙️ **Settings panel** for everything below — no editing code needed.
+For installing and using it, see **[INSTALL.md](INSTALL.md)**. This file is about how it's built.
 
-## The two views
+---
 
-- **🖼 Media** — the scrollable gallery of every image & video.
-- **💬 Conversations** — pick a chat on the left to read the thread; media shows inline. Type in the
-  search box to full-text search every message across all chats. Text is stored locally in
-  `data\messages.db`; you can also **Export full transcript** (Settings) to a local HTML archive.
+## How it works
 
-## Opening it
+```
+Electron main process  (electron/main.js)
+├── window            → loads http://127.0.0.1:8788, which serves public/
+├── tray              → live status, quick actions, quit
+├── supervision       → restarts the engine with backoff if it dies
+├── updates           → electron-updater against GitHub Releases
+└── utilityProcess    → the capture engine, its own crash domain
+        │
+        └── src/index.js
+            ├── src/web.js        Express: dashboard + JSON API
+            └── src/whatsapp.js   whatsapp-web.js driving its own bundled Chrome
+                    │
+                    └── media → images/videos/files folders (+ cloud folder)
+                        text  → node:sqlite database
+```
 
-Double-click **"WhatsApp Media"** on your Desktop. It starts the background service (if it isn't
-already running) and opens the dashboard in a clean app window. It also **starts automatically every
-time you log in**, so capture is always on.
+Two Chromiums ship in the installer: Electron's, which draws the window, and a
+pinned Chrome that whatsapp-web.js drives. That's ~150 MB more than reusing
+Electron's own — bought deliberately, because whatsapp-web.js expects to launch
+and own its browser, and the linked WhatsApp session *is* that browser's profile.
 
-## Settings (⚙︎ button, top-right)
+**The Chrome version is pinned** (`tools/fetch-chrome.js`). The session folder is
+a Chromium profile; swapping the browser underneath it risks invalidating the
+link and forcing everyone to scan a QR code again.
 
-- **Connection** — shows the linked account and how much has been captured.
-- **Import old images & videos** — pulls media already sitting in your chats, as far back as WhatsApp
-  lets a linked device see. Safe to run anytime; it skips anything already captured. Set how many
-  messages per chat to scan (default 400).
-- **Cloud folder for videos (pCloud)** — the folder videos are saved into (default `P:\WhatsApp Media`,
-  your pCloud drive). Edit it and press **Check** to confirm it's writable; **Save** then **Restart app**.
-  Optional toggle: also back up a copy of every image to pCloud.
-- **Where everything lives** — the exact folders/files used (see below).
-- **Maintenance** — remove the welcome samples, or restart the app.
+## Data
 
-## Where things are saved
+Nothing writable lives next to the program. Installed, everything is under
+`%LOCALAPPDATA%\WhatsBackUp\`:
 
-| What        | Location                                              |
-|-------------|-------------------------------------------------------|
-| Images      | `media\images\`                                       |
-| Videos      | `P:\WhatsApp Media\Videos\` (pCloud → cloud)           |
-| **Settings**| `data\settings.json`                                  |
-| Media index | `data\index.ndjson` (list of everything captured)     |
-| Logs        | `logs\dashboard.log`                                  |
-| WhatsApp link | `.wwebjs_auth\` (so you never re-scan)              |
+| Folder | Contents |
+|---|---|
+| `data\` | `messages.db` (SQLite), `index.ndjson` (media index), `settings.json` |
+| `session\` | the Chromium profile that *is* the WhatsApp link |
+| `logs\` | rotating log, capped by the `logMaxMB` setting |
+| `media\` | images / videos / files, unless the user chose another folder |
 
-**The application itself** is this folder: `C:\Users\keste\Projects\pcloud whatsapp`.
-It runs as a hidden background Node.js process (`src\index.js`) that both serves the dashboard and
-listens to WhatsApp.
+Run from source (`npm run server`) and it all falls back to the project folder,
+so development doesn't touch the installed copy. `src/paths.js` is the switch.
 
-## Command line (optional)
+`electron/migrate.js` imports an older install: it refuses to run while the old
+copy is alive (a live SQLite `-wal` holds writes the `.db` doesn't have yet),
+copies rather than moves, and verifies row and file counts before reporting
+success.
 
-- `npm start` — run with a visible console (to watch logs).
-- `npm run backfill` — import history from a terminal (the ⚙︎ button does the same).
-- `npm run reset` — remove welcome samples · `npm run reset -- --all` — clear the whole gallery.
+## Building
 
-## Start / stop / remove
+```bash
+npm install
+npm run dist          # icons + Chrome + NSIS installer into dist/
+```
 
-- **Start (hidden):** double-click `launch-hidden.vbs`, or just open the Desktop app.
-- **Stop:** Task Manager → **Node.js** → End task (or reboot). The ⚙︎ panel also has **Restart app**.
-- **Turn off auto-start:** delete
-  `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\WhatsApp Media Dashboard.lnk`.
-- **Unlink from WhatsApp:** on your phone, WhatsApp → Linked devices → remove this device, and delete
-  the `.wwebjs_auth\` folder here.
+`npm run release` does the same and publishes to GitHub Releases (needs `GH_TOKEN`).
 
-## Notes
+- `npm start` — run the desktop app from source
+- `npm run server` — run only the capture engine + dashboard (no Electron)
+- `npm run icons` — regenerate app and tray icons
 
-- Everything stays on your machine and your own pCloud. Nothing is sent anywhere else.
-- Live capture starts the moment the app is running; **Import history** fills in the past.
+## When WhatsApp breaks it
+
+It will. WhatsApp ships changes to its web client without notice, and this app
+reaches into that client's internals. In July 2026 they renamed the serialized
+field on message ids, and both `getChats()` and `downloadMedia()` in
+whatsapp-web.js started throwing a minified `r` — capture died silently for a
+month before anyone noticed.
+
+Three things came out of that, and they're the parts to understand before
+changing `src/whatsapp.js`:
+
+- **`msgKey(msg)`** resolves a message id by *shape* rather than by field name,
+  so the next rename doesn't break it.
+- **`downloadMediaByKey()`** replaces the library's `downloadMedia()`, which
+  looks messages up by the field that no longer exists.
+- **`listChatsTolerant()`** reads the chat list directly and skips chats it
+  can't parse, instead of `getChats()` failing whole-hog on one bad chat.
+
+And the safety net: the engine counts consecutive live download failures. Three
+in a row and the tray goes amber, a notification fires, and the dashboard shows
+a banner. Silent failure was the actual bug — not the missing fix.
+
+To debug the next one, set `WA_DEBUG_PORT=9222` and attach to the WhatsApp page
+with any CDP client; `msg.mediaData.mediaStage` and the real (unminified) error
+names are usually enough to find what moved.

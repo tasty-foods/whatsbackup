@@ -3,16 +3,16 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>WhatsApp Media</title>
+  <title>WhatsBackUp</title>
   <link rel="stylesheet" href="/styles.css" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖼️</text></svg>" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💬</text></svg>" />
 </head>
 <body>
   <header class="topbar">
     <div class="brand">
-      <span class="logo">🖼️</span>
+      <span class="logo">💬</span>
       <div>
-        <div class="title">WhatsApp Media</div>
+        <div class="title">WhatsBackUp</div>
         <div class="sub" id="sub">Loading…</div>
       </div>
     </div>
@@ -26,13 +26,21 @@
         <button data-f="all" class="active">All</button>
         <button data-f="image">Images</button>
         <button data-f="video">Videos</button>
+        <button data-f="file">Files</button>
         <button data-f="in">Received</button>
         <button data-f="out">Sent</button>
       </div>
-      <a id="zip" class="btn media-only" href="/api/zip" title="Videos stay in your pCloud folder">⭳ Download all images</a>
+      <a id="zip" class="btn media-only" href="/api/zip" title="Videos stay in your video folder">⭳ Download all images</a>
       <button id="open-settings" class="btn icon" title="Settings">⚙︎</button>
     </div>
   </header>
+
+  <!-- Shown when downloads keep failing: the failure mode that used to be silent -->
+  <div id="health-banner" class="banner hidden">
+    <span id="health-text"></span>
+    <button class="btn small" id="health-update">Check for updates</button>
+    <button class="btn small ghost" id="health-dismiss">Dismiss</button>
+  </div>
 
   <!-- ===== Media view ===== -->
   <div id="view-media">
@@ -41,7 +49,7 @@
         <h2 id="link-title">Link your WhatsApp</h2>
         <div id="qrwrap"><div class="spinner"></div></div>
         <ol>
-          <li>Open <b>WhatsApp Business</b> on your phone</li>
+          <li>Open <b>WhatsApp</b> on your phone</li>
           <li>Tap <b>Settings → Linked devices → Link a device</b></li>
           <li>Scan the code above</li>
         </ol>
@@ -49,7 +57,7 @@
       </div>
     </section>
     <main id="gallery" class="gallery"></main>
-    <div id="empty" class="empty hidden">No media yet. New images and videos appear here the moment they arrive — or open <b>⚙︎ Settings → Import history</b> to pull in older ones.</div>
+    <div id="empty" class="empty hidden">No media yet. New images and videos appear here the moment they arrive — or open <b>⚙︎ Settings → History</b> to pull in older ones.</div>
   </div>
 
   <!-- ===== Conversations view ===== -->
@@ -63,7 +71,7 @@
     <section class="thread">
       <div class="thread-head" id="thread-head"><span class="th-name">Select a conversation</span></div>
       <div class="thread-body" id="thread-body">
-        <div class="thread-placeholder">Pick a chat on the left to read the conversation. Text stays on this PC; media opens from your gallery / pCloud.</div>
+        <div class="thread-placeholder">Pick a chat on the left to read the conversation. Text stays on this PC; media opens from your gallery.</div>
       </div>
     </section>
   </div>
@@ -77,76 +85,280 @@
     <div class="lb-meta" id="lb-meta"></div>
   </div>
 
-  <!-- Settings -->
+  <!-- ===== First run ===== -->
+  <div id="wizard" class="wizard hidden">
+    <div class="wizard-card">
+
+      <section class="wz-step" data-step="welcome">
+        <h1>Welcome to WhatsBackUp</h1>
+        <p class="lead">It keeps a copy of every photo, video and message from your WhatsApp — on this PC, and in a cloud folder if you want one.</p>
+        <div class="notice">
+          <p><b>Before you start, three things worth knowing:</b></p>
+          <ul>
+            <li>This connects to WhatsApp the same way WhatsApp Web does, but it is <b>not an official WhatsApp app</b>. WhatsApp's terms don't allow unofficial clients, and there is a real if small chance an account gets limited or banned for using one.</li>
+            <li>It saves media from <b>everyone you chat with</b>, and they haven't agreed to that. Keep the copies to yourself.</li>
+            <li>Everything stays on this computer (and your own cloud folder). Nothing is sent anywhere else.</li>
+          </ul>
+        </div>
+        <label class="row toggle">
+          <input type="checkbox" id="wz-consent" />
+          <span class="switch"></span>
+          <span>I understand and want to continue</span>
+        </label>
+        <div class="wz-actions">
+          <button class="btn primary" id="wz-consent-next" disabled>Continue</button>
+        </div>
+      </section>
+
+      <section class="wz-step hidden" data-step="import">
+        <h1>Bring across your existing copies?</h1>
+        <p class="lead">An earlier version of this app was found on this PC. Its media, messages and WhatsApp link can be imported so you don't start over — or scan again.</p>
+        <div class="found" id="wz-found"></div>
+        <div class="row" id="wz-import-status"></div>
+        <div class="wz-actions">
+          <button class="btn" id="wz-import-skip">Skip — start fresh</button>
+          <button class="btn primary" id="wz-import-go">Import everything</button>
+        </div>
+      </section>
+
+      <section class="wz-step hidden" data-step="storage">
+        <h1>Where should your media be saved?</h1>
+        <p class="lead">Photos and videos can add up to a lot of space, so pick somewhere with room.</p>
+        <div class="choice">
+          <label class="opt"><input type="radio" name="wz-loc" value="default" checked />
+            <div><b>Keep it in the app's own folder</b><span id="wz-default-path" class="muted small"></span></div></label>
+          <label class="opt"><input type="radio" name="wz-loc" value="custom" />
+            <div><b>Choose a folder</b><span class="muted small">Pictures, another drive, anywhere you like</span></div></label>
+        </div>
+        <div class="row" id="wz-custom-row" style="display:none">
+          <input id="wz-media-root" type="text" class="txt" placeholder="D:\WhatsApp media" />
+          <button class="btn" id="wz-browse-media">Browse…</button>
+        </div>
+        <div class="row"><span id="wz-media-status" class="muted small"></span></div>
+        <div class="wz-actions">
+          <button class="btn primary" id="wz-storage-next">Continue</button>
+        </div>
+      </section>
+
+      <section class="wz-step hidden" data-step="cloud">
+        <h1>Also copy to a cloud folder?</h1>
+        <p class="lead">If you use pCloud, OneDrive, Dropbox or a network drive, point this at it and videos are written straight there — so your phone's storage never becomes the only copy.</p>
+        <div class="row">
+          <input id="wz-cloud-root" type="text" class="txt" placeholder="P:\WhatsApp Media  (leave empty to skip)" />
+          <button class="btn" id="wz-browse-cloud">Browse…</button>
+        </div>
+        <label class="row toggle">
+          <input type="checkbox" id="wz-mirror" />
+          <span class="switch"></span>
+          <span>Copy images there too (not just videos)</span>
+        </label>
+        <div class="row"><span id="wz-cloud-status" class="muted small"></span></div>
+        <div class="wz-actions">
+          <button class="btn" id="wz-cloud-skip">No cloud folder</button>
+          <button class="btn primary" id="wz-cloud-next">Continue</button>
+        </div>
+      </section>
+
+      <section class="wz-step hidden" data-step="startup">
+        <h1>Nearly there</h1>
+        <div class="choice">
+          <label class="row toggle"><input type="checkbox" id="wz-startup" checked />
+            <span class="switch"></span><span>Start automatically when Windows starts</span></label>
+          <label class="row toggle"><input type="checkbox" id="wz-convos" checked />
+            <span class="switch"></span><span>Also store message text, so conversations are readable and searchable</span></label>
+        </div>
+        <p class="muted small">Both can be changed later in Settings.</p>
+        <div class="wz-actions">
+          <button class="btn primary" id="wz-finish">Finish and link WhatsApp</button>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- ===== Settings ===== -->
   <div id="settings" class="modal hidden">
-    <div class="modal-card">
+    <div class="modal-card wide">
       <div class="modal-head">
         <h2>Settings</h2>
         <button class="modal-close" id="settings-close">✕</button>
       </div>
+
+      <div class="tabs settabs" id="settabs">
+        <button data-t="connection" class="active">Connection</button>
+        <button data-t="capture">What to save</button>
+        <button data-t="storage">Where</button>
+        <button data-t="history">History</button>
+        <button data-t="app">App</button>
+        <button data-t="advanced">Advanced</button>
+      </div>
+
       <div class="modal-body">
 
-        <div class="sec">
-          <div class="sec-title">Connection</div>
-          <div class="row"><span id="conn-status" class="muted">…</span></div>
-        </div>
-
-        <div class="sec">
-          <div class="sec-title">Import old images, videos &amp; conversations</div>
-          <p class="muted small">Pulls media and message history already in your chats (as far back as WhatsApp lets a linked device see). Safe to run anytime.</p>
-          <div class="row">
-            <label class="lbl">Scan up to
-              <input id="backfill-limit" type="number" min="50" max="5000" step="50" class="num" /> messages per chat
-            </label>
-          </div>
-          <div class="row">
-            <button id="btn-backfill" class="btn primary">⧉ Import history now</button>
-            <span id="backfill-status" class="muted small"></span>
-          </div>
-          <div class="progress hidden" id="backfill-progress"><div class="bar" id="backfill-bar"></div></div>
-        </div>
-
-        <div class="sec">
-          <div class="sec-title">Conversations</div>
-          <label class="row toggle">
-            <input type="checkbox" id="capture-convos" />
-            <span class="switch"></span>
-            <span>Capture &amp; store message text (so you can read and search conversations)</span>
-          </label>
-          <p class="muted small">Message text is kept <b>only on this PC</b> (not uploaded to pCloud).</p>
-          <div class="row wrap">
-            <button id="btn-export" class="btn">Export full transcript (local HTML)</button>
-            <span id="export-status" class="muted small"></span>
+        <!-- Connection -->
+        <div class="pane" data-pane="connection">
+          <div class="sec">
+            <div class="sec-title">WhatsApp</div>
+            <div class="row"><span id="conn-status" class="muted">…</span></div>
+            <div class="row"><span id="health-status" class="muted small"></span></div>
+            <div class="row wrap">
+              <button id="btn-reconnect" class="btn">Reconnect now</button>
+              <button id="btn-unlink" class="btn danger">Unlink this device…</button>
+            </div>
+            <p class="muted small">Unlinking forgets the link on this PC and shows a fresh QR code. Your saved media is not touched.</p>
           </div>
         </div>
 
-        <div class="sec">
-          <div class="sec-title">Cloud backup (pCloud)</div>
-          <p class="muted small">Videos always save to pCloud. Turn this on to also back up images there, so the pCloud folder alone can rebuild your media.</p>
-          <label class="row toggle">
-            <input type="checkbox" id="mirror-images" />
-            <span class="switch"></span>
-            <span>Also back up every <b>image</b> to pCloud</span>
-          </label>
-          <div class="row">
-            <input id="cloud-root" type="text" class="txt" placeholder="P:/WhatsApp Media" />
-            <button id="btn-checkpath" class="btn">Check</button>
+        <!-- Capture -->
+        <div class="pane hidden" data-pane="capture">
+          <div class="sec">
+            <div class="sec-title">Media types</div>
+            <label class="row toggle"><input type="checkbox" id="set-captureImages" /><span class="switch"></span><span>Photos</span></label>
+            <label class="row toggle"><input type="checkbox" id="set-captureVideos" /><span class="switch"></span><span>Videos</span></label>
+            <label class="row toggle"><input type="checkbox" id="set-captureVoice" /><span class="switch"></span><span>Voice notes</span></label>
+            <label class="row toggle"><input type="checkbox" id="set-captureAudio" /><span class="switch"></span><span>Audio files</span></label>
+            <label class="row toggle"><input type="checkbox" id="set-captureDocuments" /><span class="switch"></span><span>Documents (PDF, Office, …)</span></label>
+            <label class="row toggle"><input type="checkbox" id="set-captureStickers" /><span class="switch"></span><span>Stickers</span></label>
           </div>
-          <div class="row"><span id="path-status" class="muted small"></span></div>
+          <div class="sec">
+            <div class="sec-title">Which chats</div>
+            <label class="row toggle"><input type="checkbox" id="set-captureReceived" /><span class="switch"></span><span>Things sent <b>to</b> you</span></label>
+            <label class="row toggle"><input type="checkbox" id="set-captureSent" /><span class="switch"></span><span>Things <b>you</b> send</span></label>
+            <label class="row toggle"><input type="checkbox" id="set-captureGroups" /><span class="switch"></span><span>Group chats</span></label>
+            <div class="row col">
+              <label class="lbl">Skip these chats (one name per line)</label>
+              <textarea id="set-excludedChats" class="txt area" rows="3" placeholder="Family group&#10;Work announcements"></textarea>
+            </div>
+          </div>
+          <div class="sec">
+            <div class="sec-title">Conversations</div>
+            <label class="row toggle"><input type="checkbox" id="set-captureConversations" /><span class="switch"></span>
+              <span>Store message text so you can read and search conversations</span></label>
+            <p class="muted small">Message text is kept <b>only on this PC</b> — never copied to your cloud folder.</p>
+            <div class="row wrap">
+              <button id="btn-export" class="btn">Export full transcript (local HTML)</button>
+              <span id="export-status" class="muted small"></span>
+            </div>
+          </div>
         </div>
 
-        <div class="sec">
-          <div class="sec-title">Where everything lives</div>
-          <table class="paths" id="paths"></table>
+        <!-- Storage -->
+        <div class="pane hidden" data-pane="storage">
+          <div class="sec">
+            <div class="sec-title">Media folder</div>
+            <div class="row">
+              <input id="set-mediaRoot" type="text" class="txt" placeholder="(the app's own folder)" />
+              <button class="btn" id="btn-browse-media">Browse…</button>
+              <button class="btn" id="btn-open-media">Open</button>
+            </div>
+            <p class="muted small">Photos, voice notes and documents live here. Changing it takes effect after a restart; existing files stay where they are.</p>
+          </div>
+          <div class="sec">
+            <div class="sec-title">Cloud folder</div>
+            <p class="muted small">Videos are written straight into this folder, so your cloud client syncs them off the PC. Leave empty to keep everything local.</p>
+            <div class="row">
+              <input id="set-cloudRoot" type="text" class="txt" placeholder="P:\WhatsApp Media" />
+              <button class="btn" id="btn-browse-cloud">Browse…</button>
+              <button class="btn" id="btn-checkpath">Check</button>
+            </div>
+            <label class="row toggle"><input type="checkbox" id="set-mirrorImages" /><span class="switch"></span>
+              <span>Also copy every <b>image</b> there</span></label>
+            <div class="row"><span id="path-status" class="muted small"></span></div>
+          </div>
+          <div class="sec">
+            <div class="sec-title">Space used</div>
+            <table class="paths" id="storage-table"></table>
+            <div class="row">
+              <label class="lbl">Delete local copies older than
+                <input id="set-retentionDays" type="number" min="0" max="3650" step="30" class="num" /> days
+              </label>
+              <span class="muted small">(0 = keep everything)</span>
+            </div>
+          </div>
+          <div class="sec">
+            <div class="sec-title">Where everything lives</div>
+            <table class="paths" id="paths"></table>
+          </div>
         </div>
 
-        <div class="sec">
-          <div class="sec-title">Maintenance</div>
-          <div class="row wrap">
-            <button id="btn-remove-samples" class="btn">Remove sample images</button>
-            <button id="btn-restart" class="btn">Restart app</button>
+        <!-- History -->
+        <div class="pane hidden" data-pane="history">
+          <div class="sec">
+            <div class="sec-title">Import old images, videos &amp; conversations</div>
+            <p class="muted small">Pulls media and message history already in your chats, as far back as WhatsApp lets a linked device see. Safe to run anytime — anything already saved is skipped.</p>
+            <div class="row">
+              <label class="lbl">Scan up to
+                <input id="backfill-limit" type="number" min="50" max="5000" step="50" class="num" /> messages per chat
+              </label>
+            </div>
+            <div class="row">
+              <button id="btn-backfill" class="btn primary">⧉ Import history now</button>
+              <span id="backfill-status" class="muted small"></span>
+            </div>
+            <div class="progress hidden" id="backfill-progress"><div class="bar" id="backfill-bar"></div></div>
+            <p class="muted small">Older media often can't be downloaded any more — WhatsApp removes files from its servers after a while. Those are reported as skipped, not lost by this app.</p>
           </div>
-          <p class="muted small" id="restart-note"></p>
+        </div>
+
+        <!-- App -->
+        <div class="pane hidden" data-pane="app">
+          <div class="sec">
+            <div class="sec-title">Starting and closing</div>
+            <label class="row toggle"><input type="checkbox" id="set-startWithWindows" /><span class="switch"></span><span>Start when Windows starts</span></label>
+            <label class="row toggle"><input type="checkbox" id="set-startMinimized" /><span class="switch"></span><span>Start hidden in the system tray</span></label>
+            <label class="row toggle"><input type="checkbox" id="set-closeToTray" /><span class="switch"></span><span>Closing the window keeps it running in the tray</span></label>
+            <p class="muted small">It has to keep running to catch new media — WhatsApp only delivers to a device that's connected.</p>
+          </div>
+          <div class="sec">
+            <div class="sec-title">Notifications &amp; updates</div>
+            <label class="row toggle"><input type="checkbox" id="set-notifyOnProblem" /><span class="switch"></span><span>Tell me if capture stops working</span></label>
+            <label class="row toggle"><input type="checkbox" id="set-autoUpdate" /><span class="switch"></span><span>Install updates automatically</span></label>
+            <div class="row wrap">
+              <button id="btn-check-updates" class="btn">Check for updates</button>
+              <span id="version-line" class="muted small"></span>
+            </div>
+            <p class="muted small">WhatsApp changes its website without warning, which can stop capture. Updates are how the fix reaches you.</p>
+          </div>
+          <div class="sec">
+            <div class="sec-title">Help &amp; diagnostics</div>
+            <div class="row wrap">
+              <button id="btn-open-logs" class="btn">Open log folder</button>
+              <button id="btn-copy-diag" class="btn">Copy diagnostic report</button>
+              <button id="btn-restart" class="btn">Restart capture</button>
+            </div>
+            <p class="muted small" id="restart-note"></p>
+          </div>
+        </div>
+
+        <!-- Advanced -->
+        <div class="pane hidden" data-pane="advanced">
+          <div class="sec">
+            <div class="sec-title">Dashboard</div>
+            <div class="row">
+              <label class="lbl">Port <input id="set-port" type="number" min="1" max="65535" class="num" /></label>
+              <span class="muted small">Change only if something else uses it.</span>
+            </div>
+          </div>
+          <div class="sec">
+            <div class="sec-title">Downloads</div>
+            <div class="row">
+              <label class="lbl">Give up on a single download after
+                <input id="set-downloadTimeoutSec" type="number" min="10" max="600" step="10" class="num" /> seconds</label>
+            </div>
+          </div>
+          <div class="sec">
+            <div class="sec-title">Logs</div>
+            <div class="row">
+              <label class="lbl">Keep log files under
+                <input id="set-logMaxMB" type="number" min="1" max="100" class="num" /> MB</label>
+            </div>
+          </div>
+          <div class="sec">
+            <div class="sec-title">Maintenance</div>
+            <div class="row wrap">
+              <button id="btn-remove-samples" class="btn">Remove sample images</button>
+            </div>
+          </div>
         </div>
 
       </div>

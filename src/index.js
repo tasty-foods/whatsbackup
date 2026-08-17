@@ -1,4 +1,8 @@
 'use strict';
+const settings = require('./settings');
+const logger = require('./logger');
+logger.init({ maxMB: settings.read().logMaxMB });
+
 const cfg = require('./config');
 const store = require('./store');
 const createApp = require('./web');
@@ -11,12 +15,18 @@ const app = createApp();
 // so it must not be reachable from other devices on the network.
 const server = app.listen(cfg.PORT, '127.0.0.1', () => {
   console.log('====================================================');
-  console.log('  WhatsApp Media Dashboard');
+  console.log('  WhatsBackUp');
   console.log('  Open:    http://localhost:' + cfg.PORT);
+  console.log('  Home:    ' + cfg.APP_HOME);
   console.log('  Images:  ' + cfg.IMAGES_DIR);
-  console.log('  Videos:  ' + cfg.VIDEO_DIR + (cfg.CLOUD_AVAILABLE ? '  (pCloud → cloud)' : '  (LOCAL — cloud drive not found)'));
+  console.log('  Videos:  ' + cfg.VIDEO_DIR + (cfg.CLOUD_AVAILABLE ? '  (cloud folder)' : cfg.CLOUD_CONFIGURED ? '  (LOCAL — cloud drive not found)' : '  (local)'));
   console.log('====================================================');
   startClient();
+
+  // Tell the Electron shell we're up, so it can show the window on the right port.
+  if (process.parentPort) {
+    try { process.parentPort.postMessage({ type: 'listening', port: cfg.PORT, home: cfg.APP_HOME }); } catch (_) {}
+  }
 
   // Reflect cloud-drive drops/reappearance in the UI health status.
   setInterval(() => {
@@ -30,7 +40,10 @@ const server = app.listen(cfg.PORT, '127.0.0.1', () => {
 // second copy (which would fight over the WhatsApp session and the port).
 server.on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
-    console.log('[startup] Dashboard already running on port ' + cfg.PORT + ' — this copy will exit.');
+    console.log('[startup] Port ' + cfg.PORT + ' is already in use — this copy will exit.');
+    if (process.parentPort) {
+      try { process.parentPort.postMessage({ type: 'port-in-use', port: cfg.PORT }); } catch (_) {}
+    }
     process.exit(0);
   }
   console.error('[startup] server error:', err.message);

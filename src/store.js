@@ -9,8 +9,8 @@ const seen = new Set();
 const byId = new Map();
 
 function ensureDirs() {
-  for (const d of [cfg.IMAGES_DIR, cfg.VIDEO_DIR, cfg.DATA_DIR]) {
-    fs.mkdirSync(d, { recursive: true });
+  for (const d of [cfg.IMAGES_DIR, cfg.VIDEO_DIR, cfg.FILES_DIR, cfg.DATA_DIR, cfg.LOGS_DIR]) {
+    try { fs.mkdirSync(d, { recursive: true }); } catch (_) {}   // a missing cloud drive must not stop startup
   }
   if (cfg.MIRROR_IMAGES_TO_CLOUD) {
     try { fs.mkdirSync(cfg.IMAGE_CLOUD_DIR, { recursive: true }); } catch (_) {}
