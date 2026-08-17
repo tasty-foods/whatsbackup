@@ -947,11 +947,29 @@ const AI = (function () {
       $$('set-aiMonthlyBudget').value = s.aiMonthlyBudget != null ? s.aiMonthlyBudget : 5;
     } catch (e) {}
     onProviderChange();
+    showSpend(st);
     refreshEstimate();
     if (bridge) {
       const k = await bridge.hasAiKey();
       $$('ai-key').placeholder = k.stored ? '•••••••• (saved on this PC)' : 'Paste your key';
     }
+  }
+
+  // Setting a cap is no use without being able to see what has gone against it.
+  // The two figures differ only when a model with no published price was used,
+  // and in that case saying so is better than quietly showing a smaller number.
+  function showSpend(st) {
+    const el = $$('ai-spend');
+    if (!el) return;
+    if (!st || !st.lastRun) { el.innerHTML = '&nbsp;'; return; }
+    const money = (n) => (n < 0.01 && n > 0 ? 'under a cent' : '$' + n.toFixed(2));
+    const used = st.budgetUsed || 0, known = st.spendThisMonth || 0;
+    let line = `Spent this month: ${money(known)}.`;
+    if (used - known > 0.005) {
+      line += ` Plus work on a model with no published price, counted as ${money(used - known)} against the limit.`;
+    }
+    if (st.budget) line += ` Limit ${money(st.budget)}.`;
+    el.textContent = line;
   }
 
   function preset() { return state.presets.find((p) => p.id === $$('set-aiProvider').value) || {}; }
@@ -1053,6 +1071,7 @@ const AI = (function () {
           ? `<span class="bad-text">${escapeHtml(s.error)}</span>`
           : `<span class="ok-text">Done — ${escapeHtml(s.message || 'sorted')}${spend}</span>`;
         refreshEstimate();
+        showSpend(s);
         loadLabels(); loadChatGroups();
         if (currentView === 'convo') Convo.refreshChats();
       }
