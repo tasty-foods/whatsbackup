@@ -13,6 +13,8 @@ contextBridge.exposeInMainWorld('desktop', {
   checkUpdates: () => ipcRenderer.invoke('wb:checkUpdates'),
   quit: () => ipcRenderer.invoke('wb:quit'),
   migrate: (from) => ipcRenderer.invoke('wb:migrate', from),
+  setAiKey: (key) => ipcRenderer.invoke('wb:setAiKey', key),
+  hasAiKey: () => ipcRenderer.invoke('wb:hasAiKey'),
   copyDiagnostics: () => ipcRenderer.invoke('wb:copyDiagnostics'),
   onMigrateProgress: (fn) => {
     const handler = (_e, m) => fn(m);

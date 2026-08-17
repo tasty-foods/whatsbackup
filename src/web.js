@@ -68,6 +68,16 @@ const SETTING_SPEC = {
   retentionDays: { type: 'int', min: 0, max: 3650 },
   setupComplete: { type: 'bool' },
   consentAccepted: { type: 'bool' },
+  aiEnabled: { type: 'bool' },
+  aiConsent: { type: 'bool' },
+  aiProvider: { type: 'path', restart: false },
+  aiModel: { type: 'path' },
+  aiBaseUrl: { type: 'path' },
+  aiMode: { type: 'path' },
+  aiAnalyseImages: { type: 'bool' },
+  aiAnalyseChats: { type: 'bool' },
+  aiMonthlyBudget: { type: 'int', min: 0, max: 10000 },
+  aiJsonSchema: { type: 'bool' },
 };
 
 function coerce(spec, value) {
@@ -151,10 +161,19 @@ function createApp() {
     archive.finalize();
   });
 
+  // The stored key is DPAPI ciphertext, but it has no business in the settings
+  // payload or a support report either.
+  const publicSettings = () => {
+    const s = { ...settings.read() };
+    s.aiKeyStored = !!s.aiKeyEnc;
+    delete s.aiKeyEnc;
+    return s;
+  };
+
   // ---- Settings ----
   app.get('/api/settings', (req, res) => {
     res.json({
-      settings: settings.read(),
+      settings: publicSettings(),
       defaults: settings.DEFAULTS,
       cloudConfigured: cfg.CLOUD_CONFIGURED,
       cloudAvailable: cfg.CLOUD_AVAILABLE,
@@ -266,9 +285,101 @@ function createApp() {
       counts: st.counts,
       conversations: st.conversations,
       cloud: { configured: cfg.CLOUD_CONFIGURED, available: cfg.CLOUD_AVAILABLE, root: cfg.CLOUD_ROOT },
-      settings: settings.read(),
+      settings: publicSettings(),
       logTail: tail,
     });
+  });
+
+  // ---- AI sorting ----
+  const ai = require('./ai');
+
+  app.get('/api/ai/status', (req, res) => res.json(ai.status()));
+  app.get('/api/ai/presets', (req, res) => res.json({
+    presets: Object.entries(ai.PRESETS).map(([id, p]) => ({
+      id, label: p.label, keyRequired: p.keyRequired, keyHint: p.keyHint,
+      baseUrl: p.baseUrl || '', models: p.models || [], defaultModel: p.defaultModel || '', local: !!p.local,
+    })),
+  }));
+  app.get('/api/ai/estimate', (req, res) => {
+    try { res.json(ai.estimate()); } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+  app.post('/api/ai/probe', sameOrigin, async (req, res) => {
+    try { res.json(await ai.probe(req.body || {})); }
+    catch (e) { res.status(500).json({ reachable: { ok: false, detail: e.message } }); }
+  });
+  app.post('/api/ai/run', sameOrigin, async (req, res) => {
+    res.json(await ai.run({ arrangeOnly: !!(req.body && req.body.arrangeOnly) }));
+  });
+  app.post('/api/ai/cancel', sameOrigin, (req, res) => res.json(ai.cancel()));
+  app.post('/api/ai/wipe', sameOrigin, (req, res) => { ai.store.wipe(); res.json({ ok: true }); });
+
+  // Everything the AI would send, shown verbatim, so the promise on the
+  // consent screen can be checked rather than trusted.
+  app.get('/api/ai/preview', (req, res) => {
+    const out = { image: null, chat: null };
+    const rec = store.listRecords({ kind: 'image' })[0];
+    if (rec) {
+      out.image = {
+        file: rec.filename,
+        sentBytes: rec.size,
+        text: `This photo was ${rec.dir === 'out' ? 'sent by the owner' : 'received'} in a chat called "${rec.chat}".`
+          + (rec.caption ? `\ncaption: ${rec.caption}` : ''),
+      };
+    }
+    const chat = messages.listChats()[0];
+    if (chat) out.chat = { name: chat.chatName, text: messages.digest(chat.chatId).slice(0, 4000) };
+    res.json(out);
+  });
+
+  // Groups: list, rename, and move an item. A move or rename is a correction —
+  // it is remembered and replayed into the next arrange.
+  app.get('/api/ai/groups', (req, res) => {
+    const kind = req.query.kind === 'chat' ? 'chat' : 'media';
+    const groups = ai.store.listGroups(kind).map((g) => ({ ...g, items: ai.store.membersOf(g.id).map((m) => m.ref_id) }));
+    res.json({ kind, groups });
+  });
+  app.post('/api/ai/group/rename', sameOrigin, (req, res) => {
+    const { id, name } = req.body || {};
+    if (!id || !name) return res.status(400).json({ ok: false });
+    ai.store.renameGroup(id, String(name).slice(0, 60));
+    res.json({ ok: true });
+  });
+  app.post('/api/ai/group/assign', sameOrigin, (req, res) => {
+    const { kind, refId, groupId } = req.body || {};
+    if (!kind || !refId) return res.status(400).json({ ok: false });
+    ai.store.setMember(kind, refId, groupId || null, 'user');
+    const g = groupId ? ai.store.listGroups(kind === 'chat' ? 'chat' : 'media').find((x) => x.id === groupId) : null;
+    const lbl = ai.store.getLabel(kind, refId);
+    ai.store.addCorrection(kind, 'move', JSON.stringify({
+      groupName: g ? g.name : null,
+      summary: lbl && lbl.label ? (lbl.label.caption || lbl.label.summary || '') : '',
+    }));
+    res.json({ ok: true });
+  });
+  app.post('/api/ai/group/delete', sameOrigin, (req, res) => {
+    const { id } = req.body || {};
+    const row = ai.store.db().prepare('SELECT kind, name FROM ai_groups WHERE id = ?').get(id);
+    if (!row) return res.status(404).json({ ok: false });
+    ai.store.db().prepare('DELETE FROM ai_group_members WHERE group_id = ?').run(id);
+    ai.store.db().prepare('DELETE FROM ai_groups WHERE id = ?').run(id);
+    ai.store.addCorrection(row.kind, 'reject', JSON.stringify({ name: row.name }));
+    res.json({ ok: true });
+  });
+
+  // The labels themselves, for the gallery and the chat list.
+  app.get('/api/ai/labels', (req, res) => {
+    const kind = req.query.kind;
+    const kinds = kind === 'chat' ? ['chat'] : ['image', 'video'];
+    const groups = new Map(ai.store.listGroups(kind === 'chat' ? 'chat' : 'media').map((g) => [g.id, g]));
+    res.json(ai.store.labelsOfKinds(kinds).map((e) => {
+      const m = ai.store.groupOf(e.kind, e.refId);
+      const g = m && groups.get(m.group_id);
+      return {
+        kind: e.kind, refId: e.refId, label: e.label,
+        groupId: g ? g.id : null, groupName: g ? g.name : null, groupEmoji: g ? g.emoji : null,
+        placedBy: m ? m.source : null,
+      };
+    }));
   });
 
   // ---- Conversations ----

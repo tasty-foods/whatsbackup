@@ -44,6 +44,7 @@
 
   <!-- ===== Media view ===== -->
   <div id="view-media">
+    <div id="albumbar" class="albumbar hidden"></div>
     <section id="link" class="link hidden">
       <div class="link-card">
         <h2 id="link-title">Link your WhatsApp</h2>
@@ -97,7 +98,7 @@
           <ul>
             <li>This connects to WhatsApp the same way WhatsApp Web does, but it is <b>not an official WhatsApp app</b>. WhatsApp's terms don't allow unofficial clients, and there is a real if small chance an account gets limited or banned for using one.</li>
             <li>It saves media from <b>everyone you chat with</b>, and they haven't agreed to that. Keep the copies to yourself.</li>
-            <li>Everything stays on this computer (and your own cloud folder). Nothing is sent anywhere else.</li>
+            <li>Everything stays on this computer and your own cloud folder. There is no account, no server of ours, and no telemetry. The one exception is switched off: <b>AI sorting</b> can send photos and message text to an AI provider you choose, and it will not send anything until you turn it on and accept a second notice that shows you the exact data first.</li>
           </ul>
         </div>
         <label class="row toggle">
@@ -189,6 +190,7 @@
         <button data-t="capture">What to save</button>
         <button data-t="storage">Where</button>
         <button data-t="history">History</button>
+        <button data-t="ai">AI sorting</button>
         <button data-t="app">App</button>
         <button data-t="advanced">Advanced</button>
       </div>
@@ -297,6 +299,96 @@
             </div>
             <div class="progress hidden" id="backfill-progress"><div class="bar" id="backfill-bar"></div></div>
             <p class="muted small">Older media often can't be downloaded any more — WhatsApp removes files from its servers after a while. Those are reported as skipped, not lost by this app.</p>
+          </div>
+        </div>
+
+        <!-- AI sorting -->
+        <div class="pane hidden" data-pane="ai">
+          <div class="sec">
+            <div class="sec-title">Sort with AI</div>
+            <p class="muted small">Groups your photos into albums by what's in them, and your chats into projects by what they're about. It needs an AI service — your own account, your own key — and it is the only part of this app that sends anything off this PC.</p>
+            <label class="row toggle"><input type="checkbox" id="set-aiEnabled" /><span class="switch"></span><span>Use AI to sort my media and conversations</span></label>
+          </div>
+
+          <div class="sec" id="ai-consent-sec">
+            <div class="sec-title">What leaves this PC</div>
+            <p class="muted small">Before anything is sent, look at exactly what would go. This is the literal content of the first request.</p>
+            <div class="row wrap">
+              <button class="btn" id="btn-ai-preview">Show me exactly what leaves my PC</button>
+            </div>
+            <pre id="ai-preview" class="payload hidden"></pre>
+            <p class="muted small hidden" id="ai-local-note"><b>This one runs on your own PC.</b> With a local model the data below is handed to a program on this machine — nothing goes over the internet, and it costs nothing.</p>
+            <label class="row toggle"><input type="checkbox" id="set-aiConsent" /><span class="switch"></span>
+              <span>I understand my photos and message text will be sent to the service I choose below</span></label>
+          </div>
+
+          <div class="sec">
+            <div class="sec-title">Service</div>
+            <div class="row">
+              <label class="lbl">Provider</label>
+              <select id="set-aiProvider" class="txt"></select>
+            </div>
+            <div class="row" id="ai-baseurl-row">
+              <label class="lbl">Address</label>
+              <input id="set-aiBaseUrl" type="text" class="txt" placeholder="https://…/v1" />
+            </div>
+            <div class="row" id="ai-key-row">
+              <label class="lbl">API key</label>
+              <input id="ai-key" type="password" class="txt" placeholder="Paste your key" autocomplete="off" />
+              <button class="btn" id="btn-ai-savekey">Save key</button>
+              <button class="btn ghost" id="btn-ai-clearkey">Forget</button>
+            </div>
+            <div class="row"><span id="ai-key-hint" class="muted small"></span></div>
+            <div class="row">
+              <label class="lbl">Model</label>
+              <input id="set-aiModel" type="text" class="txt" list="ai-model-list" placeholder="model name" />
+              <datalist id="ai-model-list"></datalist>
+            </div>
+            <div class="row wrap">
+              <button class="btn primary" id="btn-ai-test">Test connection</button>
+              <span id="ai-test-status" class="muted small"></span>
+            </div>
+            <div id="ai-probe" class="probe hidden"></div>
+          </div>
+
+          <div class="sec">
+            <div class="sec-title">What to sort, and when</div>
+            <label class="row toggle"><input type="checkbox" id="set-aiAnalyseImages" /><span class="switch"></span><span>Photos and videos → albums</span></label>
+            <label class="row toggle"><input type="checkbox" id="set-aiAnalyseChats" /><span class="switch"></span><span>Conversations → projects</span></label>
+            <div class="row">
+              <label class="lbl">Run</label>
+              <select id="set-aiMode" class="txt">
+                <option value="manual">Only when I click</option>
+                <option value="assist">When I click, then automatically for new items</option>
+                <option value="auto">Fully automatic</option>
+              </select>
+            </div>
+            <div class="row">
+              <label class="lbl">Stop after spending
+                <input id="set-aiMonthlyBudget" type="number" min="0" max="10000" step="1" class="num" /> $ a month
+              </label>
+              <span class="muted small">(0 = no limit)</span>
+            </div>
+          </div>
+
+          <div class="sec">
+            <div class="sec-title">Sort now</div>
+            <div class="row"><span id="ai-estimate" class="muted small">…</span></div>
+            <div class="row wrap">
+              <button class="btn primary" id="btn-ai-run">Analyse and sort</button>
+              <button class="btn" id="btn-ai-arrange">Re-sort only</button>
+              <button class="btn" id="btn-ai-cancel">Stop</button>
+            </div>
+            <div class="progress hidden" id="ai-progress"><div class="bar" id="ai-bar"></div></div>
+            <div class="row"><span id="ai-run-status" class="muted small"></span></div>
+          </div>
+
+          <div class="sec">
+            <div class="sec-title">Data</div>
+            <div class="row wrap">
+              <button class="btn danger" id="btn-ai-wipe">Delete all AI labels and albums</button>
+            </div>
+            <p class="muted small">Your photos and messages are never touched — only what the AI wrote about them.</p>
           </div>
         </div>
 

@@ -122,4 +122,46 @@ function allForExport() {
     FROM messages ORDER BY chat_name, ts`).all();
 }
 
-module.exports = { init, addMessage, addMany, listChats, getThread, getNewer, search, counts, allForExport };
+// The AI tables live in this same database file — one file, one WAL, one thing
+// to back up — so they borrow this connection rather than opening a second one.
+function handle() { return init(); }
+
+// A compact digest of one chat for the AI to read: the newest messages plus a
+// sample spread across the whole history, so a long chat is characterised by
+// more than its last afternoon.
+function digest(chatId, { recent = 30, spread = 30, chars = 200 } = {}) {
+  init();
+  const newest = db.prepare(`SELECT ts, from_me, author, body FROM messages
+    WHERE chat_id = ? AND COALESCE(body,'') != '' ORDER BY ts DESC LIMIT ?`).all(chatId, recent);
+  const sampled = db.prepare(`SELECT ts, from_me, author, body FROM messages
+    WHERE chat_id = ? AND COALESCE(body,'') != '' AND id NOT IN (
+      SELECT id FROM messages WHERE chat_id = ? AND COALESCE(body,'') != '' ORDER BY ts DESC LIMIT ?)
+    ORDER BY RANDOM() LIMIT ?`).all(chatId, chatId, recent, spread);
+  const rows = [...sampled, ...newest.reverse()].sort((a, b) => a.ts - b.ts);
+  return rows.map((r) => {
+    const who = r.from_me ? 'me' : (r.author || 'them');
+    const when = new Date(r.ts).toISOString().slice(0, 10);
+    return `[${when} ${who}] ${String(r.body).replace(/\s+/g, ' ').slice(0, chars)}`;
+  }).join('\n');
+}
+
+// Chats that actually have something to read. A chat of nothing but photos has
+// no text to summarise, so it should never be counted or costed as work.
+function chatsWithText() {
+  init();
+  return new Set(db.prepare(`SELECT DISTINCT chat_id FROM messages WHERE COALESCE(body,'') != ''`)
+    .all().map((r) => r.chat_id));
+}
+
+// Identifies the state of a chat for caching: re-summarise only when it has
+// grown meaningfully, not on every new message.
+function chatFingerprint(chatId) {
+  init();
+  const r = db.prepare(`SELECT COUNT(*) c, MAX(ts) last FROM messages WHERE chat_id = ?`).get(chatId);
+  return { count: r ? r.c : 0, last: r ? r.last : 0 };
+}
+
+module.exports = {
+  init, addMessage, addMany, listChats, getThread, getNewer, search, counts, allForExport,
+  handle, digest, chatFingerprint, chatsWithText,
+};

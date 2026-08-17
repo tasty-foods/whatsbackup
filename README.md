@@ -40,7 +40,7 @@ Nothing writable lives next to the program. Installed, everything is under
 
 | Folder | Contents |
 |---|---|
-| `data\` | `messages.db` (SQLite), `index.ndjson` (media index), `settings.json` |
+| `data\` | `messages.db` (SQLite, incl. the `ai_*` tables), `index.ndjson` (media index), `settings.json` |
 | `session\` | the Chromium profile that *is* the WhatsApp link |
 | `logs\` | rotating log, capped by the `logMaxMB` setting |
 | `media\` | images / videos / files, unless the user chose another folder |
@@ -52,6 +52,52 @@ so development doesn't touch the installed copy. `src/paths.js` is the switch.
 copy is alive (a live SQLite `-wal` holds writes the `.db` doesn't have yet),
 copies rather than moves, and verifies row and file counts before reporting
 success.
+
+## AI sorting (`src/ai/`)
+
+Off by default; needs the user's own key. Two passes:
+
+**label** — one cheap call per item, cached in `ai_labels` by content hash, so
+re-running the whole library costs nothing. Images go to a vision model; videos
+are labelled from text context only (no vision API takes video) and marked as
+such; chats send a digest of 30 newest + 30 sampled messages at 200 chars each.
+
+**arrange** — one text-only call over all the labels. Three things keep the
+result stable instead of reshuffled on every run:
+
+- existing groups are sent **with their ids**, and the model is asked to move
+  items into them rather than invent a fresh taxonomy;
+- the user's own corrections are replayed as house rules, and rows with
+  `source = 'user'` are re-attached *after* the AI's, so a correction can never
+  be undone by a later sort;
+- members are referenced by **ordinal index**, never by record id — echoing 400+
+  thirty-character ids costs thousands of output tokens and silently truncates.
+
+An album the user renames keeps its old name in `prev_names`, because a model
+proposing "Equipment & repairs" means the album now called "Machine repairs";
+without the alias the arrange builds a second album and strands the first.
+
+**Providers** are two adapters: Anthropic via `@anthropic-ai/sdk`, and
+OpenAI-compatible via plain `fetch` — which covers OpenAI, Gemini's `/v1beta/openai`
+shim, OpenRouter, Groq, Ollama and LM Studio. Presets are data in `presets.js`.
+
+**Capabilities are probed, not tabled** (`probe.js`). A hardcoded `vision: true`
+is wrong the moment someone types a model name: Ollama accepts `response_format`
+and ignores it, a gateway can route to a text-only model and drop image parts.
+Test connection asks three separate questions — reachable, honours JSON, sees an
+8×8 red PNG — and the runner remembers a "no" so it skips the photos instead of
+failing several hundred charged calls. No `minItems`/`maxItems` in any schema;
+OpenAI's strict mode rejects them, so group-size rules live in the prompt and are
+enforced in `arrange.validate()`.
+
+The key is encrypted with Electron `safeStorage` (Windows DPAPI), stored as
+ciphertext in settings.json, and handed to the engine in memory over `parentPort`.
+It is stripped from `/api/settings` and the diagnostic report. The engine's
+`utilityProcess` runs with `--use-system-ca` — without it, Node's bundled roots
+fail on any machine with TLS inspection and the first call dies as "fetch failed".
+
+`demo` is a real preset: a local fake provider that labels and groups with no key
+and no cost, for seeing what sorting looks like before paying for it.
 
 ## Building
 

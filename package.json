@@ -1,9 +1,9 @@
 {
   "name": "whatsbackup",
   "productName": "WhatsBackUp",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "private": true,
-  "description": "Saves every WhatsApp image, video and message to your PC — and to your cloud folder.",
+  "description": "Saves every WhatsApp image, video and message to your PC â€” and to your cloud folder.",
   "author": {
     "name": "Tasty Foods",
     "email": "info@tasty-foods.be"
@@ -21,6 +21,7 @@
     "reset": "node src/reset.js"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.117.1",
     "archiver": "^7.0.1",
     "electron-updater": "^6.8.9",
     "express": "^4.21.2",
@@ -34,7 +35,7 @@
   "build": {
     "appId": "be.tastyfoods.whatsbackup",
     "productName": "WhatsBackUp",
-    "copyright": "Copyright © 2026 Tasty Foods",
+    "copyright": "Copyright Â© 2026 Tasty Foods",
     "directories": {
       "output": "dist",
       "buildResources": "build"

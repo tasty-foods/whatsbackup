@@ -49,7 +49,10 @@ const KIND_ICON = { voice: '🎤', audio: '🎵', document: '📄', sticker: '�
 const KIND_LABEL = { voice: 'Voice note', audio: 'Audio', document: 'Document', sticker: 'Sticker' };
 
 function matchesFilter(r) {
-  if (query && !((r.chat || '').toLowerCase().includes(query))) return false;
+  // Search matches the chat name or, once labelled, what is actually in the picture.
+  if (query && !((r.chat || '').toLowerCase().includes(query))
+    && !(typeof AI !== 'undefined' && AI.matchesText(r, query))) return false;
+  if (typeof AI !== 'undefined' && !AI.passes(r)) return false;
   if (filter === 'all') return true;
   if (filter === 'image') return r.kind === 'image' || r.kind === 'sticker';
   if (filter === 'video') return r.kind === 'video';
@@ -71,7 +74,10 @@ function tile(r) {
   el.className = 'tile';
   el.dataset.id = r.id;
   const badge = r.dir === 'out' ? '<span class="badge out">↑ Sent</span>' : '<span class="badge in">↓ Received</span>';
-  const cap = `<div class="cap"><span class="chat">${escapeHtml(r.chat)}</span><span class="time">${fmtTime(r.ts)}</span></div>`;
+  const lbl = typeof AI !== 'undefined' ? AI.labelFor(r.id) : null;
+  const albumTag = lbl && lbl.groupName
+    ? `<span class="albumtag">${escapeHtml(lbl.groupEmoji || '📁')} ${escapeHtml(lbl.groupName)}</span>` : '';
+  const cap = `<div class="cap"><span class="chat">${escapeHtml(r.chat)}</span><span class="time">${fmtTime(r.ts)}</span></div>${albumTag}`;
   if (r.kind === 'image' || r.kind === 'sticker') {
     el.innerHTML = `<img loading="lazy" src="${r.serve}" alt="" onerror="this.classList.add('imgerr')" />${badge}${cap}`;
   } else if (r.kind === 'video') {
@@ -173,9 +179,19 @@ function showCurrent() {
   els.lbStage.appendChild(el);
   const sizeKb = r.size ? (r.size / 1024).toFixed(0) + ' KB' : '';
   const cloudTag = r.kind === 'video' && r.cloud ? ' · <span class="m-sub">saved to your cloud folder</span>' : '';
+  const lbl = typeof AI !== 'undefined' ? AI.labelFor(r.id) : null;
+  const l = lbl && lbl.label;
+  const aiBlock = l ? `<span class="m-ai">${escapeHtml(l.caption || l.summary || '')}
+      ${(l.tags || []).slice(0, 6).map((t) => `<em>${escapeHtml(t)}</em>`).join('')}
+      ${l.text_in_image ? `<span class="m-ocr">reads: “${escapeHtml(String(l.text_in_image).slice(0, 120))}”</span>` : ''}
+      ${l.visual === false ? '<span class="m-ocr">described from its chat — videos aren\'t shown to the AI</span>' : ''}
+    </span>` : '';
   els.lbMeta.innerHTML = `<span class="m-chat">${escapeHtml(r.chat)}</span>
     <span class="m-sub">${r.dir === 'out' ? 'Sent' : 'Received'} · ${new Date(r.ts).toLocaleString()} · ${sizeKb}${cloudTag}</span>
+    ${aiBlock}
+    ${typeof AI !== 'undefined' && AI.groups().length ? AI.albumPicker(r) : ''}
     <a href="${r.serve}" download>⭳ Download</a>`;
+  if (typeof AI !== 'undefined') AI.bindAlbumPicker(r);
   els.lbPrev.style.visibility = i > 0 ? 'visible' : 'hidden';
   els.lbNext.style.visibility = i < filteredCache.length - 1 ? 'visible' : 'hidden';
 }
@@ -275,6 +291,8 @@ const FIELDS = {
   notifyOnProblem: 'bool', autoUpdate: 'bool',
   mediaRoot: 'text', cloudRoot: 'text', excludedChats: 'lines',
   retentionDays: 'int', port: 'int', downloadTimeoutSec: 'int', logMaxMB: 'int',
+  aiEnabled: 'bool', aiConsent: 'bool', aiAnalyseImages: 'bool', aiAnalyseChats: 'bool',
+  aiProvider: 'text', aiModel: 'text', aiBaseUrl: 'text', aiMode: 'text', aiMonthlyBudget: 'int',
 };
 
 const S = {
@@ -317,6 +335,7 @@ S.tabs.addEventListener('click', (e) => {
   [...S.tabs.children].forEach((c) => c.classList.toggle('active', c === b));
   document.querySelectorAll('.pane').forEach((p) => p.classList.toggle('hidden', p.dataset.pane !== b.dataset.t));
   if (b.dataset.t === 'storage') loadStorage();
+  if (b.dataset.t === 'ai') AI.loadSettingsTab();
 });
 
 const fmtBytes = (n) => {
@@ -693,7 +712,30 @@ const Convo = (function () {
   function renderChats(chats) {
     if (!chats.length) { chatsEl.innerHTML = '<div class="convo-empty" style="padding:24px">No conversations stored yet. Turn on “Capture message text” in ⚙︎ Settings, then Import history.</div>'; return; }
     chatsEl.innerHTML = '';
+    // Once the AI has grouped them, the list is ordered by project rather than
+    // by recency alone — chats without a project fall to the bottom.
+    const projectOf = (id) => (typeof AI !== 'undefined' && AI.chatLabelFor(id)) || null;
+    const grouped = chats.some((c) => projectOf(c.chatId) && projectOf(c.chatId).groupName);
+    if (grouped) {
+      chats = chats.slice().sort((a, b) => {
+        const pa = projectOf(a.chatId), pb = projectOf(b.chatId);
+        const na = (pa && pa.groupName) || '￿', nb = (pb && pb.groupName) || '￿';
+        return na === nb ? (b.lastTs || 0) - (a.lastTs || 0) : na.localeCompare(nb);
+      });
+    }
+    let lastProject = null;
     for (const c of chats) {
+      if (grouped) {
+        const p = projectOf(c.chatId);
+        const name = (p && p.groupName) || 'Not in a project';
+        if (name !== lastProject) {
+          lastProject = name;
+          const h = document.createElement('div');
+          h.className = 'projecthead';
+          h.textContent = ((p && p.groupEmoji) ? p.groupEmoji + ' ' : '') + name;
+          chatsEl.appendChild(h);
+        }
+      }
       const el = document.createElement('div');
       el.className = 'chatitem' + (activeChat && activeChat.chatId === c.chatId ? ' active' : '');
       el.dataset.chat = c.chatId;
@@ -803,10 +845,298 @@ const Convo = (function () {
   return { enter, pollActive, refreshChats };
 })();
 
+
+/* ---------- AI sorting ---------- */
+const AI = (function () {
+  const state = { labels: new Map(), groups: [], chatGroups: new Map(), status: null, presets: [] };
+  let album = 'all';          // 'all' | group id | 'unsorted'
+  let pollTimer = null;
+
+  const bar = $('albumbar');
+  const $$ = (id) => document.getElementById(id);
+
+  /* --- data --- */
+  async function loadLabels() {
+    try {
+      const rows = await (await fetch('/api/ai/labels?kind=media')).json();
+      state.labels = new Map(rows.map((r) => [r.refId, r]));
+      const g = await (await fetch('/api/ai/groups?kind=media')).json();
+      state.groups = g.groups || [];
+    } catch (e) { /* AI not set up */ }
+    renderAlbumBar();
+    // Tiles are built before labels arrive on first load, so redraw once the
+    // album each photo belongs to is actually known.
+    if (state.labels.size) render(allItems);
+  }
+
+  async function loadChatGroups() {
+    try {
+      const rows = await (await fetch('/api/ai/labels?kind=chat')).json();
+      state.chatGroups = new Map(rows.map((r) => [r.refId, r]));
+    } catch (e) {}
+  }
+
+  /* --- album bar over the gallery --- */
+  function renderAlbumBar() {
+    if (!state.groups.length) { bar.classList.add('hidden'); return; }
+    const unsorted = allItems.filter((r) => !(state.labels.get(r.id) || {}).groupId).length;
+    const chip = (id, emoji, name, count) =>
+      `<button class="chip${album === id ? ' active' : ''}" data-album="${id}">${emoji ? escapeHtml(emoji) + ' ' : ''}${escapeHtml(name)}<span class="n">${count}</span></button>`;
+    bar.innerHTML = chip('all', '', 'All', allItems.length)
+      + state.groups.map((g) => chip(g.id, g.emoji, g.name, g.items.length)).join('')
+      + (unsorted ? chip('unsorted', '', 'Not sorted', unsorted) : '');
+    bar.classList.remove('hidden');
+  }
+
+  bar.addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-album]');
+    if (!b) return;
+    album = b.dataset.album;
+    renderAlbumBar();
+    render(allItems);
+  });
+
+  // Called by matchesFilter so albums and text search compose with the
+  // existing kind/direction filters instead of replacing them.
+  function passes(r) {
+    if (album !== 'all') {
+      const g = (state.labels.get(r.id) || {}).groupId || null;
+      if (album === 'unsorted' ? g : g !== album) return false;
+    }
+    return true;
+  }
+
+  // Text search should find a photo by what is in it, not just by chat name.
+  function matchesText(r, q) {
+    const l = (state.labels.get(r.id) || {}).label;
+    if (!l) return false;
+    return [l.caption, l.scene, l.text_in_image, (l.tags || []).join(' '), (l.subjects || []).join(' ')]
+      .filter(Boolean).join(' ').toLowerCase().includes(q);
+  }
+
+  const labelFor = (id) => state.labels.get(id) || null;
+  const chatLabelFor = (chatId) => state.chatGroups.get(chatId) || null;
+
+  /* --- settings tab --- */
+  async function loadSettingsTab() {
+    const [st, pre] = await Promise.all([
+      fetch('/api/ai/status').then((r) => r.json()).catch(() => null),
+      fetch('/api/ai/presets').then((r) => r.json()).catch(() => ({ presets: [] })),
+    ]);
+    state.status = st;
+    state.presets = pre.presets || [];
+
+    const sel = $$('set-aiProvider');
+    if (sel && !sel.options.length) {
+      sel.innerHTML = state.presets.map((p) => `<option value="${p.id}">${escapeHtml(p.label)}</option>`).join('');
+      sel.addEventListener('change', onProviderChange);
+    }
+    // The general settings load runs before these options exist, so the saved
+    // provider has to be applied here rather than left blank.
+    try {
+      const d = await (await fetch('/api/settings')).json();
+      const s = d.settings || {};
+      if (s.aiProvider) sel.value = s.aiProvider;
+      if (s.aiModel) $$('set-aiModel').value = s.aiModel;
+      if (s.aiBaseUrl) $$('set-aiBaseUrl').value = s.aiBaseUrl;
+      if (s.aiMode) $$('set-aiMode').value = s.aiMode;
+      $$('set-aiEnabled').checked = !!s.aiEnabled;
+      $$('set-aiConsent').checked = !!s.aiConsent;
+      $$('set-aiAnalyseImages').checked = s.aiAnalyseImages !== false;
+      $$('set-aiAnalyseChats').checked = s.aiAnalyseChats !== false;
+      $$('set-aiMonthlyBudget').value = s.aiMonthlyBudget != null ? s.aiMonthlyBudget : 5;
+    } catch (e) {}
+    onProviderChange();
+    refreshEstimate();
+    if (bridge) {
+      const k = await bridge.hasAiKey();
+      $$('ai-key').placeholder = k.stored ? '•••••••• (saved on this PC)' : 'Paste your key';
+    }
+  }
+
+  function preset() { return state.presets.find((p) => p.id === $$('set-aiProvider').value) || {}; }
+
+  function onProviderChange() {
+    const p = preset();
+    $$('ai-key-hint').textContent = p.keyHint || '';
+    $$('ai-key-row').style.display = p.keyRequired === false && p.local ? 'none' : '';
+    $$('ai-baseurl-row').style.display = p.baseUrl === '' && p.id !== 'custom' ? 'none' : '';
+    if (!$$('set-aiBaseUrl').value && p.baseUrl) $$('set-aiBaseUrl').value = p.baseUrl;
+    $$('ai-model-list').innerHTML = (p.models || []).map((m) => `<option value="${m}">`).join('');
+    if (!$$('set-aiModel').value && p.defaultModel) $$('set-aiModel').value = p.defaultModel;
+    // With a model running on this machine nothing actually leaves it, and
+    // saying otherwise would be the wrong kind of scary.
+    const note = $$('ai-local-note');
+    if (note) note.classList.toggle('hidden', !p.local);
+  }
+
+  async function refreshEstimate() {
+    const el = $$('ai-estimate');
+    el.textContent = 'Working out what this would cost…';
+    try {
+      const e = await (await fetch('/api/ai/estimate')).json();
+      const skipped = Object.entries(e.census.images.skipped || {});
+      const parts = [];
+      if (e.todo.images) parts.push(`${e.todo.images} photos`);
+      if (e.todo.videos) parts.push(`${e.todo.videos} videos`);
+      if (e.todo.chats) parts.push(`${e.todo.chats} conversations`);
+      if (!parts.length) { el.innerHTML = '<span class="ok-text">Everything is already sorted.</span>'; return; }
+      const cost = e.costKnown
+        ? (e.cost < 0.01 ? 'under a cent' : '≈ $' + e.cost.toFixed(2))
+        : 'an unknown amount (this model has no published price)';
+      el.innerHTML = `To do: ${parts.join(', ')} — ${cost} with ${escapeHtml(e.model)}.`
+        + (skipped.length ? `<br><span class="muted">Skipping ${skipped.map(([k, v]) => `${v} ${k}`).join(', ')} — no charge for those.</span>` : '');
+    } catch (err) { el.textContent = 'Could not work out an estimate.'; }
+  }
+
+  /* --- probes --- */
+  async function test() {
+    const btn = $$('btn-ai-test');
+    btn.disabled = true;
+    $$('ai-test-status').textContent = 'Asking the service three questions…';
+    $$('ai-probe').classList.add('hidden');
+    try {
+      await saveAiSettings();
+      const r = await (await fetch('/api/ai/probe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })).json();
+      const line = (label, s) => s ? `<div class="probe-line ${s.ok ? 'ok' : 'bad'}"><b>${s.ok ? '✓' : '✕'} ${label}</b><span>${escapeHtml(s.detail || '')}</span></div>` : '';
+      $$('ai-probe').innerHTML = line('Connected', r.reachable) + line('Structured replies', r.json) + line('Can see images', r.vision);
+      $$('ai-probe').classList.remove('hidden');
+      $$('ai-test-status').innerHTML = r.reachable && r.reachable.ok
+        ? '<span class="ok-text">Ready.</span>' : '<span class="bad-text">Not usable yet.</span>';
+      // Remember what the probe found so calls are shaped to what this model honours.
+      if (r.json) await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ aiJsonSchema: !!r.json.ok }) });
+    } catch (e) { $$('ai-test-status').textContent = 'Test failed: ' + e.message; }
+    btn.disabled = false;
+  }
+
+  async function saveAiSettings() {
+    const body = {
+      aiEnabled: $$('set-aiEnabled').checked,
+      aiConsent: $$('set-aiConsent').checked,
+      aiProvider: $$('set-aiProvider').value,
+      aiModel: $$('set-aiModel').value.trim(),
+      aiBaseUrl: $$('set-aiBaseUrl').value.trim(),
+      aiMode: $$('set-aiMode').value,
+      aiAnalyseImages: $$('set-aiAnalyseImages').checked,
+      aiAnalyseChats: $$('set-aiAnalyseChats').checked,
+      aiMonthlyBudget: parseInt($$('set-aiMonthlyBudget').value, 10) || 0,
+    };
+    await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  }
+
+  /* --- running --- */
+  async function run(arrangeOnly) {
+    await saveAiSettings();
+    const r = await (await fetch('/api/ai/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ arrangeOnly }) })).json();
+    if (!r.ok) { $$('ai-run-status').innerHTML = `<span class="bad-text">${escapeHtml(r.message)}</span>`; return; }
+    $$('ai-progress').classList.remove('hidden');
+    watch();
+  }
+
+  function watch() {
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(async () => {
+      let s;
+      try { s = await (await fetch('/api/ai/status')).json(); } catch (e) { return; }
+      state.status = s;
+      const total = Math.max(1, s.done + s.failed + s.skipped + s.jobs.queued);
+      $$('ai-bar').style.width = Math.round(((s.done + s.failed + s.skipped) / total) * 100) + '%';
+      const spend = s.cost ? ` · $${s.cost.toFixed(3)} so far` : '';
+      if (s.running) {
+        $$('ai-run-status').textContent = s.phase === 'arranging'
+          ? 'Working out the groups…'
+          : `Looked at ${s.done} of ${total}${s.skipped ? `, skipped ${s.skipped}` : ''}${s.failed ? `, ${s.failed} failed` : ''}${spend}`;
+      } else {
+        clearInterval(pollTimer); pollTimer = null;
+        $$('ai-bar').style.width = '100%';
+        $$('ai-run-status').innerHTML = s.error
+          ? `<span class="bad-text">${escapeHtml(s.error)}</span>`
+          : `<span class="ok-text">Done — ${escapeHtml(s.message || 'sorted')}${spend}</span>`;
+        refreshEstimate();
+        loadLabels(); loadChatGroups();
+        if (currentView === 'convo') Convo.refreshChats();
+      }
+    }, 1200);
+  }
+
+  /* --- wiring --- */
+  $$('btn-ai-test').addEventListener('click', test);
+  $$('btn-ai-run').addEventListener('click', () => run(false));
+  $$('btn-ai-arrange').addEventListener('click', () => run(true));
+  $$('btn-ai-cancel').addEventListener('click', () => fetch('/api/ai/cancel', { method: 'POST' }));
+  $$('btn-ai-savekey').addEventListener('click', async () => {
+    if (!bridge) return;
+    const v = $$('ai-key').value.trim();
+    if (!v) return;
+    const r = await bridge.setAiKey(v);
+    $$('ai-key').value = '';
+    $$('ai-key').placeholder = r.ok ? '•••••••• (saved on this PC)' : 'Paste your key';
+    $$('ai-test-status').innerHTML = r.ok
+      ? '<span class="ok-text">Key saved, encrypted with your Windows account.</span>'
+      : `<span class="bad-text">${escapeHtml(r.message || 'Could not save the key')}</span>`;
+  });
+  $$('btn-ai-clearkey').addEventListener('click', async () => {
+    if (!bridge) return;
+    await bridge.setAiKey('');
+    $$('ai-key').placeholder = 'Paste your key';
+    $$('ai-test-status').textContent = 'Key removed from this PC.';
+  });
+  $$('btn-ai-preview').addEventListener('click', async () => {
+    const el = $$('ai-preview');
+    el.classList.remove('hidden');
+    el.textContent = 'Loading…';
+    try {
+      const p = await (await fetch('/api/ai/preview')).json();
+      el.textContent = [
+        p.image ? `— for one photo —\nthe image file ${p.image.file} (${Math.round(p.image.sentBytes / 1024)} KB)\n${p.image.text}` : '',
+        p.chat ? `\n\n— for one conversation (“${p.chat.name}”) —\n${p.chat.text}` : '',
+        '\n\nNothing else is sent. No file paths, no phone numbers, no other chats.',
+      ].join('');
+    } catch (e) { el.textContent = 'Could not build the preview.'; }
+  });
+  $$('btn-ai-wipe').addEventListener('click', async () => {
+    if (!confirm('Delete every AI label and album?\n\nYour photos, videos and messages are not touched. You can run the sorting again afterwards.')) return;
+    await fetch('/api/ai/wipe', { method: 'POST' });
+    state.labels = new Map(); state.groups = []; state.chatGroups = new Map();
+    album = 'all'; renderAlbumBar(); render(allItems); refreshEstimate();
+  });
+
+  /* --- correcting the AI, from the lightbox --- */
+  // A move is not just a change of album — it is recorded and replayed as a
+  // house rule the next time the groups are worked out.
+  function albumPicker(r) {
+    const cur = (state.labels.get(r.id) || {}).groupId || '';
+    return `<span class="m-album"><label>Album</label><select id="lb-album">
+      <option value="">— not in an album —</option>
+      ${state.groups.map((g) => `<option value="${g.id}"${g.id === cur ? ' selected' : ''}>${escapeHtml((g.emoji ? g.emoji + ' ' : '') + g.name)}</option>`).join('')}
+    </select></span>`;
+  }
+
+  function bindAlbumPicker(r) {
+    const sel = document.getElementById('lb-album');
+    if (!sel) return;
+    sel.addEventListener('change', async () => {
+      const kind = r.kind === 'video' ? 'video' : 'image';
+      await fetch('/api/ai/group/assign', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind, refId: r.id, groupId: sel.value || null }),
+      });
+      await loadLabels();
+      render(allItems);
+    });
+  }
+
+  return {
+    loadLabels, loadChatGroups, loadSettingsTab, refreshEstimate, passes, matchesText,
+    labelFor, chatLabelFor, renderAlbumBar, saveAiSettings, albumPicker, bindAlbumPicker,
+    groups: () => state.groups,
+  };
+})();
+
 /* ---------- Boot + polling ---------- */
 maybeRunWizard();
 loadState();
-loadItems(true);
+loadItems(true).then(() => { AI.loadLabels(); AI.loadChatGroups(); });
 setInterval(loadState, 3000);
 setInterval(() => { if (currentView === 'media') loadItems(false); }, 4000);
 setInterval(() => Convo.pollActive(), 4000);

@@ -26,7 +26,19 @@ const server = app.listen(cfg.PORT, '127.0.0.1', () => {
   // Tell the Electron shell we're up, so it can show the window on the right port.
   if (process.parentPort) {
     try { process.parentPort.postMessage({ type: 'listening', port: cfg.PORT, home: cfg.APP_HOME }); } catch (_) {}
+    // The shell holds the AI key: it decrypts it and hands it over in memory,
+    // so the plaintext never lands in settings.json, a log, or this repo.
+    process.parentPort.on('message', (e) => {
+      const msg = e && e.data;
+      if (msg && msg.type === 'ai-key') {
+        require('./ai').setKey(msg.key || '');
+        console.log('[ai] key ' + (msg.key ? 'received' : 'cleared'));
+      }
+    });
   }
+
+  // New captures trickle through the labeller when the user asked for that.
+  setInterval(() => { try { require('./ai').kick(); } catch (_) {} }, 60000);
 
   // Reflect cloud-drive drops/reappearance in the UI health status.
   setInterval(() => {

@@ -4,7 +4,7 @@
 // The capture engine (Express + whatsapp-web.js + its own Chrome) runs in a
 // utilityProcess so a crash there can't take the window with it; this process
 // owns the window, the tray, startup registration, updates, and supervision.
-const { app, BrowserWindow, Tray, Menu, dialog, ipcMain, shell, Notification, nativeImage, utilityProcess } = require('electron');
+const { app, BrowserWindow, Tray, Menu, dialog, ipcMain, shell, Notification, nativeImage, safeStorage, utilityProcess } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
@@ -74,7 +74,13 @@ function startEngine() {
   };
   if (chrome) env.WB_CHROME = chrome;
 
-  child = utilityProcess.fork(path.join(ROOT, 'src', 'index.js'), [], { env, stdio: 'pipe' });
+  child = utilityProcess.fork(path.join(ROOT, 'src', 'index.js'), [], {
+    env,
+    stdio: 'pipe',
+    // Trust the Windows certificate store as well as Node's bundled roots, so
+    // an AI provider stays reachable on a network that inspects HTTPS.
+    execArgv: ['--use-system-ca'],
+  });
 
   // The engine logs to its own rotating file; mirror to stdout for `npm run dev`.
   if (child.stdout) child.stdout.on('data', (d) => process.stdout.write(d));
@@ -85,6 +91,7 @@ function startEngine() {
     if (msg.type === 'listening') {
       serverPort = msg.port;
       childRestarts = 0;
+      sendAiKey();
       openWindow();
     }
     if (msg.type === 'restart-requested') restartEngine();
@@ -195,6 +202,29 @@ function currentPaths() {
   const s = settings.read();
   const mediaRoot = (s.mediaRoot && s.mediaRoot.trim()) || path.join(HOME, 'media');
   return { home: HOME, mediaRoot, images: path.join(mediaRoot, 'images'), logs: path.join(HOME, 'logs') };
+}
+
+// ---------- the AI key ----------
+// Stored only as DPAPI ciphertext, and handed to the engine in memory. The
+// plaintext never reaches settings.json, the log, or the diagnostic report.
+function saveAiKey(plain) {
+  if (!plain) { settings.write({ aiKeyEnc: '' }); sendAiKey(); return { ok: true, cleared: true }; }
+  if (!safeStorage.isEncryptionAvailable()) return { ok: false, message: 'Windows could not provide secure storage for the key.' };
+  settings.write({ aiKeyEnc: safeStorage.encryptString(plain).toString('base64') });
+  sendAiKey();
+  return { ok: true };
+}
+
+function readAiKey() {
+  const enc = settings.read().aiKeyEnc;
+  if (!enc) return '';
+  try { return safeStorage.decryptString(Buffer.from(enc, 'base64')); }
+  catch (_) { return ''; }   // a different machine or Windows profile can't decrypt it
+}
+
+function sendAiKey() {
+  if (!child) return;
+  try { child.postMessage({ type: 'ai-key', key: readAiKey() }); } catch (_) {}
 }
 
 // ---------- helpers ----------
@@ -333,6 +363,11 @@ function registerIpc() {
       startEngine();
     }
   });
+
+  // The renderer can set or clear the key and ask whether one is stored — it
+  // can never read it back.
+  ipcMain.handle('wb:setAiKey', (_e, plain) => saveAiKey(typeof plain === 'string' ? plain.trim() : ''));
+  ipcMain.handle('wb:hasAiKey', () => ({ stored: !!settings.read().aiKeyEnc, usable: !!readAiKey() }));
 
   ipcMain.handle('wb:copyDiagnostics', async () => {
     const d = await get('/api/diagnostics');

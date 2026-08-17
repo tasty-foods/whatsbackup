@@ -283,6 +283,7 @@ async function handleMessage(msg) {
     if (rec) {
       noteCaptureOk();
       console.log(`[capture] ${new Date(rec.ts).toLocaleString()}  ${rec.kind.toUpperCase()} ${rec.dir === 'out' ? '→sent' : '←recv'}  ${rec.chat}  (${(rec.size / 1024).toFixed(0)} KB)`);
+      try { require('./ai').noteNewMedia(rec); } catch (_) {}
     }
   } catch (e) {
     noteCaptureFail(e);

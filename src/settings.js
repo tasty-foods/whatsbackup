@@ -41,6 +41,20 @@ const DEFAULTS = {
   notifyOnProblem: true,
   autoUpdate: true,
 
+  // AI sorting. Off until the user turns it on and accepts the notice — this
+  // is the only feature that sends anything off the PC.
+  aiEnabled: false,
+  aiConsent: false,
+  aiProvider: 'anthropic',
+  aiModel: 'claude-haiku-4-5',
+  aiBaseUrl: '',
+  aiKeyEnc: '',              // DPAPI ciphertext; the plaintext key is never stored
+  aiMode: 'assist',          // manual | assist (manual, then auto for new items) | auto
+  aiAnalyseImages: true,
+  aiAnalyseChats: true,
+  aiMonthlyBudget: 5,        // USD; 0 = no cap
+  aiJsonSchema: true,        // set from the connection probe
+
   // Housekeeping
   logMaxMB: 5,
   retentionDays: 0,          // 0 = keep everything
