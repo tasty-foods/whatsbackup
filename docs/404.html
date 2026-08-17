@@ -5,50 +5,61 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Page not found — WhatsBackUp</title>
 <meta name="robots" content="noindex">
-<meta name="theme-color" content="#070b11" media="(prefers-color-scheme: dark)">
-<meta name="theme-color" content="#f7fafc" media="(prefers-color-scheme: light)">
-<!-- Deliberately self-contained. GitHub Pages serves this file for any missing
-     URL at any depth, so a relative stylesheet would sometimes 404 too and the
-     visitor would meet unstyled text on top of a broken link. -->
+<meta name="theme-color" content="#f4f1e8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#13110d" media="(prefers-color-scheme: dark)">
+<!-- Self-contained by design: GitHub Pages serves this file for any missing URL
+     at any depth, so a relative stylesheet would sometimes 404 as well and the
+     visitor would meet unstyled text sitting on top of a broken link. -->
 <style>
-  :root { color-scheme: dark light; --bg:#070b11; --panel:#0e1621; --line:#2a3b4f; --text:#e9eff6; --muted:#9db0c2; --brand:#2ee6a8; --brand-2:#16b8d4; --ink:#04140f; }
-  @media (prefers-color-scheme: light) {
-    :root { --bg:#f7fafc; --panel:#fff; --line:#c8d6e4; --text:#0d1720; --muted:#46596e; --brand:#0a7d5b; --brand-2:#0a7186; --ink:#fff; }
+  :root {
+    color-scheme: light dark;
+    --paper:#f4f1e8; --paper-2:#ebe6d9; --ink:#16140e; --ink-2:#4b4536; --ink-3:#6d6551;
+    --rule:#d3cbb6; --rule-2:#b9ae94; --accent:#a83518;
+    --serif: Georgia, "Iowan Old Style", "Palatino Linotype", ui-serif, serif;
+    --mono: ui-monospace, "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
   }
-  * { box-sizing: border-box }
+  @media (prefers-color-scheme: dark) {
+    :root { --paper:#13110d; --paper-2:#1a1712; --ink:#f2eee2; --ink-2:#b8ae99; --ink-3:#968c78;
+            --rule:#302b22; --rule-2:#453e31; --accent:#e0714f; }
+  }
+  * { box-sizing:border-box }
   body {
-    margin:0; min-height:100vh; display:grid; place-items:center; padding:40px 24px;
-    background:var(--bg); color:var(--text); text-align:center;
-    font:16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    margin:0; min-height:100vh; display:grid; align-content:center;
+    background:var(--paper); color:var(--ink); padding:8vh 7vw;
+    font:400 17.5px/1.62 var(--serif);
   }
-  .icon { width:64px; height:64px; margin:0 auto 26px; display:block }
-  h1 { font-size:clamp(2rem,5vw,3rem); letter-spacing:-.03em; margin:0 0 12px; font-weight:800 }
-  p { color:var(--muted); font-size:1.1rem; max-width:46ch; margin:0 auto 30px }
-  .row { display:flex; gap:12px; justify-content:center; flex-wrap:wrap }
+  .label { font-family:var(--mono); font-size:.69rem; letter-spacing:.19em; text-transform:uppercase; color:var(--accent); margin:0 0 1.6em }
+  h1 { font-size:clamp(2.4rem,6vw,4rem); font-weight:400; letter-spacing:-.028em; line-height:1.04; margin:0 0 .35em; max-width:14ch }
+  p.lede { font-size:clamp(1.08rem,1.9vw,1.32rem); color:var(--ink-2); max-width:38ch; margin:0 0 2em }
+  .frames { display:flex; gap:7px; margin:0 0 2.4em }
+  .fr { width:58px; height:58px; border:1px solid var(--rule-2) }
+  .fr.gone { border-style:dashed; background:var(--paper-2); display:grid; place-items:center;
+             font-family:var(--mono); font-size:.5rem; letter-spacing:.1em; color:var(--accent); text-transform:uppercase }
   a.btn {
-    display:inline-flex; align-items:center; padding:13px 22px; border-radius:12px;
-    font-weight:700; text-decoration:none; border:1px solid transparent;
+    display:inline-flex; align-items:center; padding:13px 20px; font-family:var(--mono);
+    font-size:.78rem; letter-spacing:.13em; text-transform:uppercase; text-decoration:none;
+    border:1px solid var(--ink); background:var(--ink); color:var(--paper); margin-right:12px;
   }
-  .primary { background:linear-gradient(135deg,var(--brand),var(--brand-2)); color:var(--ink) }
-  .ghost { border-color:var(--line); color:var(--text); background:var(--panel) }
-  a:focus-visible { outline:3px solid var(--brand); outline-offset:3px }
+  a.btn.ghost { background:transparent; color:var(--ink) }
+  a.btn:hover { background:var(--accent); border-color:var(--accent); color:var(--paper) }
+  a:focus-visible { outline:2px solid var(--accent); outline-offset:3px }
 </style>
 </head>
 <body>
 <main>
-  <svg class="icon" viewBox="0 0 100 100" role="img" aria-label="WhatsBackUp">
-    <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2ee6a8"/><stop offset="1" stop-color="#16b8d4"/></linearGradient></defs>
-    <rect width="100" height="100" rx="24" fill="url(#g)"/>
-    <path fill="#04140f" d="M50 18c-17.1 0-31 11.9-31 26.6 0 6.9 3.1 13.3 8.3 18-.9 5.5-3.1 9.8-6.4 13.2-.9.9-.2 2.4 1.1 2.2 7.7-1 13.4-4 17.4-7 3.4.9 6.9 1.4 10.6 1.4 17.1 0 31-11.9 31-26.6S67.1 18 50 18z"/>
-    <path fill="none" stroke="#2ee6a8" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" d="M50 30v18m0 0l-8-8m8 8l8-8M36 56h28"/>
-  </svg>
-  <h1>That page isn't here</h1>
-  <p>Which is a bit ironic, for a site about not losing things.</p>
-  <div class="row">
-    <a class="btn primary" href="https://tasty-foods.github.io/whatsbackup/">Back to the start</a>
-    <a class="btn ghost" href="https://tasty-foods.github.io/whatsbackup/download.html">Download</a>
-    <a class="btn ghost" href="https://tasty-foods.github.io/whatsbackup/faq.html">FAQ</a>
+  <p class="label">Error 404 — not in the catalogue</p>
+  <div class="frames" aria-hidden="true">
+    <div class="fr" style="background:#5c6b52"></div>
+    <div class="fr" style="background:#7d6a54"></div>
+    <div class="fr gone">missing</div>
+    <div class="fr" style="background:#455566"></div>
   </div>
+  <h1>This page is no longer available.</h1>
+  <p class="lede">Which is, admittedly, a poor look for a site about not losing things. The page you wanted has moved or never existed.</p>
+  <p>
+    <a class="btn" href="https://tasty-foods.github.io/whatsbackup/">Back to the start</a>
+    <a class="btn ghost" href="https://tasty-foods.github.io/whatsbackup/download.html">Download</a>
+  </p>
 </main>
 </body>
 </html>

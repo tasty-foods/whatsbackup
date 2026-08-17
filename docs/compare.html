@@ -7,8 +7,8 @@
 <meta name="description" content="Google Drive backup, iCloud, Export chat or a desktop archive: what each way of backing up WhatsApp actually protects you against, and where each fails.">
 <link rel="canonical" href="https://tasty-foods.github.io/whatsbackup/compare.html">
 <meta name="referrer" content="strict-origin-when-cross-origin">
-<meta name="theme-color" content="#070b11" media="(prefers-color-scheme: dark)">
-<meta name="theme-color" content="#f7fafc" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#f4f1e8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#13110d" media="(prefers-color-scheme: dark)">
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="WhatsBackUp">
 <meta property="og:title" content="WhatsApp backup compared — Drive, iCloud, export, or a desktop archive">
@@ -41,37 +41,41 @@
 
 <header class="site-head">
   <div class="wrap">
-    <a class="brand" href="./" aria-label="WhatsBackUp home">
-      <svg viewBox="0 0 100 100" aria-hidden="true"><defs><linearGradient id="bg1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2ee6a8"/><stop offset="1" stop-color="#16b8d4"/></linearGradient></defs><rect width="100" height="100" rx="24" fill="url(#bg1)"/><path fill="#04140f" d="M50 18c-17.1 0-31 11.9-31 26.6 0 6.9 3.1 13.3 8.3 18-.9 5.5-3.1 9.8-6.4 13.2-.9.9-.2 2.4 1.1 2.2 7.7-1 13.4-4 17.4-7 3.4.9 6.9 1.4 10.6 1.4 17.1 0 31-11.9 31-26.6S67.1 18 50 18z"/><path fill="none" stroke="#2ee6a8" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" d="M50 30v18m0 0l-8-8m8 8l8-8M36 56h28"/></svg>
-      Whats<b>BackUp</b>
-    </a>
+    <a class="brand" href="./"><span class="mark">Whats<i>BackUp</i></span><span class="ref">v1.1.0</span></a>
     <nav class="nav" aria-label="Main">
-      <a href="index.html#how" class="hide-sm">How it works</a>
+      <a href="index.html#problem" class="hide-sm">Why</a>
+      <a href="index.html#how" class="hide-sm">How</a>
       <a href="compare.html" aria-current="page">Compare</a>
-      <a href="faq.html">FAQ</a>
-      <a class="btn btn-primary btn-sm" href="download.html">Download</a>
+      <a href="faq.html">Questions</a>
+      <a href="download.html">Download</a>
     </nav>
   </div>
 </header>
 
 <main id="main">
-<section class="hero" style="padding-bottom:20px">
-  <div class="wrap" style="display:block">
-    <p class="eyebrow"><span class="dot" aria-hidden="true"></span> Honest comparison</p>
-    <h1>You probably already<br>have a backup.</h1>
-    <p class="lead">And it probably does not protect you from the thing you are worried about. Here is what each option actually covers — including where this one falls short.</p>
+
+<section class="hero">
+  <div class="wrap">
+    <p class="label">An honest comparison</p>
+    <h1 style="max-width:15ch">You already have a backup.</h1>
+    <p class="lede" style="margin-top:.7em">It probably doesn't protect you from the thing you are actually worried about. Here is what each option covers — including where this one loses.</p>
   </div>
 </section>
 
-<section style="padding-top:26px">
+<section class="tint">
   <div class="wrap">
-    <div class="table-wrap">
+    <div class="head">
+      <p class="marker">§ 01 <span>Side by side</span></p>
+      <div><h2>What each one actually does</h2></div>
+    </div>
+
+    <div class="ledger">
       <table>
-        <caption>How the common ways of backing up WhatsApp compare, August 2026.</caption>
+        <caption>The common ways of backing up WhatsApp, compared — August 2026</caption>
         <thead>
           <tr>
-            <th scope="col">&nbsp;</th>
-            <th scope="col">Google&nbsp;Drive / iCloud backup</th>
+            <th scope="col"><span class="vh">Capability</span></th>
+            <th scope="col">Drive / iCloud backup</th>
             <th scope="col">Export chat</th>
             <th scope="col">Save to gallery</th>
             <th scope="col">WhatsBackUp</th>
@@ -80,80 +84,80 @@
         <tbody>
           <tr>
             <th scope="row">Runs by itself</th>
-            <td><span class="yes">Yes</span>, daily</td>
-            <td><span class="no">No</span>, manual each time</td>
-            <td><span class="yes">Yes</span></td>
-            <td><span class="yes">Yes</span>, as media arrives</td>
+            <td class="is-yes"><span class="mk y">Yes</span> daily</td>
+            <td class="is-no"><span class="mk">No</span> manual, each time</td>
+            <td class="is-yes"><span class="mk y">Yes</span></td>
+            <td class="is-yes"><span class="mk y">Yes</span> as media arrives</td>
           </tr>
           <tr>
             <th scope="row">Covers every chat at once</th>
-            <td><span class="yes">Yes</span></td>
-            <td><span class="no">No</span>, one chat at a time</td>
-            <td><span class="yes">Yes</span></td>
-            <td><span class="yes">Yes</span></td>
+            <td class="is-yes"><span class="mk y">Yes</span></td>
+            <td class="is-no"><span class="mk">No</span> one at a time</td>
+            <td class="is-yes"><span class="mk y">Yes</span></td>
+            <td class="is-yes"><span class="mk y">Yes</span></td>
           </tr>
           <tr>
-            <th scope="row">Includes all media</th>
-            <td>Optional, and often skipped to save space</td>
-            <td><span class="no">Capped</span> at a few thousand files</td>
-            <td>Only what your phone auto-downloaded</td>
-            <td><span class="yes">Yes</span>, full resolution</td>
+            <th scope="row">Includes all the media</th>
+            <td class="is-no">Optional, often skipped for space</td>
+            <td class="is-no"><span class="mk">Capped</span> at a few thousand files</td>
+            <td class="is-no">Only what the phone downloaded</td>
+            <td class="is-yes"><span class="mk y">Yes</span> full resolution</td>
           </tr>
           <tr>
             <th scope="row">Readable without WhatsApp</th>
-            <td><span class="no">No</span> — only restorable into WhatsApp</td>
-            <td>A zip of text and files</td>
-            <td><span class="yes">Yes</span>, ordinary photos</td>
-            <td><span class="yes">Yes</span>, ordinary files plus a searchable database</td>
+            <td class="is-no"><span class="mk">No</span> restore-only</td>
+            <td class="is-yes">A zip of text and files</td>
+            <td class="is-yes"><span class="mk y">Yes</span> ordinary photos</td>
+            <td class="is-yes"><span class="mk y">Yes</span> files + a searchable database</td>
           </tr>
           <tr>
-            <th scope="row">Survives losing your phone</th>
-            <td><span class="yes">Yes</span>, if the restore works</td>
-            <td>Only if you saved the zip elsewhere</td>
-            <td>Only if your gallery syncs somewhere</td>
-            <td><span class="yes">Yes</span> — it is on your PC and your cloud folder</td>
+            <th scope="row">Survives losing the phone</th>
+            <td class="is-yes"><span class="mk y">Yes</span> if the restore works</td>
+            <td class="is-no">Only if you kept the zip</td>
+            <td class="is-no">Only if the gallery syncs</td>
+            <td class="is-yes"><span class="mk y">Yes</span> it is on your PC</td>
           </tr>
           <tr>
-            <th scope="row">Survives switching Android ⇄ iPhone</th>
-            <td><span class="no">Historically painful</span></td>
-            <td><span class="yes">Yes</span></td>
-            <td><span class="yes">Yes</span></td>
-            <td><span class="yes">Yes</span> — nothing is tied to the phone</td>
+            <th scope="row">Survives Android ⇄ iPhone</th>
+            <td class="is-no">Historically painful</td>
+            <td class="is-yes"><span class="mk y">Yes</span></td>
+            <td class="is-yes"><span class="mk y">Yes</span></td>
+            <td class="is-yes"><span class="mk y">Yes</span> nothing is tied to the phone</td>
           </tr>
           <tr>
             <th scope="row">Keeps media WhatsApp later deletes</th>
-            <td><span class="no">No</span></td>
-            <td>Only what you exported that day</td>
-            <td>Only what was downloaded in time</td>
-            <td><span class="yes">Yes</span>, once captured it is yours</td>
+            <td class="is-no"><span class="mk">No</span></td>
+            <td class="is-no">Only what you exported that day</td>
+            <td class="is-no">Only what downloaded in time</td>
+            <td class="is-yes"><span class="mk y">Yes</span> once kept, it is yours</td>
           </tr>
           <tr>
             <th scope="row">Search by what is in a photo</th>
-            <td><span class="no">No</span></td>
-            <td><span class="no">No</span></td>
-            <td>Your gallery app might</td>
-            <td><span class="yes">Yes</span>, with optional AI sorting</td>
+            <td class="is-no"><span class="mk">No</span></td>
+            <td class="is-no"><span class="mk">No</span></td>
+            <td class="is-no">Your gallery app might</td>
+            <td class="is-yes"><span class="mk y">Yes</span> with sorting on</td>
           </tr>
           <tr>
-            <th scope="row">Costs</th>
-            <td>Free until your cloud storage fills</td>
-            <td>Free</td>
-            <td>Free, but eats phone storage</td>
-            <td><span class="yes">Free</span></td>
+            <th scope="row">Cost</th>
+            <td class="is-yes">Free until the cloud fills</td>
+            <td class="is-yes">Free</td>
+            <td class="is-no">Free, but eats phone storage</td>
+            <td class="is-yes"><span class="mk y">Free</span></td>
           </tr>
           <tr>
             <th scope="row">Officially supported by WhatsApp</th>
-            <td><span class="yes">Yes</span></td>
-            <td><span class="yes">Yes</span></td>
-            <td><span class="yes">Yes</span></td>
-            <td><span class="no">No</span> — unofficial, small ban risk</td>
+            <td class="is-yes"><span class="mk y">Yes</span></td>
+            <td class="is-yes"><span class="mk y">Yes</span></td>
+            <td class="is-yes"><span class="mk y">Yes</span></td>
+            <td class="is-no"><span class="mk">No</span> unofficial, small ban risk</td>
           </tr>
           <tr>
             <th scope="row">Needs a PC left running</th>
-            <td><span class="no">No</span></td>
-            <td><span class="no">No</span></td>
-            <td><span class="no">No</span></td>
-            <td><span class="no">Yes</span> — it only captures while open</td>
+            <td class="is-yes"><span class="mk y">No</span></td>
+            <td class="is-yes"><span class="mk y">No</span></td>
+            <td class="is-yes"><span class="mk y">No</span></td>
+            <td class="is-no"><span class="mk">Yes</span> it captures only while open</td>
           </tr>
         </tbody>
       </table>
@@ -161,52 +165,52 @@
   </div>
 </section>
 
-<section class="tint">
+<section>
   <div class="wrap">
+    <div class="head">
+      <p class="marker">§ 02 <span>In words</span></p>
+      <div><h2>The honest summary</h2></div>
+    </div>
+
     <div class="prose">
-      <h2>The honest summary</h2>
+      <h3>Drive and iCloud backup are a restore mechanism, not an archive</h3>
+      <p>They exist so a new phone can be made to look like the old one. That is genuinely useful and everyone should have it switched on. But the backup is a sealed blob: you cannot open it, browse it, or pull one photograph out of it. It only mirrors the current state, so a photo deleted last month is gone from the backup too. And "include videos" is the first setting people turn off when the free tier fills.</p>
 
-      <h3>Google Drive and iCloud backup are a restore mechanism, not an archive</h3>
-      <p>They exist so a new phone can be made to look like the old one. That is genuinely useful, and everyone should have it switched on. But the backup is a sealed blob: you cannot open it, browse it, or pull one photo out of it. It only replaces the newest copy, so a photo deleted last month is gone from the backup too. And "include videos" is the setting people turn off first when the free tier fills up.</p>
+      <h3>Export chat is a snapshot you take once and never open again</h3>
+      <p>It is the right tool for handing one conversation to a solicitor. It is the wrong tool for an archive: it caps the media it includes, must be repeated per conversation by hand, and produces a zip that gets buried in Downloads.</p>
 
-      <h3>Export chat is a snapshot you take once and never look at again</h3>
-      <p>It is the right tool for handing one conversation to a lawyer. It is the wrong tool for an archive: it caps the media it includes, has to be repeated per conversation by hand, and produces a zip that gets buried in Downloads.</p>
-
-      <h3>Save to gallery only saves what your phone chose to download</h3>
-      <p>Auto-download is off on mobile data for most people, so the holiday video someone sent while you were out is a placeholder that expires. And it fills your phone, which leads directly to the "free up space" prompt that deletes the lot.</p>
+      <h3>Save to gallery only keeps what your phone chose to download</h3>
+      <p>Auto-download is off on mobile data for most people, so the video someone sent while you were out is a placeholder that eventually expires. And it fills the phone, which leads directly to the "free up space" prompt that deletes the lot.</p>
 
       <h3>WhatsBackUp covers a different failure — and has its own</h3>
-      <p>It protects against the quiet losses: media WhatsApp deletes from its servers, a restore that skips your videos, a "free up space" tap, a phone that dies before the next backup ran. What you get is ordinary files on your own disk that keep working whether or not WhatsApp, your phone, or this project still exists.</p>
-      <p><strong>Where it falls short, plainly:</strong></p>
+      <p>It protects against the quiet losses: media WhatsApp deletes from its servers, a restore that skips your videos, one careless tap, a phone that dies before the next backup ran. What you get is ordinary files on your own disk that keep working whether or not WhatsApp, your phone, or this project still exists.</p>
+      <p><strong>Where it loses, plainly:</strong></p>
       <ul>
-        <li>It is <strong>unofficial</strong>. WhatsApp's terms do not permit third-party clients, and there is a small but real chance of an account being limited. The other three options carry no such risk.</li>
-        <li>It <strong>only captures while it is running</strong>. Close the app for a fortnight and that fortnight is not archived in the moment — though <em>Import history</em> can usually collect it afterwards.</li>
-        <li>It <strong>needs a Windows PC</strong>. There is no Mac, Linux or mobile version.</li>
+        <li>It is <strong>unofficial</strong>. WhatsApp's terms don't permit third-party clients and there is a small but real chance of an account being limited. The other three carry no such risk.</li>
+        <li>It <strong>only captures while running</strong>. Close it for a fortnight and that fortnight isn't archived at the time — though <em>Import history</em> can usually collect it afterwards.</li>
+        <li>It <strong>needs a Windows PC</strong>. No Mac, Linux or mobile version.</li>
         <li>It <strong>does not restore into WhatsApp</strong>. It is an archive you read, not a backup you put back.</li>
       </ul>
 
       <h3>So which should you use?</h3>
-      <p><strong>Both.</strong> Keep Google Drive or iCloud backup switched on — that is your "new phone works" insurance, and nothing here replaces it. Add WhatsBackUp if the photos and videos themselves matter to you: the delivery proof, the damaged part, the signed page, the pictures of the kids that only ever existed in a chat.</p>
-      <p>They fail in different ways, which is exactly why having both is worth the five minutes.</p>
+      <p><strong>Both.</strong> Keep Drive or iCloud backup switched on — that is your "new phone works" insurance and nothing here replaces it. Add WhatsBackUp if the photographs themselves matter: the delivery proof, the damaged part, the signed page, the pictures of the children that only ever existed inside a chat.</p>
+      <p>They fail in different ways. That is exactly why having both is worth five minutes.</p>
     </div>
 
-    <div class="dl" style="margin-top:48px">
-      <h2>Add the second layer</h2>
-      <p class="lead" style="margin:0 auto 6px">Free, open source, and about five minutes to set up.</p>
-      <div class="cta-row" style="justify-content:center">
-        <a class="btn btn-primary" href="download.html">Download for Windows</a>
-        <a class="btn btn-ghost" href="faq.html">Read the FAQ first</a>
-      </div>
-    </div>
+    <p style="margin-top:clamp(32px,4.5vw,48px)">
+      <a class="btn" href="download.html">Download for Windows</a>
+      <a class="btn btn-2" href="faq.html" style="margin-left:12px">Read the questions</a>
+    </p>
   </div>
 </section>
+
 </main>
 
 <footer class="site-foot">
   <div class="wrap">
-    <div class="disclaimer" style="border-top:0;padding-top:0">
+    <div class="colophon" style="border-top:0;padding-top:0">
       <p><strong>WhatsBackUp is an independent, unofficial tool.</strong> It is not made, endorsed, sponsored or supported by WhatsApp&nbsp;LLC or Meta&nbsp;Platforms,&nbsp;Inc. "WhatsApp", "Google Drive" and "iCloud" are trademarks of their respective owners, used here only to describe and compare what this software does.</p>
-      <p>© 2026 Tasty Foods · <a href="./">Home</a> · <a href="download.html">Download</a> · <a href="privacy.html">Privacy</a> · <a href="https://github.com/tasty-foods/whatsbackup">GitHub</a></p>
+      <p class="set">© 2026 Tasty Foods · <a href="./">Home</a> · <a href="download.html">Download</a> · <a href="privacy.html">Privacy</a> · <a href="https://github.com/tasty-foods/whatsbackup">GitHub</a></p>
     </div>
   </div>
 </footer>

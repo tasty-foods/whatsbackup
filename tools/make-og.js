@@ -1,70 +1,68 @@
 'use strict';
-// Renders the social sharing card for the website. Every messaging app, search
-// engine and chat preview shows this image, and none of them render SVG — so it
-// has to be a real PNG. Run: npm run og
+// Renders the social sharing card. Every messaging app, search engine and chat
+// preview shows this image and none of them render SVG, so it has to be a real
+// PNG. It carries the same argument the site opens with: a contact sheet with
+// frames already missing. Run: npm run og
 const puppeteer = require('puppeteer');
 const fs = require('fs');
 const path = require('path');
 
 const OUT = path.join(__dirname, '..', 'docs', 'assets', 'og.png');
 
+const WASH = ['#5c6b52', '#7d6a54', '#455566', '#8a6f5e', null, '#6b5f7a', '#4f6660', '#7a5a4c'];
+
+const frames = WASH.map((c, i) => {
+  const n = String(41 + i).padStart(3, '0');
+  return c
+    ? `<div class="fr" style="background:${c}"><span class="n">${n}</span></div>`
+    : `<div class="fr gone"><span class="x">no longer<br>available</span><span class="n">${n}</span></div>`;
+}).join('');
+
 const html = `<!doctype html><meta charset="utf-8"><style>
-  @page { margin: 0 }
   html,body { margin:0; padding:0; width:1200px; height:630px; }
   body {
-    background: #070b11;
-    color: #e9eff6;
-    font: 400 24px/1.5 -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
-    -webkit-font-smoothing: antialiased;
-    position: relative; overflow: hidden;
+    background:#f4f1e8; color:#16140e; overflow:hidden;
+    font:400 26px/1.5 Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+    -webkit-font-smoothing:antialiased;
   }
-  .glow {
-    position:absolute; width:900px; height:900px; left:-220px; top:-380px; border-radius:50%;
-    background: radial-gradient(closest-side, rgba(46,230,168,.20), rgba(46,230,168,0));
-  }
-  .glow2 {
-    position:absolute; width:760px; height:760px; right:-240px; bottom:-360px; border-radius:50%;
-    background: radial-gradient(closest-side, rgba(22,184,212,.18), rgba(22,184,212,0));
-  }
-  .pad { position:relative; padding: 74px 78px; height:630px; box-sizing:border-box; display:flex; flex-direction:column; }
-  /* No flex gap: "Whats" and <b>BackUp</b> are two flex items and a gap would
-     split the wordmark down the middle. */
-  .brand { display:flex; align-items:center; font-size:30px; font-weight:800; letter-spacing:-.02em; }
-  .brand svg { width:56px; height:56px; margin-right:16px; }
-  .brand b { color:#2ee6a8 }
-  h1 {
-    font-size: 76px; line-height:1.04; letter-spacing:-.035em; font-weight:800;
-    margin: 46px 0 24px; max-width: 17ch;
-  }
-  p { font-size:29px; color:#93a5b8; margin:0; max-width:34ch; line-height:1.45 }
-  .pills { margin-top:auto; display:flex; gap:12px; flex-wrap:wrap }
-  .pill {
-    border:1px solid #2a3b4f; background:#0e1621; color:#93a5b8;
-    padding:11px 20px; border-radius:999px; font-size:22px; font-weight:600;
-  }
-  .pill.on { border-color:transparent; background:linear-gradient(135deg,#2ee6a8,#16b8d4); color:#04140f; font-weight:800 }
+  /* Everything is sized to land inside 630px with room to spare — a social card
+     that overflows is cropped by the platform, not scrolled. */
+  .pad { padding:56px 62px; height:630px; box-sizing:border-box; display:grid;
+         grid-template-columns:1fr 430px; gap:48px; align-items:center }
+  .label { font-family:ui-monospace,Consolas,monospace; font-size:14px; letter-spacing:.15em;
+           white-space:nowrap; text-transform:uppercase; color:#6d6551; margin:0 0 24px }
+  .label b { color:#a83518; font-weight:400 }
+  h1 { font-size:60px; line-height:1.04; letter-spacing:-.028em; font-weight:400; margin:0 0 22px }
+  h1 i { font-style:normal; color:#a83518 }
+  p { font-size:23px; line-height:1.45; color:#4b4536; margin:0; max-width:28ch }
+  .rule { height:1px; background:#d3cbb6; margin:24px 0 20px }
+  /* max-width is inherited from the paragraph rule above; this line must not wrap. */
+  .set { font-family:ui-monospace,Consolas,monospace; font-size:13.5px; letter-spacing:.11em;
+         text-transform:uppercase; color:#6d6551; max-width:none; white-space:nowrap }
+  .sheet { border:1px solid #b9ae94; background:#ebe6d9; padding:14px }
+  .bar { display:flex; justify-content:space-between; font-family:ui-monospace,Consolas,monospace;
+         font-size:13px; letter-spacing:.15em; text-transform:uppercase; color:#6d6551; padding-bottom:12px }
+  .frames { display:grid; grid-template-columns:repeat(4,1fr); gap:8px }
+  .fr { position:relative; aspect-ratio:1; border:1px solid #b9ae94 }
+  .fr .n { position:absolute; left:0; bottom:0; font-family:ui-monospace,Consolas,monospace;
+           font-size:11px; background:rgba(10,9,6,.62); color:#f2eee2; padding:2px 5px }
+  .fr.gone { background:#e2dcca; border-style:dashed; display:grid; place-items:center }
+  .fr.gone .x { font-family:ui-monospace,Consolas,monospace; font-size:10px; letter-spacing:.1em;
+                text-transform:uppercase; color:#a83518; text-align:center; line-height:1.5 }
+  .fr.gone .n { background:none; color:#6d6551 }
 </style>
-<div class="glow"></div><div class="glow2"></div>
 <div class="pad">
-  <div class="brand">
-    <svg viewBox="0 0 100 100">
-      <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0" stop-color="#2ee6a8"/><stop offset="1" stop-color="#16b8d4"/>
-      </linearGradient></defs>
-      <rect width="100" height="100" rx="24" fill="url(#g)"/>
-      <path fill="#04140f" d="M50 18c-17.1 0-31 11.9-31 26.6 0 6.9 3.1 13.3 8.3 18-.9 5.5-3.1 9.8-6.4 13.2-.9.9-.2 2.4 1.1 2.2 7.7-1 13.4-4 17.4-7 3.4.9 6.9 1.4 10.6 1.4 17.1 0 31-11.9 31-26.6S67.1 18 50 18z"/>
-      <path fill="none" stroke="#2ee6a8" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" d="M50 30v18m0 0l-8-8m8 8l8-8M36 56h28"/>
-    </svg>
-    Whats<b>BackUp</b>
+  <div>
+    <p class="label">WhatsBackUp <b>·</b> Free &amp; open source <b>·</b> Windows 10 &amp; 11</p>
+    <h1>Your WhatsApp photos are <i>quietly</i> being deleted.</h1>
+    <p>Keep a copy of every one, on your own disk, automatically.</p>
+    <div class="rule"></div>
+    <p class="set">No account · Nothing uploaded · Ordinary files</p>
   </div>
-  <h1>Never lose another WhatsApp photo.</h1>
-  <p>Every photo, video and message saved automatically to your own PC — then sorted into albums that make sense.</p>
-  <div class="pills">
-    <span class="pill on">Free &amp; open source</span>
-    <span class="pill">Windows 10 &amp; 11</span>
-    <span class="pill">No account</span>
-    <span class="pill">Nothing uploaded</span>
-  </div>
+  <figure class="sheet" style="margin:0">
+    <div class="bar"><span>Contact sheet</span><span>Aug 2024</span></div>
+    <div class="frames">${frames}</div>
+  </figure>
 </div>`;
 
 (async () => {

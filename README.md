@@ -123,6 +123,17 @@ webfonts, and the only third-party request on the whole site is an optional
 `api.github.com` call that upgrades the download button to point at the newest
 release asset — the button works without it.
 
+**The design is an archive, because the product is one.** Paper and ink rather
+than a dark gradient; a system serif doing the talking with mono reserved for
+labels, catalogue references and figures; hairline rules instead of cards;
+numbered `§` sections in the margin like a finding aid; the disclosure block set
+as a rubber stamp. One vermilion accent, used sparingly. Deliberately *not* a
+messaging app's green, and no WhatsApp mark anywhere.
+
+The hero carries the argument on its own: a contact sheet of twelve frames with
+two already empty and marked *no longer available*. That is the product's whole
+case in one glance, and it is reused as the social card, the favicon and the 404.
+
 ```bash
 node tools/serve-site.js     # preview at http://127.0.0.1:4321
 npm run og                   # re-render docs/assets/og.png (the social card)
