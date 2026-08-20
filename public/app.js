@@ -547,13 +547,28 @@ function updateConn(s) {
 /* ---------- First run ---------- */
 const WZ = {
   root: $('wizard'),
+  history: [],
+  current: null,
   step: (name) => document.querySelector(`.wz-step[data-step="${name}"]`),
-  show(name) {
+  // The flow branches — an old install inserts an import step — so Back follows
+  // the steps actually visited rather than a fixed running order.
+  show(name, { push = true } = {}) {
+    if (push && WZ.current && WZ.current !== name) WZ.history.push(WZ.current);
+    WZ.current = name;
     document.querySelectorAll('.wz-step').forEach((s) => s.classList.toggle('hidden', s.dataset.step !== name));
+    // Nothing to go back to on the first step, so the control stays out of the way.
+    document.querySelectorAll('.wz-back').forEach((b) => b.classList.toggle('hidden', WZ.history.length === 0));
     WZ.root.classList.remove('hidden');
+  },
+  back() {
+    if (!WZ.history.length) return;
+    WZ.show(WZ.history.pop(), { push: false });
   },
   done() { WZ.root.classList.add('hidden'); },
 };
+
+// One delegated handler covers every step's Back button.
+if (WZ.root) WZ.root.addEventListener('click', (e) => { if (e.target.closest('.wz-back')) WZ.back(); });
 
 async function maybeRunWizard() {
   let d;

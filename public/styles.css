@@ -294,6 +294,9 @@ table.paths td.v { color: var(--text); font-family: ui-monospace, Consolas, mono
 .wizard .notice ul { margin: 8px 0 0; padding-left: 18px; }
 .wizard .notice li { margin: 6px 0; }
 .wz-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
+/* Back sits apart from the forward actions, so it can't be hit by muscle memory
+   aimed at Continue. */
+.wz-back { margin-right: auto; }
 .choice { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
 .opt { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px;
   border: 1px solid var(--line); border-radius: 12px; cursor: pointer; }
