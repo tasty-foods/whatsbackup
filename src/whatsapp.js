@@ -20,6 +20,7 @@ const state = {
 
 let reconnecting = false;
 let reconnectAttempts = 0;
+let reconnectTimer = null;
 
 const backfill = {
   running: false, saved: 0, skipped: 0, messages: 0, doneChats: 0, totalChats: 0,
@@ -196,8 +197,12 @@ async function downloadMediaByKey(key) {
       const got = await Collections.Msg.getMessagesById([msgId]);
       msg = got && got.messages && got.messages[0];
     }
-    // REUPLOADING means WhatsApp no longer holds the file — nothing to fetch.
-    if (!msg || !msg.mediaData) return null;
+    // Not in the page's collection at all — genuinely nothing to fetch (a silent
+    // skip). But a message that IS here yet carries no mediaData is the exact
+    // shape of a WhatsApp rename: report it as unavailable so a live failure
+    // counts against health instead of vanishing silently.
+    if (!msg) return null;
+    if (!msg.mediaData) return { unavailable: 'media data missing — WhatsApp internals may have changed' };
     if (msg.mediaData.mediaStage === 'REUPLOADING') return { unavailable: 'expired (WhatsApp no longer has the file)' };
     // WhatsApp's own errors here are minified, so report the media stage — that
     // is the part that says whether the file is simply gone.
@@ -458,7 +463,9 @@ function scheduleReconnect(c) {
   const delay = Math.min(60000, 5000 * Math.pow(2, reconnectAttempts));
   reconnectAttempts++;
   console.warn(`[link] Reconnecting in ${Math.round(delay / 1000)}s (attempt ${reconnectAttempts})…`);
-  setTimeout(() => {
+  if (reconnectTimer) clearTimeout(reconnectTimer);
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
     c.initialize()
       .then(() => { reconnecting = false; })
       .catch((e) => { reconnecting = false; console.error('[link] reconnect failed:', e.message); scheduleReconnect(c); });
@@ -493,6 +500,7 @@ async function unlink() {
 // Ask for a reconnect now instead of waiting out the backoff.
 function reconnectNow() {
   if (!client) return { ok: false, message: 'Not running' };
+  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
   reconnecting = false;
   reconnectAttempts = 0;
   scheduleReconnect(client);

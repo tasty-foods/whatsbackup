@@ -652,9 +652,19 @@ function openSingleMedia(serve, kind) {
   lbId = null;
   els.lightbox.classList.remove('hidden');
   els.lbStage.innerHTML = '';
-  const el = kind === 'video' ? document.createElement('video') : document.createElement('img');
-  el.src = serve;
-  if (kind === 'video') { el.controls = true; el.autoplay = true; el.playsInline = true; }
+  // Branch on kind like the gallery lightbox does — a voice note or document is
+  // served from /media/files and would render as a broken <img> ("unavailable")
+  // even though the file is right there on disk.
+  let el;
+  if (kind === 'video') { el = document.createElement('video'); el.src = serve; el.controls = true; el.autoplay = true; el.playsInline = true; }
+  else if (kind === 'voice' || kind === 'audio') { el = document.createElement('audio'); el.src = serve; el.controls = true; el.autoplay = true; }
+  else if (kind === 'image' || kind === 'sticker') { el = document.createElement('img'); el.src = serve; }
+  else {
+    el = document.createElement('div');
+    el.className = 'lb-file';
+    el.innerHTML = `<div class="fileicon big">${KIND_ICON[kind] || '📎'}</div>
+      <div class="filename">${escapeHtml(decodeURIComponent((serve || '').split('/').pop() || ''))}</div>`;
+  }
   el.onerror = () => { els.lbStage.innerHTML = '<div class="lb-unavailable">⚠ Media unavailable.</div>'; };
   els.lbStage.appendChild(el);
   els.lbMeta.innerHTML = `<a href="${serve}" download>⭳ Download</a>`;

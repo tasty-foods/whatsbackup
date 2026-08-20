@@ -314,6 +314,10 @@ async function run({ arrangeOnly = false } = {}) {
         cost_usd: state.cost, cost_cap_usd: state.costCap,
         finished_at: Date.now(), error: state.error,
       });
+      // Clear the run's spend from shared state, exactly as kick() does. Left
+      // set, budgetExceeded() would add this run's cost on top of the ledger row
+      // it just wrote — double-counting it and wedging the next background kick.
+      state.cost = 0; state.costCap = 0; state.tokensIn = 0; state.tokensOut = 0;
       state.running = false;
       state.phase = 'idle';
     }

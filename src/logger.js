@@ -12,6 +12,7 @@ const PREV = FILE + '.1';
 let stream = null;
 let written = 0;
 let maxBytes = 5 * 1024 * 1024;
+let rotating = false;
 
 function open() {
   fs.mkdirSync(paths.LOGS_DIR, { recursive: true });
@@ -19,11 +20,25 @@ function open() {
   stream = fs.createWriteStream(FILE, { flags: 'a' });
 }
 
+// The rename has to wait for the write stream to actually close: on Windows the
+// file handle is still open synchronously after stream.end(), so renaming it
+// throws EPERM/EBUSY (silently, into the old catch). That left FILE in place at
+// full size, open() re-read it as still-over-limit, and every subsequent line
+// re-entered rotate() — the log never rotated and churned a stream per line.
+// So: swap only inside end()'s completion callback, guarded against re-entry.
 function rotate() {
-  try { if (stream) stream.end(); } catch (_) {}
-  try { if (fs.existsSync(PREV)) fs.unlinkSync(PREV); } catch (_) {}
-  try { fs.renameSync(FILE, PREV); } catch (_) {}
-  open();
+  if (rotating || !stream) return;
+  rotating = true;
+  written = 0;                       // stop this and following lines re-triggering during the async swap
+  const closing = stream;
+  stream = null;
+  const swap = () => {
+    try { if (fs.existsSync(PREV)) fs.unlinkSync(PREV); } catch (_) {}
+    try { fs.renameSync(FILE, PREV); } catch (_) {}
+    open();                          // reopens a fresh FILE; written := 0
+    rotating = false;
+  };
+  try { closing.end(swap); } catch (_) { swap(); }
 }
 
 function render(a) {

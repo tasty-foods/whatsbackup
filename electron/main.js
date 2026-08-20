@@ -34,6 +34,8 @@ let suspended = false;      // engine deliberately stopped (migration) — don't
 let serverPort = null;
 let lastHealthy = true;
 let updater = null;
+let restartTimer = null;    // pending crash-restart backoff timer, so it can be cancelled
+let portConflict = false;   // engine can't bind the port — surface the dialog only once
 
 // ---------- the Chrome we ship ----------
 // Packaged builds carry their own Chrome so the target machine needs nothing
@@ -66,6 +68,8 @@ function icon(name) {
 
 // ---------- capture engine ----------
 function startEngine() {
+  if (restartTimer) { clearTimeout(restartTimer); restartTimer = null; }
+  if (child) return;   // never run two engines at once — they'd fight over the port and the session folder
   const chrome = bundledChrome();
   const env = {
     ...process.env,
@@ -91,13 +95,19 @@ function startEngine() {
     if (msg.type === 'listening') {
       serverPort = msg.port;
       childRestarts = 0;
+      portConflict = false;
       sendAiKey();
-      openWindow();
+      // First start opens and shows the window; an engine restart keeps the
+      // existing one as the user left it (no surprise show / focus steal).
+      if (!win || win.isDestroyed()) openWindow();
     }
     if (msg.type === 'restart-requested') restartEngine();
     if (msg.type === 'port-in-use') {
-      dialog.showErrorBox(APP_NAME,
-        `Port ${msg.port} is already in use, so the dashboard can't start.\n\nChange the port in Settings, or close whatever is using it.`);
+      if (!portConflict) {
+        portConflict = true;
+        dialog.showErrorBox(APP_NAME,
+          `Port ${msg.port} is already in use, so the dashboard can't start.\n\nChange the port in Settings, or close whatever is using it.`);
+      }
     }
   });
 
@@ -109,7 +119,11 @@ function startEngine() {
     childRestarts++;
     console.error(`[shell] capture engine exited (code ${code}) — restarting in ${Math.round(delay / 1000)}s`);
     updateTray();
-    setTimeout(() => { if (!quitting) startEngine(); }, delay);
+    if (restartTimer) clearTimeout(restartTimer);
+    // Re-check state when the timer fires, not just when it's set: a migration
+    // may have suspended the engine during the backoff window, and launching it
+    // then would run Chrome onto the session folder mid-copy.
+    restartTimer = setTimeout(() => { restartTimer = null; if (!quitting && !suspended) startEngine(); }, delay);
   });
 }
 
@@ -122,8 +136,12 @@ function restartEngine() {
 // release the session folder, hence the grace period after exit.
 function stopEngine() {
   return new Promise((resolve) => {
-    if (!child) return resolve();
+    // Set suspended (and cancel any pending crash-restart) up front, even if the
+    // engine already died — otherwise a restart timer armed before this call
+    // could relaunch it while a migration copies over the session folder.
     suspended = true;
+    if (restartTimer) { clearTimeout(restartTimer); restartTimer = null; }
+    if (!child) return resolve();
     const c = child;
     const done = () => setTimeout(resolve, 1500);
     c.once('exit', done);
@@ -135,6 +153,7 @@ function stopEngine() {
 // ---------- window ----------
 function openWindow() {
   if (win && !win.isDestroyed()) { win.show(); win.focus(); return; }
+  if (!serverPort) return;   // engine isn't listening yet — don't build a window pointed at http://127.0.0.1:null/
   const startHidden = settings.read().startMinimized && process.argv.includes('--hidden');
 
   win = new BrowserWindow({
