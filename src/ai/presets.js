@@ -117,6 +117,10 @@ const PRICES = {
   'claude-haiku-4-5': { in: 1, out: 5 },
   'claude-sonnet-5': { in: 3, out: 15 },
   'claude-opus-5': { in: 5, out: 25 },
+  'gemini-2.5-flash': { in: 0.30, out: 2.50 },
+  'gemini-2.5-pro': { in: 1.25, out: 10 },     // the ≤200k-prompt tier; our calls never exceed it
+  'gpt-5-mini': { in: 0.25, out: 2 },
+  'gpt-5': { in: 1.25, out: 10 },
 };
 
 function priceFor(provider, model) {

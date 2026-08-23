@@ -208,7 +208,7 @@ function enqueue(type, refId) {
   db().prepare(`INSERT INTO ai_jobs (type, ref_id, state, updated_at) VALUES (?,?, 'queued', ?)
     ON CONFLICT(type, ref_id) DO UPDATE SET
       state = 'queued', attempts = 0, error = NULL, updated_at = excluded.updated_at
-    WHERE ai_jobs.state <> 'queued'`).run(type, refId, Date.now());
+    WHERE ai_jobs.state NOT IN ('queued', 'running')`).run(type, refId, Date.now());
 }
 
 // Claiming marks the rows as taken in the same synchronous turn it reads them.

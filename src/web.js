@@ -18,8 +18,13 @@ const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]', '0.0.0.0'
 // Reject requests whose Host header isn't a loopback name — defeats DNS-rebinding
 // even though we also bind to 127.0.0.1.
 function localHostOnly(req, res, next) {
-  const host = String(req.headers.host || '').split(':')[0].toLowerCase();
-  if (host && !LOCAL_HOSTS.has(host)) return res.status(403).json({ error: 'forbidden host' });
+  // URL handles the bracketed IPv6 form — "[::1]:8788".split(':') would yield "[".
+  const raw = String(req.headers.host || '');
+  if (raw) {
+    let host = null;
+    try { host = new URL('http://' + raw).hostname.toLowerCase(); } catch (_) {}
+    if (!host || !LOCAL_HOSTS.has(host)) return res.status(403).json({ error: 'forbidden host' });
+  }
   next();
 }
 
@@ -243,7 +248,7 @@ function createApp() {
     const st = getState();
     if (st.status !== 'ready') return res.status(409).json({ ok: false, message: 'Not linked yet — scan the QR first.' });
     if (st.backfill.running) return res.json({ ok: true, alreadyRunning: true });
-    runBackfill(limit);
+    Promise.resolve(runBackfill(limit)).catch((e) => console.error('[history] import crashed:', e.message));
     res.json({ ok: true, started: true });
   });
 
@@ -396,7 +401,7 @@ function createApp() {
     try {
       if (req.query.after) return res.json(withNames(messages.getNewer(chat, parseInt(req.query.after, 10), limit)));
       const before = req.query.before ? parseInt(req.query.before, 10) : undefined;
-      res.json(withNames(messages.getThread(chat, before, limit)));
+      res.json(withNames(messages.getThread(chat, before, limit, req.query.beforeId || '')));
     } catch (e) { res.json([]); }
   });
   app.get('/api/search', (req, res) => {

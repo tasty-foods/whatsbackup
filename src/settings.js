@@ -64,10 +64,30 @@ const DEFAULTS = {
   consentAccepted: false,
 };
 
+// The last successful read. A file that exists but momentarily can't be read
+// or parsed (locked mid-write, transient I/O) must not be mistaken for a fresh
+// install: that would show the first-run wizard on a configured machine, and
+// the next write() would merge the user's patch over defaults — wiping the
+// stored folders and the encrypted AI key.
+let lastGood = null;
+
 function read() {
   let s = {};
   let existed = false;
-  try { s = JSON.parse(fs.readFileSync(FILE, 'utf8')); existed = true; } catch (_) {}
+  try {
+    s = JSON.parse(fs.readFileSync(FILE, 'utf8'));
+    existed = true;
+    lastGood = s;
+  } catch (e) {
+    if (e.code !== 'ENOENT') {
+      // The file is there (or unknowable) but unreadable right now. Serve the
+      // last good copy; failing that, defaults that can't hijack a configured
+      // install into setup.
+      if (lastGood) { s = lastGood; existed = true; }
+      else return { ...DEFAULTS, setupComplete: true, consentAccepted: true };
+    }
+    // ENOENT falls through: a genuinely missing file is a genuine first run.
+  }
   // Someone already running the pre-desktop version has a settings file but no
   // setupComplete flag — they've long since linked, so don't send them through
   // the first-run wizard.

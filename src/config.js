@@ -32,7 +32,7 @@ const config = {
   INDEX_FILE: path.join(paths.DATA_DIR, 'index.ndjson'),
   SETTINGS_FILE: settings.FILE,
   LOGS_DIR: paths.LOGS_DIR,
-  LOG_FILE: path.join(paths.LOGS_DIR, 'dashboard.log'),
+  LOG_FILE: path.join(paths.LOGS_DIR, 'whatsbackup.log'),   // must match logger.FILE
 
   AUTH_DIR: paths.AUTH_DIR,
   PUBLIC_DIR: path.join(paths.PROJECT_ROOT, 'public'),

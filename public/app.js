@@ -713,9 +713,11 @@ const Convo = (function () {
   const bodyEl = document.getElementById('thread-body');
   let activeChat = null;
   let oldestTs = null;
+  let oldestId = null;      // (ts, id) cursor — ts alone loses rows cut mid-second by LIMIT
   let newestTs = 0;
   let canLoadOlder = false;
   let loading = false;
+  const seenIds = new Set();  // the live poll asks ts >= newest, so dedupe by id
   let entered = false;
   let searchMode = false;
 
@@ -772,8 +774,9 @@ const Convo = (function () {
     }
   }
 
-  async function fetchThread(chatId, before) {
-    const url = '/api/thread?chat=' + encodeURIComponent(chatId) + (before ? '&before=' + before : '') + '&limit=200';
+  async function fetchThread(chatId, before, beforeId) {
+    const url = '/api/thread?chat=' + encodeURIComponent(chatId)
+      + (before ? '&before=' + before + '&beforeId=' + encodeURIComponent(beforeId || '') : '') + '&limit=200';
     try { return await (await fetch(url)).json(); } catch (e) { return []; }
   }
 
@@ -782,11 +785,12 @@ const Convo = (function () {
     [...chatsEl.children].forEach((x) => x.classList.toggle('active', x.dataset.chat === c.chatId));
     headEl.innerHTML = `<span class="th-name">${escapeHtml(activeChat.chatName)}</span>`;
     bodyEl.innerHTML = '<div class="convo-empty">Loading…</div>';
-    oldestTs = null; newestTs = 0;
+    oldestTs = null; oldestId = null; newestTs = 0; seenIds.clear();
     const rows = await fetchThread(activeChat.chatId, null);
     bodyEl.innerHTML = '';
     if (!rows.length) { bodyEl.innerHTML = '<div class="convo-empty">No messages stored for this chat.</div>'; return; }
-    oldestTs = rows[0].ts; newestTs = rows[rows.length - 1].ts;
+    oldestTs = rows[0].ts; oldestId = rows[0].id; newestTs = rows[rows.length - 1].ts;
+    for (const r of rows) seenIds.add(r.id);
     canLoadOlder = rows.length >= 200;
     bodyEl.appendChild(buildBubbles(rows));
     bodyEl.scrollTop = bodyEl.scrollHeight;
@@ -795,12 +799,13 @@ const Convo = (function () {
   async function loadOlder() {
     if (loading || !activeChat || !canLoadOlder) return;
     loading = true;
-    const rows = await fetchThread(activeChat.chatId, oldestTs);
+    const rows = await fetchThread(activeChat.chatId, oldestTs, oldestId);
     loading = false;
     if (!rows.length) { canLoadOlder = false; return; }
     canLoadOlder = rows.length >= 200;
     const prevH = bodyEl.scrollHeight, prevTop = bodyEl.scrollTop;
-    oldestTs = rows[0].ts;
+    oldestTs = rows[0].ts; oldestId = rows[0].id;
+    for (const r of rows) seenIds.add(r.id);
     bodyEl.insertBefore(buildBubbles(rows), bodyEl.firstChild);
     bodyEl.scrollTop = prevTop + (bodyEl.scrollHeight - prevH);
   }
@@ -834,8 +839,12 @@ const Convo = (function () {
   async function pollActive() {
     if (currentView !== 'convo' || !activeChat || searchMode) return;
     try {
-      const rows = await (await fetch('/api/thread?chat=' + encodeURIComponent(activeChat.chatId) + '&after=' + newestTs + '&limit=200')).json();
+      const got = await (await fetch('/api/thread?chat=' + encodeURIComponent(activeChat.chatId) + '&after=' + newestTs + '&limit=200')).json();
+      // The server returns ts >= newest so same-second arrivals aren't lost;
+      // rows already rendered come back too and are dropped here by id.
+      const rows = got.filter((r) => !seenIds.has(r.id));
       if (rows.length) {
+        for (const r of rows) seenIds.add(r.id);
         const nearBottom = bodyEl.scrollHeight - bodyEl.scrollTop - bodyEl.clientHeight < 100;
         bodyEl.appendChild(buildBubbles(rows));
         newestTs = rows[rows.length - 1].ts;

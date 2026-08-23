@@ -276,8 +276,10 @@ function notifyOnce(key, title, body) {
   new Notification({ title, body, icon: icon('app.ico') }).show();
 }
 
-function notify(title, body) {
-  if (!settings.read().notifyOnProblem || !Notification.isSupported()) return;
+function notify(title, body, force) {
+  // `force` bypasses the notifyOnProblem setting - an update being ready is
+  // not a problem, and switching problem alerts off shouldn't hide it.
+  if ((!force && !settings.read().notifyOnProblem) || !Notification.isSupported()) return;
   const n = new Notification({ title, body, icon: icon('app.ico') });
   n.on('click', () => openWindow());
   n.show();
@@ -312,7 +314,7 @@ function checkForUpdates(interactive) {
       updater.autoDownload = true;
       updater.autoInstallOnAppQuit = true;
       updater.on('update-downloaded', (info) => {
-        notify(`${APP_NAME} ${info.version} is ready`, 'It will be installed when you quit the app.');
+        notify(`${APP_NAME} ${info.version} is ready`, 'It will be installed when you quit the app.', true);
       });
       updater.on('error', (e) => console.error('[update] ' + (e && e.message)));
     }

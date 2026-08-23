@@ -76,25 +76,32 @@ function listChats() {
     ORDER BY lastTs DESC`).all();
 }
 
-// Most recent `limit` messages in a chat older than `before` (cursor), returned oldest-first.
-function getThread(chatId, before, limit) {
+// Most recent `limit` messages in a chat older than the cursor, returned
+// oldest-first. WhatsApp timestamps are whole seconds, so a burst of messages
+// shares one ts and the ordering tiebreaks on id — the cursor has to carry the
+// same (ts, id) pair, or rows cut off mid-second by LIMIT are never reachable.
+function getThread(chatId, before, limit, beforeId) {
   init();
+  const b = before || Number.MAX_SAFE_INTEGER;
   const rows = db.prepare(`
     SELECT id, chat_id AS chatId, chat_name AS chatName, ts, from_me AS fromMe,
            author, type, body, media_kind AS mediaKind, media_serve AS mediaServe
-    FROM messages WHERE chat_id = ? AND ts < ?
-    ORDER BY ts DESC, id DESC LIMIT ?`).all(chatId, before || Number.MAX_SAFE_INTEGER, limit || 200);
+    FROM messages WHERE chat_id = ? AND (ts < ? OR (ts = ? AND id < ?))
+    ORDER BY ts DESC, id DESC LIMIT ?`).all(chatId, b, b, beforeId || '', limit || 200);
   rows.reverse();
   return rows;
 }
 
-// Messages newer than `after` (for live thread updates), oldest-first.
+// Messages at or after `after` (for live thread updates), oldest-first.
+// `>=` rather than `>` for the same whole-second reason: a message landing in
+// the second already polled would otherwise be skipped forever. The client
+// dedupes by id, exactly as the media gallery does.
 function getNewer(chatId, after, limit) {
   init();
   return db.prepare(`
     SELECT id, chat_id AS chatId, chat_name AS chatName, ts, from_me AS fromMe,
            author, type, body, media_kind AS mediaKind, media_serve AS mediaServe
-    FROM messages WHERE chat_id = ? AND ts > ?
+    FROM messages WHERE chat_id = ? AND ts >= ?
     ORDER BY ts ASC, id ASC LIMIT ?`).all(chatId, after || 0, limit || 200);
 }
 

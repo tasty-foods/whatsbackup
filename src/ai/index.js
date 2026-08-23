@@ -38,7 +38,8 @@ let visionOff = null;                                  // the key it applies to,
 const visionKey = (c) => `${c.baseUrl}|${c.model}`;
 const visionIsOff = (c) => visionOff === visionKey(c);
 const noteVisionOff = (c) => { visionOff = visionKey(c); };
-const noteVisionOk = (c) => { if (visionIsOff(c)) visionOff = null; };
+const noteVisionOk = (c) => { if (visionIsOff(c)) visionOff = null; imageRejects = 0; };
+let imageRejects = 0;                                 // consecutive image rejections, reset by any success
 
 function config() {
   const s = settings.read();
@@ -202,6 +203,7 @@ async function drainQueue(cfg) {
         else {
           ai.finishJob(job.id, 'done');
           state.done++;
+          if (job.type === 'label_image') imageRejects = 0;
           if (r.usage) { state.tokensIn += r.usage.in; state.tokensOut += r.usage.out; }
           if (r.cost) state.cost += r.cost;
           if (r.costCap) state.costCap += r.costCap;
@@ -227,8 +229,15 @@ async function drainQueue(cfg) {
           // itself counts — a wrong model name is a 404 and is handled above,
           // and must not be reported as "this model cannot see".
           if (job.type === 'label_image' && e instanceof AiError && [400, 413, 415, 422].includes(e.status)) {
-            noteVisionOff(cfg);
-            state.message = 'This model cannot read images — photos were left unsorted. Conversations are unaffected.';
+            // One rejected request may be one bad file — an oversized or oddly
+            // encoded image — not a blind model, and must not strand every
+            // other photo. Only an error that names the problem, or two
+            // rejections in a row with no success between, count as "cannot see".
+            imageRejects++;
+            if (imageRejects >= 2 || /image|vision|multimodal|media/i.test(e.message || '')) {
+              noteVisionOff(cfg);
+              state.message = 'This model cannot read images — photos were left unsorted. Conversations are unaffected.';
+            }
           }
         }
       }
@@ -292,13 +301,17 @@ async function run({ arrangeOnly = false } = {}) {
           const r = await arrange.arrange(cfg, 'media', entriesFor('media'));
           if (r.cost) state.cost += r.cost;
           if (r.costCap) state.costCap += r.costCap;
+          if (r.usage) { state.tokensIn += r.usage.in; state.tokensOut += r.usage.out; }
           console.log(`[ai] albums: ${r.groups} groups, ${r.coverage}% of items placed${r.note ? ' — ' + r.note : ''}`);
           state.message = r.note || `${r.groups} albums · ${r.coverage}% sorted`;
         }
-        if (s.aiAnalyseChats !== false) {
+        // The media arrange can itself cross the cap — check again before the
+        // second-largest call of the run instead of only before the first.
+        if (s.aiAnalyseChats !== false && !budgetExceeded()) {
           const r = await arrange.arrange(cfg, 'chat', entriesFor('chat'));
           if (r.cost) state.cost += r.cost;
           if (r.costCap) state.costCap += r.costCap;
+          if (r.usage) { state.tokensIn += r.usage.in; state.tokensOut += r.usage.out; }
           console.log(`[ai] projects: ${r.groups} groups, ${r.coverage}% of chats placed${r.note ? ' — ' + r.note : ''}`);
           state.message += `${state.message ? ' · ' : ''}${r.groups} projects`;
         }
@@ -366,9 +379,11 @@ async function kick() {
       for (const kind of ['media', 'chat']) {
         if (kind === 'media' && s.aiAnalyseImages === false) continue;
         if (kind === 'chat' && s.aiAnalyseChats === false) continue;
+        if (budgetExceeded()) break;
         const r = await arrange.arrange(cfg, kind, entriesFor(kind));
         if (r.cost) state.cost += r.cost;
         if (r.costCap) state.costCap += r.costCap;
+        if (r.usage) { state.tokensIn += r.usage.in; state.tokensOut += r.usage.out; }
       }
     }
   } catch (e) {
