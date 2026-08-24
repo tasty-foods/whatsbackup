@@ -91,11 +91,15 @@ function existingBlock(kind) {
 function validate(result, itemCount) {
   const groups = [];
   const claimed = new Set();
-  for (const g of (result && result.groups) || []) {
+  // Ollama and LM Studio get json_object mode rather than a strict schema, so
+  // "groups" can come back as something truthy that is not an array; for..of
+  // would throw and lose the whole pass.
+  const rawGroups = result && Array.isArray(result.groups) ? result.groups : [];
+  for (const g of rawGroups) {
     const name = String(g.name || '').trim().slice(0, 60);
     if (!name || /^(other|misc|miscellaneous|unsorted|various)$/i.test(name)) continue;
     const members = [];
-    for (const raw of g.members || []) {
+    for (const raw of (Array.isArray(g.members) ? g.members : [])) {
       const n = Number(raw);
       if (!Number.isInteger(n) || n < 1 || n > itemCount) continue;   // hallucinated index
       if (claimed.has(n)) continue;                                    // first group wins

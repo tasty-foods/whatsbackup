@@ -38,6 +38,8 @@ const health = {
   lastErrorAt: null,
   lastCaptureAt: null,
   totalCaptured: 0,
+  lastStorageError: null,      // a folder or cloud drive problem, counted apart
+  lastStorageErrorAt: null,
 };
 function noteCaptureOk() {
   health.consecutiveFailures = 0;
@@ -258,8 +260,15 @@ async function saveMediaMessage(msg, chatObj) {
   // (which also serves the dashboard the user is looking at).
   const area = AREA_BY_KIND[kind];
   const target = area === 'videos' ? cfg.VIDEO_DIR : area === 'files' ? cfg.FILES_DIR : cfg.IMAGES_DIR;
-  await fs.promises.mkdir(target, { recursive: true });
-  await fs.promises.writeFile(path.join(target, filename), buf);
+  try {
+    await fs.promises.mkdir(target, { recursive: true });
+    await fs.promises.writeFile(path.join(target, filename), buf);
+  } catch (e) {
+    // Tagged so the health net can tell "the drive went away" from "WhatsApp
+    // changed its internals". They need opposite reactions from the user.
+    e.storage = true;
+    throw e;
+  }
   if (area === 'images' && mirrorImages()) {
     try {
       await fs.promises.mkdir(cfg.IMAGE_CLOUD_DIR, { recursive: true });
@@ -291,9 +300,18 @@ async function handleMessage(msg) {
       try { require('./ai').noteNewMedia(rec); } catch (_) {}
     }
   } catch (e) {
-    noteCaptureFail(e);
-    console.error('[capture] download failed:', describeError(e), `(${health.consecutiveFailures} in a row)`);
-    if (captureBroken()) console.error('[capture] capture looks broken — WhatsApp may have changed again. Check for an update.');
+    if (e && e.storage) {
+      // The download worked and the bytes are in hand; we just couldn't write
+      // them. Counting this as a capture failure would put "WhatsApp may have
+      // changed" in front of someone whose cloud drive is simply offline.
+      health.lastStorageError = describeError(e);
+      health.lastStorageErrorAt = Date.now();
+      console.error('[capture] could not save the file:', describeError(e), '— check the media folder or cloud drive.');
+    } else {
+      noteCaptureFail(e);
+      console.error('[capture] download failed:', describeError(e), `(${health.consecutiveFailures} in a row)`);
+      if (captureBroken()) console.error('[capture] capture looks broken — WhatsApp may have changed again. Check for an update.');
+    }
   }
   try {
     if (captureConversations() && keepInTranscript(msg)) {

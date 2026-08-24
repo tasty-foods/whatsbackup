@@ -152,10 +152,13 @@ function noteNewMessages(chatId) {
   if (!s.aiEnabled || !s.aiConsent || s.aiMode === 'manual') return;
   if (s.aiAnalyseChats === false) return;
   ai.enqueue('label_chat', chatId);
+  kick();                     // as noteNewMedia does; otherwise it waits for the 60s timer
 }
 
 /* ---------------- the runner ---------------- */
-const recordById = (id) => store.listRecords({}).find((r) => r.id === id) || null;
+// store keeps an id map; listRecords() copies, filters and re-sorts the whole
+// library, and this runs once per queued item.
+const recordById = (id) => store.get(id);
 
 async function runOneJob(cfg, job) {
   if (job.type === 'label_image') {
