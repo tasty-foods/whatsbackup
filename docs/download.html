@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Download WhatsBackUp — free WhatsApp backup for Windows</title>
-<meta name="description" content="Download WhatsBackUp 1.1.0 free for Windows 10 and 11. No admin password, no prerequisites — install it, scan one QR code, and your photos are saved.">
+<meta name="description" content="Download WhatsBackUp 1.2.0 free for Windows 10 and 11. No admin password, no prerequisites — install it, scan one QR code, and your photos are saved.">
 <link rel="canonical" href="https://tasty-foods.github.io/whatsbackup/download.html">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="theme-color" content="#f4f1e8" media="(prefers-color-scheme: light)">
@@ -12,7 +12,7 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="WhatsBackUp">
 <meta property="og:title" content="Download WhatsBackUp for Windows — free">
-<meta property="og:description" content="WhatsBackUp 1.1.0 for Windows 10 and 11. Free, open source, no account. Install it, scan a QR code, and every WhatsApp photo is saved.">
+<meta property="og:description" content="WhatsBackUp 1.2.0 for Windows 10 and 11. Free, open source, no account. Install it, scan a QR code, and every WhatsApp photo is saved.">
 <meta property="og:url" content="https://tasty-foods.github.io/whatsbackup/download.html">
 <meta property="og:image" content="https://tasty-foods.github.io/whatsbackup/assets/og.png">
 <meta property="og:image:width" content="1200">
@@ -37,7 +37,7 @@
         { "@type": "HowToTool", "name": "The phone your WhatsApp account runs on" }
       ],
       "step": [
-        { "@type": "HowToStep", "name": "Download the installer", "text": "Download WhatsBackUp-Setup-1.1.0.exe from the GitHub releases page.", "url": "https://tasty-foods.github.io/whatsbackup/download.html#step-1" },
+        { "@type": "HowToStep", "name": "Download the installer", "text": "Download WhatsBackUp-Setup-1.2.0.exe from the GitHub releases page.", "url": "https://tasty-foods.github.io/whatsbackup/download.html#step-1" },
         { "@type": "HowToStep", "name": "Get past the SmartScreen warning", "text": "Windows shows 'Windows protected your PC' because the installer is not signed with a paid certificate. Click More info, then Run anyway.", "url": "https://tasty-foods.github.io/whatsbackup/download.html#step-2" },
         { "@type": "HowToStep", "name": "Answer four setup questions", "text": "Accept the notice, choose where to keep your media, optionally point it at a cloud folder, and decide whether it starts with Windows.", "url": "https://tasty-foods.github.io/whatsbackup/download.html#step-3" },
         { "@type": "HowToStep", "name": "Scan the QR code", "text": "On your phone open WhatsApp, go to Settings, then Linked devices, then Link a device, and scan the code shown by WhatsBackUp.", "url": "https://tasty-foods.github.io/whatsbackup/download.html#step-4" },
@@ -60,7 +60,7 @@
 
 <header class="site-head">
   <div class="wrap">
-    <a class="brand" href="./"><span class="mark">Whats<i>BackUp</i></span><span class="ref">v1.1.0</span></a>
+    <a class="brand" href="./"><span class="mark">Whats<i>BackUp</i></span><span class="ref">v1.2.0</span></a>
     <nav class="nav" aria-label="Main">
       <a href="index.html#problem" class="hide-sm">Why</a>
       <a href="index.html#how" class="hide-sm">How</a>
@@ -75,7 +75,7 @@
 
 <section class="hero">
   <div class="wrap">
-    <p class="label">Release 1.1.0 <span class="no">·</span> 17 August 2026</p>
+    <p class="label">Release 1.2.0 <span class="no">·</span> 24 August 2026</p>
     <h1 style="max-width:16ch">Take a copy.</h1>
     <p class="lede" style="margin-top:.7em">Free and open source. About five minutes from here to <em>every photograph I am sent is now kept</em>.</p>
 
@@ -85,13 +85,52 @@
         Download for Windows
       </a>
       <p class="manifest">
-        <span>File</span><b>WhatsBackUp-Setup-1.1.0.exe</b><br>
+        <span>File</span><b>WhatsBackUp-Setup-1.2.0.exe</b><br>
         <span>Size</span><b>233 MB</b><br>
         <span>Requires</span><b>Windows 10 / 11, 64-bit</b><br>
         <span>Installs</span><b>per user — no admin password</b><br>
         <span>Source</span><b><a href="https://github.com/tasty-foods/whatsbackup">github.com/tasty-foods/whatsbackup</a></b>
       </p>
     </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="head">
+      <p class="marker">§ 00 <span>This release</span></p>
+      <div>
+        <h2>New in 1.2.0</h2>
+        <p>Mostly repairs, and one addition. Existing installations update themselves on the next restart.</p>
+      </div>
+    </div>
+
+    <dl class="defs">
+      <div>
+        <dt>Videos play in the gallery</dt>
+        <dd>A video shows a frame instead of a grey box, and plays silently while the pointer rests on it. <em>Quick play</em> runs them one after another, full screen, one flick per video — with sound when you open one.</dd>
+      </div>
+      <div>
+        <dt>Settings can no longer be lost</dt>
+        <dd>A settings file that existed but could not be read for a moment was treated as no settings at all, which sent a configured machine back through first-run setup and could overwrite the folders it had been given. Only a genuinely missing file counts as a first run now.</dd>
+      </div>
+      <div>
+        <dt>A missing drive says so</dt>
+        <dd>A video that downloaded but could not be written — a cloud folder that had unmounted — counted towards <em>capture looks broken, WhatsApp may have changed</em>. Storage trouble is now reported as storage trouble.</dd>
+      </div>
+      <div>
+        <dt>Nothing fails silently in the log</dt>
+        <dd>Log rotation never worked on Windows: the file was held open while being renamed, the rename failed quietly, and past the size limit the log reopened itself for every line written. Both fixed.</dd>
+      </div>
+      <div>
+        <dt>Conversations stopped hiding messages</dt>
+        <dd>Paging through a chat used a timestamp alone as its place-marker. WhatsApp stamps whole seconds, so messages sharing a second with the page boundary were unreachable — present in search, missing from the thread.</dd>
+      </div>
+      <div>
+        <dt>Sorting costs what it says</dt>
+        <dd>Gemini and GPT-5 had no listed price, so a run was charged against the monthly cap at the dearest rate known and could stop halfway through reporting money that was never spent. Also adds NVIDIA's endpoint as a provider.</dd>
+      </div>
+    </dl>
   </div>
 </section>
 
@@ -107,7 +146,7 @@
         <span class="n">01</span>
         <div>
           <h3>Run the installer</h3>
-          <p>Double-click <code>WhatsBackUp-Setup-1.1.0.exe</code>. There is nothing to install beforehand — no Node.js, no Chrome, no developer tools. The app carries everything it needs.</p>
+          <p>Double-click <code>WhatsBackUp-Setup-1.2.0.exe</code>. There is nothing to install beforehand — no Node.js, no Chrome, no developer tools. The app carries everything it needs.</p>
         </div>
       </li>
       <li id="step-2">
