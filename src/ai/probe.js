@@ -49,7 +49,7 @@ async function probe(cfg) {
     const r = await complete(cfg, {
       system: 'You return JSON only.',
       user: 'Return {"ok": true}.',
-      schema: OK_SCHEMA, schemaName: 'probe', maxTokens: 64,
+      schema: OK_SCHEMA, schemaName: 'probe', maxTokens: 300,
     });
     out.json = r.json && r.json.ok === true
       ? step(true, 'structured replies work')
@@ -66,7 +66,7 @@ async function probe(cfg) {
       system: 'You describe images literally.',
       user: 'What colour fills this image? Answer with one colour word.',
       images: [{ mediaType: 'image/png', data: RED_PNG }],
-      schema: COLOUR_SCHEMA, schemaName: 'colour', maxTokens: 64,
+      schema: COLOUR_SCHEMA, schemaName: 'colour', maxTokens: 300,
     });
     const said = String((r.json && r.json.colour) || r.text || '').toLowerCase();
     out.vision = /red|rood|rouge|rot|rojo/.test(said)

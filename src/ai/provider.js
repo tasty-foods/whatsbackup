@@ -115,6 +115,16 @@ async function completeOpenAi(cfg, req) {
       { role: 'user', content: parts },
     ],
   };
+  // Gemini's 2.5 models think before they answer, and the thinking is spent out
+  // of the same token allowance as the reply. Asked for a short JSON answer they
+  // reason past the limit and return nothing parseable — which reads exactly
+  // like a model that ignores the requested format. Turning thinking off is the
+  // documented control on this endpoint, and these are labelling calls: the
+  // shape is fixed and there is nothing to reason about. Pro and 3-series models
+  // refuse to have it turned off, so they are not asked.
+  const isGemini = /(^|\.)generativelanguage\.googleapis\.com$/i.test(label);
+  if (isGemini && /^gemini-2\.5-flash/i.test(cfg.model || '')) body.reasoning_effort = 'none';
+
   if (req.schema) {
     body.response_format = cfg.jsonSchema === false
       ? { type: 'json_object' }
