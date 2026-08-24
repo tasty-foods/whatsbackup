@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contact — WhatsBackUp</title>
+<meta name="description" content="Questions about WhatsBackUp, or trouble installing it? Write to kestenbaumaaron@gmail.com or call +32 491 28 03 50. Answered by the person who builds it.">
+<link rel="canonical" href="https://whatsbackup.cc/contact.html">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="theme-color" content="#f4f1e8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#13110d" media="(prefers-color-scheme: dark)">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="WhatsBackUp">
+<meta property="og:title" content="Contact WhatsBackUp">
+<meta property="og:description" content="Questions, trouble installing, or something that broke — reach the person who builds it, by email or telephone.">
+<meta property="og:url" content="https://whatsbackup.cc/contact.html">
+<meta property="og:image" content="https://whatsbackup.cc/assets/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://whatsbackup.cc/assets/og.png">
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/site.css">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "ContactPage",
+  "name": "Contact WhatsBackUp",
+  "url": "https://whatsbackup.cc/contact.html",
+  "mainEntity": {
+    "@type": "Organization",
+    "name": "Tasty Foods",
+    "url": "https://whatsbackup.cc/",
+    "contactPoint": [{
+      "@type": "ContactPoint",
+      "contactType": "customer support",
+      "email": "kestenbaumaaron@gmail.com",
+      "telephone": "+32491280350",
+      "availableLanguage": ["en", "nl", "fr"]
+    }]
+  }
+}
+</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="site-head">
+  <div class="wrap">
+    <a class="brand" href="./"><span class="mark">Whats<i>BackUp</i></span><span class="ref">v1.2.0</span></a>
+    <nav class="nav" aria-label="Main">
+      <a href="index.html#problem" class="hide-sm">Why</a>
+      <a href="compare.html">Compare</a>
+      <a href="faq.html">Questions</a>
+      <a href="contact.html" aria-current="page">Contact</a>
+      <a href="download.html">Download</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+
+<section class="hero">
+  <div class="wrap">
+    <p class="label">Contact <span class="no">·</span> answered by the person who builds it</p>
+    <h1 style="max-width:18ch">Ask, and you get a person.</h1>
+    <p class="lede" style="margin-top:.7em">
+      There is no support desk and no ticket number. Write or call, and the reply comes
+      from whoever wrote the line of code you are asking about — which is one person.
+    </p>
+
+    <div style="display:flex;flex-wrap:wrap;gap:clamp(26px,5vw,64px);align-items:flex-start;margin-top:2.2em">
+      <p class="manifest">
+        <span>Email</span><b><a href="mailto:kestenbaumaaron@gmail.com">kestenbaumaaron@gmail.com</a></b><br>
+        <span>Telephone</span><b><a href="tel:+32491280350">+32 491 28 03 50</a></b><br>
+        <span>Hours</span><b>Belgian time, most days</b><br>
+        <span>Languages</span><b>English, Nederlands, Français</b><br>
+        <span>Code</span><b><a href="https://github.com/tasty-foods/whatsbackup">github.com/tasty-foods/whatsbackup</a></b>
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ FORM ═══ -->
+<section class="tint">
+  <div class="wrap">
+    <div class="head">
+      <p class="marker">§ 01 <span>Write</span></p>
+      <div>
+        <h2>Say what happened</h2>
+        <p>Fill this in and it opens your own mail program with the whole thing written out, addressed and ready. Nothing is sent from this page and nothing is stored on it — this site has no server to store it on.</p>
+      </div>
+    </div>
+
+    <form id="contact-form" class="cform" novalidate>
+      <div class="frow">
+        <label for="cf-name">Your name</label>
+        <input id="cf-name" name="name" type="text" autocomplete="name" placeholder="Aaron Kestenbaum">
+      </div>
+      <div class="frow">
+        <label for="cf-topic">What is this about</label>
+        <select id="cf-topic" name="topic">
+          <option>A question before I install it</option>
+          <option>Trouble installing or linking</option>
+          <option>Something stopped working</option>
+          <option>AI sorting</option>
+          <option>Something else</option>
+        </select>
+      </div>
+      <div class="frow">
+        <label for="cf-version">Version <span class="opt">optional</span></label>
+        <input id="cf-version" name="version" type="text" placeholder="1.2.0 — shown in Settings" value="1.2.0">
+      </div>
+      <div class="frow full">
+        <label for="cf-msg">What happened</label>
+        <textarea id="cf-msg" name="message" rows="7" placeholder="What you did, what you expected, and what happened instead. If something failed, the exact wording of the message helps more than anything else."></textarea>
+      </div>
+      <div class="frow full actions" style="margin-top:.4em">
+        <button class="btn" type="submit">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" aria-hidden="true"><path d="M3 5h18v14H3zM3 6l9 7 9-7"/></svg>
+          Open this in my mail app
+        </button>
+        <p class="fine" id="cf-note" style="margin:0">
+          Prefer to write it yourself? <a href="mailto:kestenbaumaaron@gmail.com">kestenbaumaaron@gmail.com</a>
+        </p>
+      </div>
+    </form>
+  </div>
+</section>
+
+<!-- ═══ BEFORE YOU WRITE ═══ -->
+<section>
+  <div class="wrap">
+    <div class="head">
+      <p class="marker">§ 02 <span>Faster than waiting</span></p>
+      <div>
+        <h2>Three things that answer themselves</h2>
+        <p>These come up most, and each has a full answer already written.</p>
+      </div>
+    </div>
+
+    <dl class="defs">
+      <div>
+        <dt>Windows says it protected your PC</dt>
+        <dd>Expected, and explained in full on the <a href="download.html#step-2">download page</a>. The installer is not signed with a paid certificate, so Windows does not recognise the publisher. It says nothing about whether the app is safe.</dd>
+      </div>
+      <div>
+        <dt>Will this get my account banned</dt>
+        <dd>The honest answer, including the part that is not reassuring, is in the <a href="faq.html">questions</a>. WhatsApp's terms do not allow unofficial clients, and the risk is small but real.</dd>
+      </div>
+      <div>
+        <dt>Where your data actually goes</dt>
+        <dd>Nowhere, unless you switch on AI sorting — and then only to the provider you chose, with your own key. <a href="privacy.html">Exactly what it sends →</a></dd>
+      </div>
+    </dl>
+
+    <p class="fine" style="margin-top:clamp(24px,3vw,34px)">
+      Something broken rather than unclear? A <a href="https://github.com/tasty-foods/whatsbackup/issues">GitHub issue</a>
+      is the better place — it stays visible, and the fix arrives attached to it.
+    </p>
+  </div>
+</section>
+
+</main>
+
+<footer class="site-foot">
+  <div class="wrap">
+    <div class="colophon" style="border-top:0;padding-top:0">
+      <p><strong>WhatsBackUp is an independent, unofficial tool.</strong> It is not made, endorsed, sponsored or supported by WhatsApp&nbsp;LLC or Meta&nbsp;Platforms,&nbsp;Inc. "WhatsApp" is a trademark of its respective owner, used here only to describe what this software works with.</p>
+      <p class="set">© 2026 Tasty Foods · <a href="./">Home</a> · <a href="download.html">Download</a> · <a href="faq.html">Questions</a> · <a href="contact.html">Contact</a> · <a href="https://github.com/tasty-foods/whatsbackup">GitHub</a></p>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function () {
+  var f = document.getElementById('contact-form');
+  if (!f) return;
+  f.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var v = function (id) { var el = document.getElementById(id); return el ? el.value.trim() : ''; };
+    var name = v('cf-name'), topic = v('cf-topic'), ver = v('cf-version'), msg = v('cf-msg');
+    if (!msg) {
+      var m = document.getElementById('cf-msg');
+      m.focus();
+      document.getElementById('cf-note').textContent = 'Write a line or two first — otherwise the mail arrives empty.';
+      return;
+    }
+    var body = msg
+      + '\n\n—\n'
+      + (name ? 'From: ' + name + '\n' : '')
+      + (ver ? 'Version: ' + ver + '\n' : '')
+      + 'Sent from whatsbackup.cc';
+    window.location.href = 'mailto:kestenbaumaaron@gmail.com'
+      + '?subject=' + encodeURIComponent('WhatsBackUp — ' + (topic || 'Question'))
+      + '&body=' + encodeURIComponent(body);
+  });
+})();
+</script>
+</body>
+</html>

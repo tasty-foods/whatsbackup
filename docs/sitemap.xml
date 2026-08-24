@@ -30,4 +30,10 @@
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
   </url>
+<url>
+    <loc>https://whatsbackup.cc/contact.html</loc>
+    <lastmod>2026-08-17</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
 </urlset>
