@@ -7,3 +7,4 @@ logs/
 *.log
 dist/
 build/
+.local-backup-installed-1.1.0/
