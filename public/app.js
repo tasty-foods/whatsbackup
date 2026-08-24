@@ -81,7 +81,16 @@ function tile(r) {
   if (r.kind === 'image' || r.kind === 'sticker') {
     el.innerHTML = `<img loading="lazy" src="${r.serve}" alt="" onerror="this.classList.add('imgerr')" />${badge}${cap}`;
   } else if (r.kind === 'video') {
-    el.innerHTML = `<div class="videotile"><div class="play">▶</div></div>${badge}${cap}`;
+    // A real video rather than a placeholder glyph, so the grid shows what the
+    // clip actually is. The #t= fragment makes the browser paint that frame as
+    // the still, which saves generating and storing poster images for every
+    // video — and these sit on a cloud drive where writing thumbnails back
+    // would be slow and untidy.
+    el.innerHTML = `<div class="videotile">
+        <video class="tile-vid" muted playsinline loop preload="none" data-src="${r.serve}#t=${PREVIEW_AT}"></video>
+        <div class="play">▶</div>
+        <div class="mutehint" title="Muted while previewing — click to open it with sound">🔇</div>
+      </div>${badge}${cap}`;
   } else {
     const name = r.docName || decodeURIComponent((r.serve || '').split('/').pop() || '');
     el.innerHTML = `<div class="filetile"><div class="fileicon">${KIND_ICON[r.kind] || '📎'}</div>
@@ -89,7 +98,64 @@ function tile(r) {
         <div class="filekind">${escapeHtml(KIND_LABEL[r.kind] || r.kind)}</div></div>${badge}${cap}`;
   }
   el.addEventListener('click', () => openLightbox(r));
+  if (r.kind === 'video') wireVideoPreview(el);
   return el;
+}
+
+/* ---------- Hover previews -----------------------------------------------
+   Point at a video and it plays silently in place, the way a feed does;
+   click and it opens with sound. Silent because a grid that starts talking
+   when the pointer crosses it is unbearable — and because browsers refuse
+   to autoplay with sound anyway. */
+const PREVIEW_AT = 0.5;          // seconds in: past any black leading frame
+
+function loadTileVideo(v) {
+  if (!v || v.dataset.loaded === '1') return;
+  v.dataset.loaded = '1';
+  v.preload = 'metadata';
+  v.src = v.dataset.src;         // carries #t=, so a frame is painted, not a black box
+}
+
+// Metadata is fetched when a tile nears the viewport rather than for the whole
+// library at once: each one is a request to the cloud drive, and there can be
+// hundreds of them.
+const tileVideoIO = ('IntersectionObserver' in window)
+  ? new IntersectionObserver((entries) => {
+      for (const e of entries) {
+        if (!e.isIntersecting) continue;
+        loadTileVideo(e.target.querySelector('.tile-vid'));
+        tileVideoIO.unobserve(e.target);
+      }
+    }, { rootMargin: '250px' })
+  : null;
+
+// Someone who has asked the system for less motion should not get video
+// starting under the pointer; they still get the still frame and the click.
+const wantsStill = (() => {
+  try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (_) { return false; }
+})();
+
+function wireVideoPreview(el) {
+  const v = el.querySelector('.tile-vid');
+  if (!v) return;
+  if (wantsStill) { if (tileVideoIO) tileVideoIO.observe(el); return; }
+  let hold = null;
+  el.addEventListener('mouseenter', () => {
+    loadTileVideo(v);            // also covers the case where the observer never ran
+    clearTimeout(hold);
+    // A beat before starting, so sweeping the pointer across the grid doesn't
+    // kick off a dozen downloads that are all abandoned immediately.
+    hold = setTimeout(() => {
+      try { v.currentTime = 0; } catch (_) {}
+      v.play().then(() => el.classList.add('previewing')).catch(() => {});
+    }, 180);
+  });
+  el.addEventListener('mouseleave', () => {
+    clearTimeout(hold);
+    el.classList.remove('previewing');
+    try { v.pause(); v.currentTime = PREVIEW_AT; } catch (_) {}   // back to the still
+  });
+  if (tileVideoIO) tileVideoIO.observe(el);
 }
 
 /* ---------- Chunked rendering (only materialize what's needed) ---------- */
