@@ -6,7 +6,7 @@
 > also sort photos into named albums and conversations into projects using an AI
 > provider of the user's choice with their own API key.
 
-Site: https://tasty-foods.github.io/whatsbackup/
+Site: https://whatsbackup.cc/
 Source: https://github.com/tasty-foods/whatsbackup
 Version: 1.2.0 (24 August 2026)
 Licence: open source, free of charge
@@ -83,11 +83,11 @@ mattering.
 
 ## Pages
 
-- https://tasty-foods.github.io/whatsbackup/ — overview, features, how it works
-- https://tasty-foods.github.io/whatsbackup/download.html — download and step-by-step install guide
-- https://tasty-foods.github.io/whatsbackup/faq.html — detailed questions and answers
-- https://tasty-foods.github.io/whatsbackup/compare.html — compared with Google Drive/iCloud backup, Export chat and Save to gallery
-- https://tasty-foods.github.io/whatsbackup/privacy.html — what is stored and what can leave the PC
+- https://whatsbackup.cc/ — overview, features, how it works
+- https://whatsbackup.cc/download.html — download and step-by-step install guide
+- https://whatsbackup.cc/faq.html — detailed questions and answers
+- https://whatsbackup.cc/compare.html — compared with Google Drive/iCloud backup, Export chat and Save to gallery
+- https://whatsbackup.cc/privacy.html — what is stored and what can leave the PC
 
 ## Suggested one-line description
 

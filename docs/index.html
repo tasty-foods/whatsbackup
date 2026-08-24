@@ -3,27 +3,27 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>WhatsBackUp — Save every WhatsApp photo to your PC</title>
-<meta name="description" content="Free Windows app that automatically saves every WhatsApp photo, video and message to your own PC and cloud folder, then sorts them into albums. Open source.">
-<link rel="canonical" href="https://tasty-foods.github.io/whatsbackup/">
+<title>WhatsBackUp — Keep everything WhatsApp holds, sorted by project</title>
+<meta name="description" content="Free Windows app that saves every WhatsApp photo, video and message to your own PC and cloud folder — then sorts the conversations into projects and the photographs into albums, searchable by what is in them. Open source.">
+<link rel="canonical" href="https://whatsbackup.cc/">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="theme-color" content="#f4f1e8" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#13110d" media="(prefers-color-scheme: dark)">
 
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="WhatsBackUp">
-<meta property="og:title" content="WhatsBackUp — never lose another WhatsApp photo">
-<meta property="og:description" content="A free Windows app that saves every WhatsApp photo, video and message to your PC automatically, then sorts them into albums with AI. Open source, no account, no subscription.">
-<meta property="og:url" content="https://tasty-foods.github.io/whatsbackup/">
-<meta property="og:image" content="https://tasty-foods.github.io/whatsbackup/assets/og.png">
+<meta property="og:title" content="WhatsBackUp — everything WhatsApp holds, sorted by project">
+<meta property="og:description" content="Saves every WhatsApp photo, video and message to your own PC, then gathers the conversations into projects and the photographs into albums — so picking a job back up is one screen, not three chats. Free and open source.">
+<meta property="og:url" content="https://whatsbackup.cc/">
+<meta property="og:image" content="https://whatsbackup.cc/assets/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="WhatsBackUp — automatically save every WhatsApp photo, video and message to your PC.">
 <meta property="og:locale" content="en_GB">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="WhatsBackUp — never lose another WhatsApp photo">
-<meta name="twitter:description" content="A free Windows app that saves every WhatsApp photo, video and message to your PC automatically, then sorts them into albums with AI.">
-<meta name="twitter:image" content="https://tasty-foods.github.io/whatsbackup/assets/og.png">
+<meta name="twitter:title" content="WhatsBackUp — everything WhatsApp holds, sorted by project">
+<meta name="twitter:description" content="Saves every WhatsApp photo, video and message to your own PC, then sorts the conversations into projects and the photographs into albums.">
+<meta name="twitter:image" content="https://whatsbackup.cc/assets/og.png">
 
 <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="assets/icon.svg">
@@ -35,23 +35,23 @@
   "@graph": [
     {
       "@type": "WebSite",
-      "@id": "https://tasty-foods.github.io/whatsbackup/#website",
-      "url": "https://tasty-foods.github.io/whatsbackup/",
+      "@id": "https://whatsbackup.cc/#website",
+      "url": "https://whatsbackup.cc/",
       "name": "WhatsBackUp",
-      "description": "Free Windows app that automatically saves every WhatsApp photo, video and message to your PC.",
+      "description": "Free Windows app that saves every WhatsApp photo, video and message to your PC, then sorts conversations into projects and photographs into albums.",
       "inLanguage": "en"
     },
     {
       "@type": "SoftwareApplication",
-      "@id": "https://tasty-foods.github.io/whatsbackup/#app",
+      "@id": "https://whatsbackup.cc/#app",
       "name": "WhatsBackUp",
       "applicationCategory": "UtilitiesApplication",
       "applicationSubCategory": "Backup and archiving software",
       "operatingSystem": "Windows 10, Windows 11",
       "softwareVersion": "1.2.0",
-      "url": "https://tasty-foods.github.io/whatsbackup/",
+      "url": "https://whatsbackup.cc/",
       "downloadUrl": "https://github.com/tasty-foods/whatsbackup/releases/latest",
-      "installUrl": "https://tasty-foods.github.io/whatsbackup/download.html",
+      "installUrl": "https://whatsbackup.cc/download.html",
       "fileSize": "237MB",
       "license": "https://github.com/tasty-foods/whatsbackup/blob/master/LICENSE",
       "isAccessibleForFree": true,
@@ -75,7 +75,7 @@
     },
     {
       "@type": "FAQPage",
-      "@id": "https://tasty-foods.github.io/whatsbackup/#faq",
+      "@id": "https://whatsbackup.cc/#faq",
       "mainEntity": [
         { "@type": "Question", "name": "What is WhatsBackUp?", "acceptedAnswer": { "@type": "Answer", "text": "WhatsBackUp is a free, open-source Windows desktop app that automatically saves every photo, video and message from your WhatsApp to a folder on your own PC. It links to your phone the same way WhatsApp Web does, then quietly archives everything that arrives from that point on, and can import media already in your chat history." } },
         { "@type": "Question", "name": "Does WhatsBackUp cost anything?", "acceptedAnswer": { "@type": "Answer", "text": "No. WhatsBackUp is free and open source, with no account, no subscription and no upload limits. The only thing that can cost money is the optional AI sorting feature, which uses an AI provider of your choice with your own API key — typically about $1.50 to sort a library of a few hundred photos, or nothing at all if you run a model locally with Ollama or LM Studio." } },
@@ -117,11 +117,14 @@
     <div class="hero-grid">
       <div>
         <p class="label">Windows 10 &amp; 11 · Free &amp; open source</p>
-        <h1>Your WhatsApp photos are <span class="q">quietly</span> being deleted.</h1>
+        <h1>Everything went through WhatsApp. <span class="q">Nothing</span> came out of it.</h1>
         <p class="lede">
-          Not all at once. A few at a time — expired from WhatsApp's servers, skipped
-          by a phone restore, cleared by a "free up space" tap. WhatsBackUp keeps a
-          copy of every one, on your own disk, from the moment you link it.
+          The quote, the address, the photograph of the damage, the delivery note, the
+          yes — every one of them arrived in a chat and stayed there, scrolling a
+          little further out of reach each day. WhatsBackUp keeps all of it on your own
+          disk, then gathers the conversations into projects and the photographs into
+          albums, so picking a job back up means opening one project instead of
+          searching three chats and a phone.
         </p>
         <div class="actions">
           <a class="btn" href="download.html">
@@ -248,10 +251,10 @@
 <section class="tint" id="sorting">
   <div class="wrap">
     <div class="head">
-      <p class="marker">§ 03 <span>Optional</span></p>
+      <p class="marker">§ 03 <span>Making sense of it</span></p>
       <div>
-        <h2>Then it stops being a pile</h2>
-        <p>Any backup left alone is a list in date order. Switch on AI sorting and the archive reads itself: photographs fall into albums it names, conversations gather under the job they belong to.</p>
+        <h2>A record you can actually work from</h2>
+        <p>Any backup left alone is a list in date order, which is barely better than the phone it came from. Switch sorting on and the archive reads itself: conversations gather under the job they belong to, photographs fall into albums it names, and the whole thing becomes searchable by what is in it rather than what it was called.</p>
       </div>
     </div>
 
@@ -286,7 +289,39 @@
       </div>
     </div>
 
+    <div class="ba" style="margin-top:clamp(22px,3vw,34px)" role="img" aria-label="Before and after for conversations. Before: a flat list of chat names and bare phone numbers in date order. After: the same conversations gathered under the project each one belongs to — a refit, a van, suppliers.">
+      <div>
+        <h3>Before</h3>
+        <ul>
+          <li class="it">Site — Rue Haute</li>
+          <li class="it">+32 478 55 12 09</li>
+          <li class="it">Bram (plumber)</li>
+          <li class="it">Kitchen group</li>
+          <li class="it">+32 495 71 40 33</li>
+          <li class="it">Tiles — showroom</li>
+          <li class="it">… 203 more</li>
+        </ul>
+      </div>
+      <div>
+        <h3>After</h3>
+        <ul>
+          <li class="grp">Rue Haute refit · 5 conversations</li>
+          <li class="it">Site — Rue Haute</li>
+          <li class="it">Bram (plumber)</li>
+          <li class="it">Tiles — showroom</li>
+          <li class="grp">The van · 2 conversations</li>
+          <li class="it">+32 478 55 12 09</li>
+          <li class="grp">Suppliers · 11 conversations</li>
+          <li class="it">+32 495 71 40 33</li>
+        </ul>
+      </div>
+    </div>
+
     <dl class="defs" style="margin-top:clamp(30px,4vw,46px)">
+      <div>
+        <dt>One place per job</dt>
+        <dd>A project holds the conversations that belong to it, and the album beside it holds what was photographed — the damage, the meter reading, the signed note. What took three chats and a scroll takes one screen.</dd>
+      </div>
       <div>
         <dt>Search stops being about filenames</dt>
         <dd>Ask for <em>the invoice with 0871 on it</em> and it finds the photograph, because it read the number off the paper.</dd>
@@ -297,11 +332,11 @@
       </div>
       <div>
         <dt>Your key, your choice of provider</dt>
-        <dd>Anthropic, OpenAI, Gemini, OpenRouter, Groq — or Ollama and LM Studio on your own machine, which cost nothing and send nothing anywhere.</dd>
+        <dd>Anthropic, OpenAI, Gemini, NVIDIA, OpenRouter, Groq — or Ollama and LM Studio on your own machine, which cost nothing and send nothing anywhere.</dd>
       </div>
       <div>
         <dt>Priced before a penny is spent</dt>
-        <dd>Roughly $1.50 for a few hundred photographs, with a monthly limit you set. <a href="privacy.html">Exactly what it sends →</a></dd>
+        <dd>Around 50 cents to sort six hundred photographs and two hundred conversations on Gemini's cheapest model — and nothing at all on its free tier. The run is priced before it starts, against a monthly limit you set. <a href="privacy.html">Exactly what it sends →</a></dd>
       </div>
     </dl>
   </div>

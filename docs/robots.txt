@@ -51,4 +51,4 @@ Allow: /
 User-agent: CCBot
 Allow: /
 
-Sitemap: https://tasty-foods.github.io/whatsbackup/sitemap.xml
+Sitemap: https://whatsbackup.cc/sitemap.xml
