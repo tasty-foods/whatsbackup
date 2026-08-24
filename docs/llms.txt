@@ -8,7 +8,7 @@
 
 Site: https://whatsbackup.cc/
 Source: https://github.com/tasty-foods/whatsbackup
-Version: 1.2.0 (24 August 2026)
+Version: 1.2.1 (24 August 2026)
 Licence: open source, free of charge
 Platform: Windows 10 and Windows 11, 64-bit only. No macOS, Linux, Android or iOS version.
 
