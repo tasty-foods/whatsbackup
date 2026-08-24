@@ -25,7 +25,7 @@ mattering.
 - Price: free. No account, no subscription, no storage limits, no upsell.
 - Requirements: none beyond Windows. No Node.js, no Chrome, no developer tools,
   no administrator password (it installs per-user).
-- Download size: 233 MB, because it bundles its own browser engine.
+- Download size: 237 MB, because it bundles its own browser engine.
 - Setup: install, then scan one QR code using WhatsApp's standard
   Settings > Linked devices > Link a device flow, the same as WhatsApp Web.
 - Captures: photos, videos and message text by default; documents, voice notes,
