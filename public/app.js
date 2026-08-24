@@ -1194,3 +1194,214 @@ setInterval(loadState, 3000);
 setInterval(() => { if (currentView === 'media') loadItems(false); }, 4000);
 setInterval(() => Convo.pollActive(), 4000);
 setInterval(() => { if (currentView === 'convo') Convo.refreshChats(); }, 9000);
+
+/* ---------- Quick play ---------------------------------------------------
+   A vertical feed of the videos currently on screen. Scroll-snap does the
+   paging; only the visible slide and its neighbours ever hold a <video>,
+   because these files live on a cloud drive and mounting forty of them at
+   once would spin the disk for minutes and hold the memory for as long. */
+const Reels = (() => {
+  const root = document.getElementById('reels');
+  if (!root) return { open() {}, close() {}, isOpen: () => false };
+  const track = document.getElementById('reels-track');
+  const countEl = document.getElementById('reels-count');
+  const hintEl = document.getElementById('reels-hint');
+  const muteBtn = document.getElementById('reels-mute');
+
+  let items = [];
+  let current = -1;
+  let muted = true;          // browsers refuse an unmuted autoplay; the button opts back in
+
+  const slideAt = (i) => track.children[i];
+  const videoAt = (i) => { const s = slideAt(i); return s ? s.querySelector('video') : null; };
+
+  function mount(i) {
+    const slide = slideAt(i);
+    if (!slide || slide.dataset.mounted === '1') return;
+    slide.dataset.mounted = '1';
+    const r = items[i];
+    const v = document.createElement('video');
+    v.src = r.serve;
+    v.loop = true;
+    v.muted = muted;
+    v.playsInline = true;
+    v.preload = 'auto';
+    v.addEventListener('loadeddata', () => {
+      const h = slide.querySelector('.reel-holder');
+      if (h) h.remove();
+    });
+    v.addEventListener('error', () => {
+      const h = slide.querySelector('.reel-holder');
+      if (h) h.innerHTML = '<div class="reel-failed">This video cannot be played.<br>If it lives in your cloud folder, the drive may be offline.</div>';
+    });
+    slide.insertBefore(v, slide.firstChild);
+  }
+
+  function unmount(i) {
+    const slide = slideAt(i);
+    if (!slide || slide.dataset.mounted !== '1') return;
+    const v = slide.querySelector('video');
+    if (v) { v.pause(); v.removeAttribute('src'); v.load(); v.remove(); }
+    slide.dataset.mounted = '';
+    slide.classList.remove('is-paused');
+    if (!slide.querySelector('.reel-holder')) {
+      const h = document.createElement('div');
+      h.className = 'reel-holder';
+      h.innerHTML = '<div class="reel-spin"></div>';
+      slide.insertBefore(h, slide.firstChild);
+    }
+  }
+
+  function activate(i) {
+    if (i === current || i < 0 || i >= items.length) return;
+    current = i;
+    countEl.textContent = (i + 1) + ' / ' + items.length;
+    // Keep a one-slide window either side: the next video is already buffering
+    // by the time it is scrolled to, and everything else is released.
+    for (let k = 0; k < items.length; k++) {
+      if (Math.abs(k - i) <= 1) mount(k); else unmount(k);
+    }
+    for (let k = 0; k < items.length; k++) {
+      const v = videoAt(k);
+      if (!v) continue;
+      if (k === i) {
+        v.muted = muted;
+        try { v.currentTime = 0; } catch (_) {}
+        // An unmuted autoplay can still be refused; fall back rather than sit silent.
+        v.play().catch(() => { v.muted = true; muted = true; syncMute(); v.play().catch(() => {}); });
+      } else {
+        v.pause();
+      }
+    }
+    if (i > 0) hintEl.classList.add('gone');
+  }
+
+  function syncMute() {
+    muteBtn.textContent = muted ? '🔇' : '🔊';
+    muteBtn.title = muted ? 'Sound off — click for sound (M)' : 'Sound on (M)';
+  }
+
+  function toggleMute() {
+    muted = !muted;
+    syncMute();
+    const v = videoAt(current);
+    if (v) { v.muted = muted; if (!muted) v.play().catch(() => {}); }
+  }
+
+  function togglePlay() {
+    const slide = slideAt(current);
+    const v = slide ? slide.querySelector('video') : null;
+    if (!v) return;
+    if (v.paused) { v.play().catch(() => {}); slide.classList.remove('is-paused'); }
+    else { v.pause(); slide.classList.add('is-paused'); }
+  }
+
+  function go(delta) {
+    const next = current + delta;
+    if (next < 0 || next >= items.length) return;
+    track.scrollTop = next * track.clientHeight;
+    // Don't wait for the scroll event to report where we landed: scroll events
+    // are dispatched with the rendering steps, which a page that isn't drawing
+    // skips entirely. Moving deliberately, we already know the destination.
+    activate(next);
+  }
+
+  function open(list, startIndex) {
+    items = list || [];
+    if (!items.length) return;
+    track.innerHTML = '';
+    current = -1;
+    muted = true;
+    syncMute();
+    hintEl.classList.remove('gone');
+
+    for (const r of items) {
+      const slide = document.createElement('div');
+      slide.className = 'reel';
+      const when = new Date(r.ts).toLocaleString();
+      const cap = r.caption ? '<div class="reel-cap">' + escapeHtml(r.caption) + '</div>' : '';
+      slide.innerHTML = '<div class="reel-holder"><div class="reel-spin"></div></div>'
+        + '<div class="reel-paused">⏸</div>'
+        + '<div class="reel-meta">'
+        + '<div class="reel-chat">' + escapeHtml(r.chat || 'unknown') + '</div>'
+        + '<div class="reel-sub">' + (r.dir === 'out' ? 'Sent' : 'Received') + ' · ' + escapeHtml(when) + '</div>'
+        + cap
+        + '</div>';
+      slide.addEventListener('click', (e) => { if (!e.target.closest('.reels-bar')) togglePlay(); });
+      track.appendChild(slide);
+    }
+
+    root.classList.remove('hidden');
+
+    const start = Math.max(0, Math.min(startIndex || 0, items.length - 1));
+    track.scrollTop = start * track.clientHeight;
+    activate(start);
+  }
+
+  function close() {
+    for (let k = 0; k < items.length; k++) unmount(k);
+    root.classList.add('hidden');
+    track.innerHTML = '';
+    items = [];
+    current = -1;
+  }
+
+  // Whatever moved the scroll - wheel, touch, keyboard, snap settling - the
+  // slide on screen is scrollTop / height. Done synchronously and on purpose:
+  // requestAnimationFrame is suspended whenever the page isn't drawing (a
+  // background tab, a minimised window), and deferring to it there would leave
+  // the feed scrolled to a video that never starts. The work is a division and
+  // a comparison; activate() returns immediately unless the slide changed.
+  track.addEventListener('scroll', () => {
+    if (!items.length) return;
+    activate(Math.round(track.scrollTop / (track.clientHeight || 1)));
+  });
+
+  // One wheel gesture, one video. Left to CSS alone, a normal notch or two of
+  // wheel moves a few hundred pixels - less than half a slide - and mandatory
+  // snapping pulls it straight back to the video it started on, so the feed
+  // feels stuck. Taking the gesture ourselves is what makes it read like the
+  // apps this is modelled on. Touch is left alone: a swipe already carries
+  // enough momentum, and the native handling has the better feel.
+  let wheelLock = false;
+  track.addEventListener('wheel', (e) => {
+    if (!items.length) return;
+    e.preventDefault();
+    if (wheelLock || Math.abs(e.deltaY) < 4) return;
+    wheelLock = true;
+    go(e.deltaY > 0 ? 1 : -1);
+    setTimeout(() => { wheelLock = false; }, 420);   // ignore the tail of one flick
+  }, { passive: false });
+
+  document.getElementById('reels-close').addEventListener('click', close);
+  document.getElementById('reels-back').addEventListener('click', close);
+  muteBtn.addEventListener('click', toggleMute);
+
+  document.addEventListener('keydown', (e) => {
+    if (root.classList.contains('hidden')) return;
+    if (e.key === 'Escape') { close(); return; }
+    if (e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === 'j') { e.preventDefault(); go(1); }
+    if (e.key === 'ArrowUp' || e.key === 'PageUp' || e.key === 'k') { e.preventDefault(); go(-1); }
+    if (e.key === ' ') { e.preventDefault(); togglePlay(); }
+    if (e.key === 'm' || e.key === 'M') toggleMute();
+  });
+
+  return { open: open, close: close, isOpen: () => !root.classList.contains('hidden') };
+})();
+
+// Plays whatever the current filter is showing, so a search for one chat and
+// then Quick play walks that chat's videos and nothing else.
+function openQuickPlay(startId) {
+  const vids = filteredCache.filter((r) => r.kind === 'video');
+  if (!vids.length) {
+    alert('No videos to play here.\n\nPick the Videos tab, or clear the filter, and try again.');
+    return;
+  }
+  const at = startId ? vids.findIndex((r) => r.id === startId) : 0;
+  Reels.open(vids, at < 0 ? 0 : at);
+}
+
+(function bindQuickPlay() {
+  const b = document.getElementById('reels-open');
+  if (b) b.addEventListener('click', () => openQuickPlay(null));
+})();

@@ -141,7 +141,15 @@ function createApp() {
   app.get('/media/videos/:name', (req, res) => serveFrom([cfg.VIDEO_DIR, cfg.LOCAL_VIDEO_DIR])(req, res));
   app.get('/media/files/:name', (req, res) => serveFrom([cfg.FILES_DIR])(req, res));
 
-  app.use(express.static(cfg.PUBLIC_DIR));
+  // The dashboard's own files must never be served from a stale cache: after an
+  // update the browser could hold yesterday's app.js against today's index.html,
+  // which shows the new markup with none of the code behind it. They come off
+  // local disk, so revalidating every time costs nothing.
+  app.use(express.static(cfg.PUBLIC_DIR, {
+    etag: true,
+    maxAge: 0,
+    setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache'),
+  }));
 
   app.get('/api/state', (req, res) => res.json(getState()));
 

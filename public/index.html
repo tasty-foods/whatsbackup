@@ -30,6 +30,7 @@
         <button data-f="in">Received</button>
         <button data-f="out">Sent</button>
       </div>
+      <button id="reels-open" class="btn media-only" title="Play your videos one after another">▶ Quick play</button>
       <a id="zip" class="btn media-only" href="/api/zip" title="Videos stay in your video folder">⭳ Download all images</a>
       <button id="open-settings" class="btn icon" title="Settings">⚙︎</button>
     </div>
@@ -84,6 +85,20 @@
     <div class="lb-stage" id="lb-stage"></div>
     <button class="lb-nav lb-next" id="lb-next">›</button>
     <div class="lb-meta" id="lb-meta"></div>
+  </div>
+
+  <!-- ===== Quick play: one video at a time, swipe/scroll for the next ===== -->
+  <div id="reels" class="reels hidden">
+    <div class="reels-bar">
+      <button class="reels-btn" id="reels-back" title="Back to the gallery (Esc)">‹ Back</button>
+      <span class="reels-count" id="reels-count"></span>
+      <div class="reels-bar-right">
+        <button class="reels-btn" id="reels-mute" title="Sound (M)">🔇</button>
+        <button class="reels-btn" id="reels-close" title="Close (Esc)">✕</button>
+      </div>
+    </div>
+    <div class="reels-track" id="reels-track"></div>
+    <div class="reels-hint" id="reels-hint">Scroll or press ↓ for the next video · Space pauses</div>
   </div>
 
   <!-- ===== First run ===== -->
