@@ -41,6 +41,21 @@ const PRESETS = {
     vision: true,
     jsonSchema: true,
   },
+  nvidia: {
+    label: 'NVIDIA (build.nvidia.com)',
+    api: 'openai',
+    baseUrl: 'https://integrate.api.nvidia.com/v1',
+    keyRequired: true,
+    keyHint: 'Starts with nvapi- · build.nvidia.com',
+    // The catalogue is large and changes often, so the name is typed rather
+    // than picked from a list that would rot. This one is the text-only V4
+    // Flash: vision is a separate model, so photographs are skipped unless the
+    // model name is changed to a multimodal one — which the probe will detect.
+    models: ['deepseek-ai/deepseek-v4-flash-0731'],
+    defaultModel: 'deepseek-ai/deepseek-v4-flash-0731',
+    vision: false,
+    jsonSchema: true,
+  },
   openrouter: {
     label: 'OpenRouter',
     api: 'openai',
