@@ -21,6 +21,7 @@
 <meta name="twitter:image" content="https://whatsbackup.cc/assets/og.png">
 <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="assets/site.css">
+<script src="assets/analytics.js" defer></script>
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -140,6 +141,14 @@
         <li><strong>The WhatsApp link:</strong> ⚙︎ Settings → Connection → <em>Unlink</em>, then remove the device from your phone's Linked devices list.</li>
         <li><strong>Everything else:</strong> uninstall, then delete <code>%LOCALAPPDATA%\WhatsBackUp\</code> and your media folder. Nothing is left anywhere else, because there is nowhere else.</li>
       </ul>
+
+      <h3>This website</h3>
+      <p>Everything above is about the app. The site you are reading is static files with no server of its own, and it asks your browser for nothing from anywhere else — with two exceptions, both listed here.</p>
+      <ul>
+        <li><strong>The download button</strong> asks GitHub which release is newest, so it can point at the current installer. Skip it and the button still works; it just points at the releases page.</li>
+        <li><strong>Visit counting</strong>, if it is switched on, is Cloudflare Web Analytics: a page count and a referrer, no cookies, no fingerprint, nothing that identifies you, and nothing that follows you to another site. It exists so we know whether anyone is reading this, which is the whole of the ambition.</li>
+      </ul>
+      <p>There is no advertising, no tag manager, and no third party that gets to watch you here.</p>
 
       <h3>If this page ever changes</h3>
       <p>If the app ever starts sending something it does not send today, this page changes and so does the notice inside the app — before the feature ships, not after. The wording here is kept deliberately in step with the consent screen you actually see.</p>

@@ -5,8 +5,24 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const fs = require('fs');
 const path = require('path');
+
+// Run by hand with plain node, this script has no WB_HOME, so paths.js would
+// fall back to the project folder — a session that was never linked and an
+// index the installed app never reads. It would appear to work and fill a
+// folder nobody looks at. Point it at the installed home when there is one,
+// before config is loaded, and say out loud which it chose.
+if (!process.env.WB_HOME) {
+  const installed = path.join(process.env.LOCALAPPDATA || '', 'WhatsBackUp');
+  if (installed && fs.existsSync(path.join(installed, 'data', 'settings.json'))) {
+    process.env.WB_HOME = installed;
+  }
+}
+
 const cfg = require('./config');
 const store = require('./store');
+
+console.log('[backfill] Using ' + cfg.APP_HOME + (process.env.WB_HOME ? '' : '  (project folder — no installed copy found)'));
+console.log('[backfill] Set WB_HOME to override.');
 
 const PER_CHAT = parseInt(process.env.WA_BACKFILL_LIMIT || '80', 10);
 

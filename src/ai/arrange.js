@@ -215,6 +215,21 @@ async function assignOne(cfg, kind, entry) {
     user: `Existing groups:\n${list}\n\nThe new item:\n${factLine(1, entry).slice(3)}\n\nWhich group?`,
     schema: ASSIGN_SCHEMA, schemaName: 'assignment', maxTokens: 100,
   });
+  // Every other call in this module is wrapped by a run row that records what
+  // it cost. This one is reachable from outside and was not: whatever it spent
+  // was invisible to the monthly total and to the cap that is supposed to stop
+  // it. Its own row is small, and honest.
+  try {
+    const runId = ai.startRun('assign', cfg.model, cfg.provider);
+    ai.updateRun(runId, {
+      items: 1, ok: 1, failed: 0, skipped: 0,
+      tokens_in: (res.usage && res.usage.in) || 0,
+      tokens_out: (res.usage && res.usage.out) || 0,
+      cost_usd: res.cost || 0, cost_cap_usd: res.costCap || 0,
+      finished_at: Date.now(),
+    });
+  } catch (_) {}
+
   const id = res.json && res.json.group_id;
   const conf = (res.json && res.json.confidence) || 0;
   if (id && conf >= 0.6 && groups.some((g) => g.id === id)) {

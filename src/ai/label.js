@@ -3,6 +3,7 @@
 // Cached by content hash, so re-running the library costs nothing.
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const cfgApp = require('../config');
 const store = require('../store');
 const messages = require('../messages');
@@ -119,6 +120,34 @@ function census({ analyseImages = true, analyseChats = true } = {}) {
 // base64 "image" is a charged call that can only fail.
 const VISIBLE_KINDS = new Set(['image', 'sticker']);
 
+// What makes two images the same image. Size and type alone put two unrelated
+// photographs that happen to weigh the same into one bucket, and the loser is
+// dropped from the run as a "duplicate" — never labelled, never sorted, and
+// nothing says so. A forward from WhatsApp is byte-identical, so the head of
+// the file settles it: 16 KB is enough to separate any two real photographs
+// and far cheaper than hashing 78 MB. Computed once per record — files here
+// are written once and never edited — so repeated estimates cost nothing.
+const dupKeys = new Map();
+function dupKey(rec) {
+  const cached = dupKeys.get(rec.id);
+  if (cached) return cached;
+  let key = `${rec.size}:${rec.mimetype}`;
+  try {
+    const file = path.join(rec.kind === 'video' ? cfgApp.VIDEO_DIR : cfgApp.IMAGES_DIR, rec.filename);
+    const fd = fs.openSync(file, 'r');
+    try {
+      const head = Buffer.alloc(Math.min(16384, rec.size || 16384));
+      const read = fs.readSync(fd, head, 0, head.length, 0);
+      key += ':' + crypto.createHash('sha1').update(head.subarray(0, read)).digest('hex').slice(0, 16);
+    } finally { fs.closeSync(fd); }
+  } catch (_) {
+    // Unreadable right now — a cloud drive that has gone away. Fall back to the
+    // weaker key rather than calling every unreadable file distinct.
+  }
+  dupKeys.set(rec.id, key);
+  return key;
+}
+
 // A free local pass that keeps money from being spent on things that cannot
 // produce a useful group.
 function skipReason(rec, seen) {
@@ -127,7 +156,7 @@ function skipReason(rec, seen) {
   if ((rec.size || 0) > MAX_IMAGE_BYTES) return 'too large to send';
   if ((rec.size || 0) < MIN_USEFUL_BYTES) return 'thumbnail-sized';
   if (rec.kind === 'sticker') return 'sticker';
-  const key = `${rec.size}:${rec.mimetype}`;
+  const key = dupKey(rec);
   if (seen) {
     if (seen.has(key)) return 'duplicate of another image';
     seen.add(key);
