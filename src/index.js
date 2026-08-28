@@ -40,6 +40,25 @@ const server = app.listen(cfg.PORT, '127.0.0.1', () => {
   // New captures trickle through the labeller when the user asked for that.
   setInterval(() => { try { require('./ai').kick(); } catch (_) {} }, 60000);
 
+  // Run the history import on a schedule when one is set. Checked every ten
+  // minutes rather than timed exactly: the machine sleeps, and a missed hour
+  // should mean "run it now", not "wait for the next tick a day later".
+  setInterval(() => {
+    try {
+      const wa = require('./whatsapp');
+      const s = require('./settings').read();
+      const every = (s.autoImportHours || 0) * 3600000;
+      if (!every) return;
+      const st = wa.getState();
+      if (st.status !== 'ready' || st.backfill.running) return;
+      const last = s.lastImportAt || 0;
+      if (Date.now() - last < every) return;
+      console.log('[history] scheduled import (every ' + s.autoImportHours + 'h)');
+      Promise.resolve(wa.runBackfill(s.backfillLimit || 400))
+        .catch((e) => console.error('[history] scheduled import failed:', e.message));
+    } catch (_) {}
+  }, 600000);
+
   // Reflect cloud-drive drops/reappearance in the UI health status.
   setInterval(() => {
     if (cfg.recheckCloud && cfg.recheckCloud()) {

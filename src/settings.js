@@ -33,6 +33,8 @@ const DEFAULTS = {
   // History import
   backfillLimit: 400,
   downloadTimeoutSec: 90,
+  autoImportHours: 0,        // 0 = only when asked; otherwise run the import this often
+  lastImportAt: 0,           // when the last import finished, kept across restarts
 
   // Desktop behaviour
   startWithWindows: false,

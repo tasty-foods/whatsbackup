@@ -30,6 +30,7 @@
         <button data-f="in">Received</button>
         <button data-f="out">Sent</button>
       </div>
+      <button id="filters-open" class="btn media-only" title="Filter by type, date, album, project">⚙ Filters</button>
       <button id="reels-open" class="btn media-only" title="Play your videos one after another">▶ Quick play</button>
       <a id="zip" class="btn media-only" href="/api/zip" title="Videos stay in your video folder">⭳ Download all images</a>
       <button id="open-settings" class="btn icon" title="Settings">⚙︎</button>
@@ -46,6 +47,47 @@
   <!-- ===== Media view ===== -->
   <div id="view-media">
     <div id="albumbar" class="albumbar hidden"></div>
+    <div id="filterbar" class="filterbar hidden">
+      <div class="fb-row">
+        <label>Type
+          <select id="f-kind">
+            <option value="">Anything</option>
+            <option value="image">Photos</option>
+            <option value="video">Videos</option>
+            <option value="sticker">Stickers</option>
+            <option value="voice">Voice notes</option>
+            <option value="audio">Audio</option>
+            <option value="document">Documents</option>
+          </select>
+        </label>
+        <label>Direction
+          <select id="f-dir">
+            <option value="">Both ways</option>
+            <option value="in">Received</option>
+            <option value="out">Sent</option>
+          </select>
+        </label>
+        <label>Album
+          <select id="f-album"><option value="">Any album</option></select>
+        </label>
+        <label>Project
+          <select id="f-project"><option value="">Any project</option></select>
+        </label>
+        <label>From <input id="f-from" type="date"></label>
+        <label>To <input id="f-to" type="date"></label>
+        <label>Order
+          <select id="f-sort">
+            <option value="new">Newest first</option>
+            <option value="old">Oldest first</option>
+            <option value="big">Largest first</option>
+            <option value="small">Smallest first</option>
+            <option value="chat">By chat A–Z</option>
+          </select>
+        </label>
+        <button class="btn small ghost" id="f-reset">Clear</button>
+        <span class="fb-count muted small" id="f-count"></span>
+      </div>
+    </div>
     <section id="link" class="link hidden">
       <div class="link-card">
         <h2 id="link-title">Link your WhatsApp</h2>
@@ -313,9 +355,22 @@
               </label>
             </div>
             <div class="row">
+              <label class="lbl">Run it automatically
+                <select id="set-autoImportHours" class="num" style="width:auto">
+                  <option value="0">only when I ask</option>
+                  <option value="6">every 6 hours</option>
+                  <option value="12">every 12 hours</option>
+                  <option value="24">once a day</option>
+                  <option value="72">every 3 days</option>
+                  <option value="168">once a week</option>
+                </select>
+              </label>
+            </div>
+            <div class="row">
               <button id="btn-backfill" class="btn primary">⧉ Import history now</button>
               <span id="backfill-status" class="muted small"></span>
             </div>
+            <div class="row"><span class="muted small" id="last-sync-line">Last import: never</span></div>
             <div class="progress hidden" id="backfill-progress"><div class="bar" id="backfill-bar"></div></div>
             <p class="muted small">Older media often can't be downloaded any more — WhatsApp removes files from its servers after a while. Those are reported as skipped, not lost by this app.</p>
           </div>

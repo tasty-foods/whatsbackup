@@ -63,6 +63,7 @@ const SETTING_SPEC = {
   captureConversations: { type: 'bool' },
   excludedChats: { type: 'list' },
   backfillLimit: { type: 'int', min: 50, max: 5000 },
+  autoImportHours: { type: 'int', min: 0, max: 168 },
   downloadTimeoutSec: { type: 'int', min: 10, max: 600, restart: true },
   startWithWindows: { type: 'bool' },
   startMinimized: { type: 'bool' },
@@ -386,11 +387,18 @@ function createApp() {
     const kind = req.query.kind;
     const kinds = kind === 'chat' ? ['chat'] : ['image', 'video'];
     const groups = new Map(ai.store.listGroups(kind === 'chat' ? 'chat' : 'media').map((g) => [g.id, g]));
+    // Chat labels are keyed by chat id, but a media record only knows the chat's
+    // display name — so send the name too and the two can be matched up.
+    let names = null;
+    if (kind === 'chat') {
+      try { names = new Map(messages.listChats().map((c) => [c.chatId, c.chatName])); } catch (_) {}
+    }
     res.json(ai.store.labelsOfKinds(kinds).map((e) => {
       const m = ai.store.groupOf(e.kind, e.refId);
       const g = m && groups.get(m.group_id);
       return {
         kind: e.kind, refId: e.refId, label: e.label,
+        ...(names ? { chatName: names.get(e.refId) || null } : {}),
         groupId: g ? g.id : null, groupName: g ? g.name : null, groupEmoji: g ? g.emoji : null,
         placedBy: m ? m.source : null,
       };

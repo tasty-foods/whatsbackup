@@ -106,7 +106,7 @@ function getState() {
     cloudAvailable: cfg.CLOUD_AVAILABLE,
     cloudRoot: cfg.CLOUD_ROOT,
     qr: qrDataUrl,
-    backfill: { ...backfill },
+    backfill: { ...backfill, lastImportAt: settings.read().lastImportAt || backfill.finishedAt || 0 },
     health: { ...health, ok: !captureBroken() },
   };
 }
@@ -413,6 +413,9 @@ async function runBackfill(limitPerChat) {
   }
   backfill.running = false;
   backfill.finishedAt = Date.now();
+  // Kept in settings rather than memory: "last synced" is the first thing
+  // looked at after a restart, which is exactly when memory is empty.
+  try { settings.write({ lastImportAt: backfill.finishedAt }); } catch (_) {}
   return backfill;
 }
 

@@ -21,6 +21,14 @@ const els = {
 let filter = 'all';        // all | image | video | in | out
 let query = '';
 let allItems = [];         // full list, newest first
+// Filter state lives up here with the rest: render() runs during the first
+// load, long before the bottom of this file has executed, and a const declared
+// down there is still in its dead zone when the first render reaches it.
+const F = {
+  kind: '', dir: '', album: '', project: '', from: '', to: '', sort: 'new',
+};
+const fEl = (id) => document.getElementById(id);
+
 let filteredCache = [];    // allItems with the current filter applied
 let renderedCount = 0;     // how many of filteredCache are in the DOM
 let lastDayRendered = null;
@@ -53,6 +61,7 @@ function matchesFilter(r) {
   if (query && !((r.chat || '').toLowerCase().includes(query))
     && !(typeof AI !== 'undefined' && AI.matchesText(r, query))) return false;
   if (typeof AI !== 'undefined' && !AI.passes(r)) return false;
+  if (typeof matchesAdvanced === 'function' && !matchesAdvanced(r)) return false;
   if (filter === 'all') return true;
   if (filter === 'image') return r.kind === 'image' || r.kind === 'sticker';
   if (filter === 'video') return r.kind === 'video';
@@ -188,6 +197,8 @@ function fillViewport() {
 function render(all) {
   if (all !== undefined) allItems = all;
   filteredCache = allItems.filter(matchesFilter);
+  if (typeof sortRecords === 'function') sortRecords(filteredCache);
+  if (typeof updateFilterCount === 'function') updateFilterCount(filteredCache.length, allItems.length);
   els.gallery.innerHTML = '';
   renderedCount = 0; lastDayRendered = null; sentinel = null;
   els.empty.classList.toggle('hidden', filteredCache.length > 0);
@@ -303,7 +314,8 @@ async function loadState() {
     if (status === 'ready') {
       els.link.classList.add('hidden');
       const cloud = s.cloudAvailable ? 'videos → pCloud' : 'videos → local (cloud drive offline)';
-      els.sub.innerHTML = `<span class="dot ok"></span>Linked${s.me ? ' as ' + escapeHtml(s.me) : ''} · ${s.counts.images} images · ${s.counts.videos} videos · ${cloud}`;
+      const synced = typeof syncLine === 'function' ? syncLine(s) : '';
+      els.sub.innerHTML = `<span class="dot ok"></span>Linked${s.me ? ' as ' + escapeHtml(s.me) : ''} · ${s.counts.images} images · ${s.counts.videos} videos · ${cloud}${synced}`;
     } else if (status === 'qr') {
       els.link.classList.remove('hidden');
       els.linkTitle.textContent = 'Link your WhatsApp';
@@ -357,6 +369,7 @@ const FIELDS = {
   notifyOnProblem: 'bool', autoUpdate: 'bool',
   mediaRoot: 'text', cloudRoot: 'text', excludedChats: 'lines',
   retentionDays: 'int', port: 'int', downloadTimeoutSec: 'int', logMaxMB: 'int',
+  autoImportHours: 'int',
   aiEnabled: 'bool', aiConsent: 'bool', aiAnalyseImages: 'bool', aiAnalyseChats: 'bool',
   aiProvider: 'text', aiModel: 'text', aiBaseUrl: 'text', aiMode: 'text', aiMonthlyBudget: 'int',
 };
@@ -1017,6 +1030,27 @@ const AI = (function () {
   const labelFor = (id) => state.labels.get(id) || null;
   const chatLabelFor = (chatId) => state.chatGroups.get(chatId) || null;
 
+  // Media records carry the chat's display name, chat labels are keyed by chat
+  // id — so the project filter matches on the name the two have in common.
+  const chatGroupIdForName = (chatName) => {
+    if (!chatName) return null;
+    for (const row of state.chatGroups.values()) {
+      if (row && row.chatName === chatName) return row.groupId || null;
+    }
+    return null;
+  };
+
+  // The distinct projects, for the filter menu.
+  const chatGroups = () => {
+    const seen = new Map();
+    for (const row of state.chatGroups.values()) {
+      if (row && row.groupId && !seen.has(row.groupId)) {
+        seen.set(row.groupId, { id: row.groupId, name: row.groupName || 'Project', emoji: row.groupEmoji || '' });
+      }
+    }
+    return [...seen.values()];
+  };
+
   /* --- settings tab --- */
   async function loadSettingsTab() {
     const [st, pre] = await Promise.all([
@@ -1249,6 +1283,7 @@ const AI = (function () {
     loadLabels, loadChatGroups, loadSettingsTab, refreshEstimate, passes, matchesText,
     labelFor, chatLabelFor, renderAlbumBar, saveAiSettings, albumPicker, bindAlbumPicker,
     groups: () => state.groups,
+    chatGroups, chatGroupIdForName,
   };
 })();
 
@@ -1256,6 +1291,7 @@ const AI = (function () {
 maybeRunWizard();
 loadState();
 loadItems(true).then(() => { AI.loadLabels(); AI.loadChatGroups(); });
+if (typeof bindFilters === 'function') bindFilters();
 setInterval(loadState, 3000);
 setInterval(() => { if (currentView === 'media') loadItems(false); }, 4000);
 setInterval(() => Convo.pollActive(), 4000);
@@ -1471,3 +1507,126 @@ function openQuickPlay(startId) {
   const b = document.getElementById('reels-open');
   if (b) b.addEventListener('click', () => openQuickPlay(null));
 })();
+
+/* ---------- Filters --------------------------------------------------------
+   The tab strip answers "photos or videos"; this answers everything else the
+   records actually carry — kind, direction, album, project, a date range, and
+   what order to read them in. Kept in one object so matchesFilter has a single
+   place to look and the Clear button is one assignment. */
+
+function filtersActive() {
+  return !!(F.kind || F.dir || F.album || F.project || F.from || F.to) || F.sort !== 'new';
+}
+
+// Applied after the tab strip and the search box have had their say.
+function matchesAdvanced(r) {
+  if (F.kind && r.kind !== F.kind) return false;
+  if (F.dir && r.dir !== F.dir) return false;
+  if (F.from && r.ts < Date.parse(F.from + 'T00:00:00')) return false;
+  if (F.to && r.ts > Date.parse(F.to + 'T23:59:59')) return false;
+  if (F.album) {
+    const g = (typeof AI !== 'undefined' && AI.labelFor(r.id)) || null;
+    if (!g || g.groupId !== F.album) return false;
+  }
+  if (F.project) {
+    // A media item belongs to a project through the chat it arrived in.
+    const cg = typeof AI !== 'undefined' ? AI.chatGroupIdForName(r.chat) : null;
+    if (cg !== F.project) return false;
+  }
+  return true;
+}
+
+function sortRecords(list) {
+  const by = {
+    new: (a, b) => b.ts - a.ts,
+    old: (a, b) => a.ts - b.ts,
+    big: (a, b) => (b.size || 0) - (a.size || 0),
+    small: (a, b) => (a.size || 0) - (b.size || 0),
+    chat: (a, b) => String(a.chat || '').localeCompare(String(b.chat || '')) || b.ts - a.ts,
+  };
+  return list.sort(by[F.sort] || by.new);
+}
+
+// Album and project lists come from whatever the AI actually produced, so the
+// menus can't offer a grouping that doesn't exist.
+function refreshFilterOptions() {
+  if (typeof AI === 'undefined') return;
+  const albums = AI.groups() || [];
+  const projects = AI.chatGroups() || [];
+  const fill = (sel, items, anyLabel) => {
+    if (!sel) return;
+    const keep = sel.value;
+    sel.innerHTML = `<option value="">${anyLabel}</option>`
+      + items.map((g) => `<option value="${escapeHtml(g.id)}">${escapeHtml((g.emoji ? g.emoji + ' ' : '') + g.name)}</option>`).join('');
+    if ([...sel.options].some((o) => o.value === keep)) sel.value = keep;
+  };
+  fill(fEl('f-album'), albums, 'Any album');
+  fill(fEl('f-project'), projects, 'Any project');
+  const bar = fEl('filterbar');
+  // Nothing to filter by yet is worth saying, rather than two empty menus.
+  const none = !albums.length && !projects.length;
+  const al = fEl('f-album'), pr = fEl('f-project');
+  if (al) al.disabled = !albums.length;
+  if (pr) pr.disabled = !projects.length;
+  if (bar && none) bar.dataset.nogroups = '1'; else if (bar) delete bar.dataset.nogroups;
+}
+
+function bindFilters() {
+  const open = fEl('filters-open'), bar = fEl('filterbar');
+  if (!open || !bar) return;
+  open.addEventListener('click', () => {
+    bar.classList.toggle('hidden');
+    if (!bar.classList.contains('hidden')) refreshFilterOptions();
+  });
+  const wire = (id, key) => {
+    const el = fEl(id);
+    if (!el) return;
+    el.addEventListener('change', () => { F[key] = el.value; render(allItems); });
+  };
+  wire('f-kind', 'kind'); wire('f-dir', 'dir'); wire('f-album', 'album');
+  wire('f-project', 'project'); wire('f-from', 'from'); wire('f-to', 'to');
+  wire('f-sort', 'sort');
+  const reset = fEl('f-reset');
+  if (reset) reset.addEventListener('click', () => {
+    Object.assign(F, { kind: '', dir: '', album: '', project: '', from: '', to: '', sort: 'new' });
+    for (const id of ['f-kind', 'f-dir', 'f-album', 'f-project', 'f-from', 'f-to']) { const e = fEl(id); if (e) e.value = ''; }
+    const s = fEl('f-sort'); if (s) s.value = 'new';
+    render(allItems);
+  });
+}
+
+// "Showing 12 of 431" only when something is actually narrowing the view —
+// otherwise it is noise restating the count already in the header.
+function updateFilterCount(shown, total) {
+  const el = fEl('f-count');
+  if (!el) return;
+  el.textContent = filtersActive() && shown !== total ? `showing ${shown} of ${total}` : '';
+  const open = fEl('filters-open');
+  if (open) open.classList.toggle('on', filtersActive());
+}
+
+/* ---------- Last synced ---------- */
+function ago(ms) {
+  if (!ms) return null;
+  const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
+  if (s < 60) return 'just now';
+  const m = Math.round(s / 60);
+  if (m < 60) return m + (m === 1 ? ' minute ago' : ' minutes ago');
+  const h = Math.round(m / 60);
+  if (h < 24) return h + (h === 1 ? ' hour ago' : ' hours ago');
+  const d = Math.round(h / 24);
+  return d + (d === 1 ? ' day ago' : ' days ago');
+}
+
+function syncLine(s) {
+  const saved = s.health && s.health.lastCaptureAt ? ago(s.health.lastCaptureAt) : null;
+  const imported = s.backfill && s.backfill.lastImportAt ? ago(s.backfill.lastImportAt) : null;
+  const el = document.getElementById('last-sync-line');
+  if (el) {
+    el.textContent = 'Last import: ' + (imported
+      ? imported + ' (' + new Date(s.backfill.lastImportAt).toLocaleString() + ')'
+      : 'never');
+  }
+  // Live capture is the one people mean by "is it working right now".
+  return saved ? ' · saved ' + saved : '';
+}
