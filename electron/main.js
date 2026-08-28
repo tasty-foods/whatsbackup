@@ -306,6 +306,12 @@ function watchHealth() {
 }
 
 // ---------- updates ----------
+// What the updater is doing, in a shape the dashboard can render. Updating
+// silently is right; being unable to find out is not — "am I on the current
+// version" was previously answerable only by comparing two numbers by hand.
+let updateState = { status: 'idle', version: null, percent: 0, error: null, checkedAt: 0 };
+const setUpdateState = (patch) => { updateState = { ...updateState, ...patch }; };
+
 function checkForUpdates(interactive) {
   try {
     if (!updater) {
@@ -313,16 +319,25 @@ function checkForUpdates(interactive) {
       updater = autoUpdater;
       updater.autoDownload = true;
       updater.autoInstallOnAppQuit = true;
+      updater.on('checking-for-update', () => setUpdateState({ status: 'checking', error: null }));
+      updater.on('update-available', (info) => setUpdateState({ status: 'downloading', version: info && info.version, percent: 0 }));
+      updater.on('update-not-available', () => setUpdateState({ status: 'current', version: null, checkedAt: Date.now() }));
+      updater.on('download-progress', (p) => setUpdateState({ status: 'downloading', percent: Math.round(p.percent || 0) }));
       updater.on('update-downloaded', (info) => {
+        setUpdateState({ status: 'ready', version: info && info.version, percent: 100, checkedAt: Date.now() });
         notify(`${APP_NAME} ${info.version} is ready`, 'It will be installed when you quit the app.', true);
       });
-      updater.on('error', (e) => console.error('[update] ' + (e && e.message)));
+      updater.on('error', (e) => {
+        setUpdateState({ status: 'error', error: (e && e.message) || 'update check failed' });
+        console.error('[update] ' + (e && e.message));
+      });
     }
     if (!isPackaged) {
       if (interactive) dialog.showMessageBox({ message: 'Updates only apply to installed builds.', buttons: ['OK'] });
       return;
     }
     updater.checkForUpdates().then((r) => {
+      setUpdateState({ checkedAt: Date.now() });
       if (interactive) {
         const v = r && r.updateInfo && r.updateInfo.version;
         dialog.showMessageBox({
@@ -369,6 +384,15 @@ function registerIpc() {
 
   ipcMain.handle('wb:restart', () => { restartEngine(); return true; });
   ipcMain.handle('wb:checkUpdates', () => { checkForUpdates(true); return true; });
+  ipcMain.handle('wb:updateStatus', () => ({ ...updateState, current: app.getVersion(), packaged: isPackaged }));
+  // Waiting for the next quit is fine by default, but someone who has just been
+  // told an update is ready should be able to take it now.
+  ipcMain.handle('wb:installUpdate', () => {
+    if (!updater || updateState.status !== 'ready') return false;
+    quitting = true;
+    setImmediate(() => { try { updater.quitAndInstall(false, true); } catch (e) { console.error('[update] install failed:', e.message); } });
+    return true;
+  });
   ipcMain.handle('wb:quit', () => { quitting = true; app.quit(); return true; });
 
   // Chrome holds the session folder open, so the engine has to stand down

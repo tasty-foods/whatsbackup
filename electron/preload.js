@@ -11,6 +11,8 @@ contextBridge.exposeInMainWorld('desktop', {
   setStartup: (enabled) => ipcRenderer.invoke('wb:setStartup', !!enabled),
   restart: () => ipcRenderer.invoke('wb:restart'),
   checkUpdates: () => ipcRenderer.invoke('wb:checkUpdates'),
+  updateStatus: () => ipcRenderer.invoke('wb:updateStatus'),
+  installUpdate: () => ipcRenderer.invoke('wb:installUpdate'),
   quit: () => ipcRenderer.invoke('wb:quit'),
   migrate: (from) => ipcRenderer.invoke('wb:migrate', from),
   setAiKey: (key) => ipcRenderer.invoke('wb:setAiKey', key),

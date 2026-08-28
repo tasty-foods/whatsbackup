@@ -448,3 +448,16 @@ table.paths td.v { color: var(--text); font-family: ui-monospace, Consolas, mono
 .fb-count { margin-left: auto; align-self: center; }
 /* The button reports that something is filtered even with the bar closed. */
 #filters-open.on { border-color: var(--accent); color: var(--accent); }
+
+/* ── Version badge ────────────────────────────────────────────────────────
+   The version belongs where it can be read without going looking for it; it
+   turns green when an update is downloaded and waiting. */
+.verbadge {
+  font: inherit; font-size: 11px; font-weight: 700; letter-spacing: .02em;
+  background: var(--panel2); color: var(--muted); border: 1px solid var(--line);
+  border-radius: 999px; padding: 1px 8px; margin-left: 8px; cursor: pointer;
+  vertical-align: middle;
+}
+.verbadge:hover { border-color: var(--accent2); color: var(--text); }
+.verbadge.update { background: rgba(37,211,102,.14); border-color: var(--accent); color: var(--accent); }
+.verbadge:empty { display: none; }

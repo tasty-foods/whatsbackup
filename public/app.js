@@ -310,6 +310,8 @@ async function loadState() {
   try {
     const s = await (await fetch('/api/state')).json();
     if (typeof updateConn === 'function') updateConn(s);
+    // Which version this is doesn't depend on whether WhatsApp is linked.
+    if (typeof showVersion === 'function') showVersion(s.version);
     const status = s.status;
     if (status === 'ready') {
       els.link.classList.add('hidden');
@@ -1630,3 +1632,81 @@ function syncLine(s) {
   // Live capture is the one people mean by "is it working right now".
   return saved ? ' · saved ' + saved : '';
 }
+
+
+/* ---------- Version and updates -------------------------------------------
+   Updating quietly in the background is right; being unable to find out which
+   version you are on, or whether one is waiting, is not. The badge sits beside
+   the title and turns green when an update has downloaded. */
+let lastSeenVersion = null;
+
+function showVersion(v) {
+  const el = document.getElementById('ver-badge');
+  if (!el || !v) return;
+  lastSeenVersion = v;
+  if (!el.dataset.state) el.textContent = 'v' + v;
+}
+
+function describeUpdate(u) {
+  if (!u) return '';
+  if (!u.packaged) return 'Running from source — updates apply to installed copies.';
+  if (u.status === 'checking') return 'Checking for updates…';
+  if (u.status === 'downloading') return `Downloading ${u.version || 'an update'}… ${u.percent || 0}%`;
+  if (u.status === 'ready') return `Version ${u.version} is downloaded and installs when you quit.`;
+  if (u.status === 'error') return 'Could not check for updates: ' + (u.error || 'unknown');
+  if (u.status === 'current') return `You're on the latest version (${u.current}).`;
+  return `Version ${u.current}`;
+}
+
+async function refreshUpdateStatus() {
+  const line = document.getElementById('version-line');
+  const badge = document.getElementById('ver-badge');
+  const install = document.getElementById('btn-install-update');
+  if (!bridge || !bridge.updateStatus) {
+    if (line) line.textContent = lastSeenVersion
+      ? `Version ${lastSeenVersion} — open the desktop app for updates.` : '';
+    return;
+  }
+  let u = null;
+  try { u = await bridge.updateStatus(); } catch (e) { return; }
+  if (line) line.textContent = describeUpdate(u);
+  if (install) install.classList.toggle('hidden', u.status !== 'ready');
+  if (badge && u.current) {
+    // An update waiting is the one thing worth colouring; everything else is
+    // just a number people occasionally want to read.
+    if (u.status === 'ready') {
+      badge.textContent = 'v' + u.current + ' → ' + u.version;
+      badge.dataset.state = 'ready';
+      badge.classList.add('update');
+      badge.title = 'Version ' + u.version + ' is ready — click to install';
+    } else {
+      badge.textContent = 'v' + u.current;
+      delete badge.dataset.state;
+      badge.classList.remove('update');
+      badge.title = describeUpdate(u);
+    }
+  }
+}
+
+(function bindVersionUi() {
+  const badge = document.getElementById('ver-badge');
+  if (badge) badge.addEventListener('click', async () => {
+    // Ready to install: offer that. Otherwise show where the detail lives.
+    if (badge.dataset.state === 'ready' && bridge && bridge.installUpdate) {
+      const msg = 'Install the update now?' + String.fromCharCode(10,10) + 'The app closes and reopens. Capture resumes straight after.';
+      if (confirm(msg)) {
+        await bridge.installUpdate();
+      }
+      return;
+    }
+    openSettings();
+    const tab = [...document.querySelectorAll('#settabs button')].find((b) => b.dataset.t === 'app');
+    if (tab) tab.click();
+  });
+  const install = document.getElementById('btn-install-update');
+  if (install) install.addEventListener('click', async () => {
+    if (bridge && bridge.installUpdate) await bridge.installUpdate();
+  });
+  refreshUpdateStatus();
+  setInterval(refreshUpdateStatus, 15000);
+})();

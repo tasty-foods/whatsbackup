@@ -152,7 +152,9 @@ function createApp() {
     setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache'),
   }));
 
-  app.get('/api/state', (req, res) => res.json(getState()));
+  // So the dashboard can show which version it is, with or without the desktop
+  // bridge — the engine is told WB_VERSION when the shell starts it.
+  app.get('/api/state', (req, res) => res.json({ ...getState(), version: process.env.WB_VERSION || null }));
 
   app.get('/api/list', (req, res) => {
     const { kind, dir, chat } = req.query;
