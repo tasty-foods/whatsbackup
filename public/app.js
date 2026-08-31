@@ -951,18 +951,63 @@ const Convo = (function () {
     const q = searchEl.value.trim();
     if (q.length < 2) { searchMode = false; loadChats(); return; }
     searchMode = true;
-    try { renderSearch(await (await fetch('/api/search?q=' + encodeURIComponent(q))).json(), q); } catch (e) {}
+    const ql = q.toLowerCase();
+    // Two different questions, asked at once: which conversations are about
+    // this, and which messages say it. The first is the one the sorting was
+    // for, so it is answered first and separately.
+    let chats = [], msgs = [];
+    if (typeof AI !== 'undefined') { try { await AI.ensureChatGroups(); } catch (e) {} }
+    try { chats = await (await fetch('/api/chats')).json(); } catch (e) {}
+    try { msgs = await (await fetch('/api/search?q=' + encodeURIComponent(q))).json(); } catch (e) {}
+    const about = (typeof AI === 'undefined') ? []
+      : chats.filter((c) => AI.matchesChat(c.chatId, ql));
+    renderSearch(msgs, q, about);
   }
-  function renderSearch(res, q) {
-    if (!res.length) { chatsEl.innerHTML = `<div class="convo-empty" style="padding:24px">No messages match “${escapeHtml(q)}”.</div>`; return; }
+  // Two answers, kept apart on purpose. What a conversation is about comes
+  // from the sorting; what a message says comes from the words. Mixing them
+  // would bury the first under the second, and the first is the point.
+  function renderSearch(res, q, about) {
+    about = about || [];
+    if (!res.length && !about.length) {
+      chatsEl.innerHTML = '<div class="convo-empty" style="padding:24px">Nothing matches “' + escapeHtml(q) + '”.</div>';
+      return;
+    }
     chatsEl.innerHTML = '';
-    for (const m of res) {
-      const el = document.createElement('div');
-      el.className = 'chatitem';
-      el.innerHTML = `<div class="ci-top"><span class="ci-name">${escapeHtml(m.chatName || m.chatId)}</span><span class="ci-time">${shortDay(m.ts)}</span></div>
-        <div class="ci-last">${escapeHtml((m.body || '').slice(0, 100))}</div>`;
-      el.addEventListener('click', () => { searchEl.value = ''; searchMode = false; openChat({ chatId: m.chatId, chatName: m.chatName }); loadChats(); });
-      chatsEl.appendChild(el);
+
+    if (about.length) {
+      const head = document.createElement('div');
+      head.className = 'projecthead';
+      head.textContent = 'Conversations about this (' + about.length + ')';
+      chatsEl.appendChild(head);
+      for (const c of about) {
+        const row = (typeof AI !== 'undefined' && AI.chatLabelFor(c.chatId)) || null;
+        const l = (row && row.label) || {};
+        const topics = (l.topics || []).slice(0, 4).join(' · ');
+        const el = document.createElement('div');
+        el.className = 'chatitem';
+        el.innerHTML = '<div class="ci-top"><span class="ci-name">' + escapeHtml(c.chatName || c.chatId) + '</span>'
+          + (row && row.groupName ? '<span class="ci-time">' + escapeHtml(row.groupName) + '</span>' : '')
+          + '</div><div class="ci-last">' + escapeHtml(String(l.summary || '').slice(0, 130)) + '</div>'
+          + (topics ? '<div class="ci-last" style="opacity:.65">' + escapeHtml(topics) + '</div>' : '');
+        el.addEventListener('click', () => { searchEl.value = ''; searchMode = false; openChat({ chatId: c.chatId, chatName: c.chatName }); loadChats(); });
+        chatsEl.appendChild(el);
+      }
+    }
+
+    if (res.length) {
+      const head = document.createElement('div');
+      head.className = 'projecthead';
+      head.textContent = 'Messages that say it (' + res.length + ')';
+      chatsEl.appendChild(head);
+      for (const m of res) {
+        const el = document.createElement('div');
+        el.className = 'chatitem';
+        el.innerHTML = '<div class="ci-top"><span class="ci-name">' + escapeHtml(m.chatName || m.chatId) + '</span>'
+          + '<span class="ci-time">' + shortDay(m.ts) + '</span></div>'
+          + '<div class="ci-last">' + escapeHtml((m.body || '').slice(0, 100)) + '</div>';
+        el.addEventListener('click', () => { searchEl.value = ''; searchMode = false; openChat({ chatId: m.chatId, chatName: m.chatName }); loadChats(); });
+        chatsEl.appendChild(el);
+      }
     }
   }
 
@@ -1038,6 +1083,26 @@ const AI = (function () {
     if (!l) return false;
     return [l.caption, l.scene, l.text_in_image, (l.tags || []).join(' '), (l.subjects || []).join(' ')]
       .filter(Boolean).join(' ').toLowerCase().includes(q);
+  }
+
+  // The same idea for a conversation: search what the AI understood it to be
+  // about, not the words that happen to appear in it. A chat about a late
+  // delivery is findable by "delivery" even when nobody typed the word.
+  function matchesChat(chatId, q) {
+    const row = state.chatGroups.get(chatId);
+    if (!row) return false;
+    const l = row.label || {};
+    return [l.summary, l.category, (l.topics || []).join(' '), row.groupName]
+      .filter(Boolean).join(' ').toLowerCase().includes(q);
+  }
+
+  // A search typed before the chat labels have arrived would quietly match
+  // nothing and look like the sorting had not worked. Wait for them once.
+  let chatGroupsOnce = null;
+  function ensureChatGroups() {
+    if (state.chatGroups.size) return Promise.resolve();
+    if (!chatGroupsOnce) chatGroupsOnce = loadChatGroups();
+    return chatGroupsOnce;
   }
 
   const labelFor = (id) => state.labels.get(id) || null;
@@ -1296,7 +1361,7 @@ const AI = (function () {
   }
 
   return {
-    loadLabels, loadChatGroups, loadSettingsTab, refreshEstimate, passes, matchesText,
+    loadLabels, loadChatGroups, ensureChatGroups, loadSettingsTab, refreshEstimate, passes, matchesText, matchesChat,
     labelFor, chatLabelFor, renderAlbumBar, saveAiSettings, albumPicker, bindAlbumPicker,
     groups: () => state.groups,
     chatGroups, chatGroupIdForName,
