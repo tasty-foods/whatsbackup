@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Download WhatsBackUp — free WhatsApp backup for Windows</title>
-<meta name="description" content="Download WhatsBackUp 1.3.1 free for Windows 10 and 11. No admin password, no prerequisites — install it, scan one QR code, and your photos are saved.">
+<meta name="description" content="Download WhatsBackUp 1.3.2 free for Windows 10 and 11. No admin password, no prerequisites — install it, scan one QR code, and your photos are saved.">
 <link rel="canonical" href="https://whatsbackup.cc/download.html">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="theme-color" content="#f4f1e8" media="(prefers-color-scheme: light)">
@@ -12,7 +12,7 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="WhatsBackUp">
 <meta property="og:title" content="Download WhatsBackUp for Windows — free">
-<meta property="og:description" content="WhatsBackUp 1.3.1 for Windows 10 and 11. Free, open source, no account. Install it, scan a QR code, and every WhatsApp photo is saved.">
+<meta property="og:description" content="WhatsBackUp 1.3.2 for Windows 10 and 11. Free, open source, no account. Install it, scan a QR code, and every WhatsApp photo is saved.">
 <meta property="og:url" content="https://whatsbackup.cc/download.html">
 <meta property="og:image" content="https://whatsbackup.cc/assets/og.png">
 <meta property="og:image:width" content="1200">
@@ -38,7 +38,7 @@
         { "@type": "HowToTool", "name": "The phone your WhatsApp account runs on" }
       ],
       "step": [
-        { "@type": "HowToStep", "name": "Download the installer", "text": "Download WhatsBackUp-Setup-1.3.1.exe from the GitHub releases page.", "url": "https://whatsbackup.cc/download.html#step-1" },
+        { "@type": "HowToStep", "name": "Download the installer", "text": "Download WhatsBackUp-Setup-1.3.2.exe from the GitHub releases page.", "url": "https://whatsbackup.cc/download.html#step-1" },
         { "@type": "HowToStep", "name": "Get past the SmartScreen warning", "text": "Windows shows 'Windows protected your PC' because the installer is not signed with a paid certificate. Click More info, then Run anyway.", "url": "https://whatsbackup.cc/download.html#step-2" },
         { "@type": "HowToStep", "name": "Answer four setup questions", "text": "Accept the notice, choose where to keep your media, optionally point it at a cloud folder, and decide whether it starts with Windows.", "url": "https://whatsbackup.cc/download.html#step-3" },
         { "@type": "HowToStep", "name": "Scan the QR code", "text": "On your phone open WhatsApp, go to Settings, then Linked devices, then Link a device, and scan the code shown by WhatsBackUp.", "url": "https://whatsbackup.cc/download.html#step-4" },
@@ -61,7 +61,7 @@
 
 <header class="site-head">
   <div class="wrap">
-    <a class="brand" href="./"><span class="mark">Whats<i>BackUp</i></span><span class="ref">v1.3.1</span></a>
+    <a class="brand" href="./"><span class="mark">Whats<i>BackUp</i></span><span class="ref">v1.3.2</span></a>
     <nav class="nav" aria-label="Main">
       <a href="index.html#problem" class="hide-sm">Why</a>
       <a href="index.html#how" class="hide-sm">How</a>
@@ -77,7 +77,7 @@
 
 <section class="hero">
   <div class="wrap">
-    <p class="label">Release 1.3.1 <span class="no">·</span> 31 August 2026</p>
+    <p class="label">Release 1.3.2 <span class="no">·</span> 31 August 2026</p>
     <h1 style="max-width:16ch">Take a copy.</h1>
     <p class="lede" style="margin-top:.7em">Free and open source. About five minutes from here to <em>every photograph I am sent is now kept</em>.</p>
 
@@ -87,7 +87,7 @@
         Download for Windows
       </a>
       <p class="manifest">
-        <span>File</span><b>WhatsBackUp-Setup-1.3.1.exe</b><br>
+        <span>File</span><b>WhatsBackUp-Setup-1.3.2.exe</b><br>
         <span>Size</span><b>237 MB</b><br>
         <span>Requires</span><b>Windows 10 / 11, 64-bit</b><br>
         <span>Installs</span><b>per user — no admin password</b><br>
@@ -102,7 +102,7 @@
     <div class="head">
       <p class="marker">§ 00 <span>This release</span></p>
       <div>
-        <h2>New in 1.3.1 &#8212; it sorts on your own PC, and says what it found</h2>
+        <h2>New in 1.3.2 &#8212; it sorts on your own PC, and says what it found</h2>
         <p>Existing installations update themselves on the next restart.</p>
       </div>
     </div>
@@ -130,7 +130,7 @@
       </div>
       <div>
         <dt>Fixes</dt>
-        <dd>A model without schema support was handed the JSON schema itself and told to match it, and copied it back instead of filling it in &#8212; every label came out empty. The connection test called a model blind when it answered <em>#ff0000</em> to a red square, and a blind provider has every photograph skipped in silence. A local model that was not running failed each item three times instead of being stepped past. A photographed page was transcribed until the reply was cut off mid-word, which is not valid JSON, so the item failed for being too informative. And grouping is no longer attempted when the library cannot fit the model&#8217;s context: what does not fit is dropped silently, and albums built from the last tenth of an archive are worse than none.</dd>
+        <dd>Grouping a whole library asked for more room than it was given: four hundred photographs were allowed 3,618 tokens, the answer stopped part-way through a list, and a document that ends mid-array does not parse &#8212; so the pass failed and blamed the model&#8217;s formatting. It has the room now, and a reply that runs out says so instead. The overview scrolls with the page rather than under its own header. A model without schema support was handed the JSON schema itself and told to match it, and copied it back instead of filling it in &#8212; every label came out empty. The connection test called a model blind when it answered <em>#ff0000</em> to a red square, and a blind provider has every photograph skipped in silence. A local model that was not running failed each item three times instead of being stepped past. A photographed page was transcribed until the reply was cut off mid-word, which is not valid JSON, so the item failed for being too informative. And grouping is no longer attempted when the library cannot fit the model&#8217;s context: what does not fit is dropped silently, and albums built from the last tenth of an archive are worse than none.</dd>
       </div>
     </dl>
   </div>
@@ -148,7 +148,7 @@
         <span class="n">01</span>
         <div>
           <h3>Run the installer</h3>
-          <p>Double-click <code>WhatsBackUp-Setup-1.3.1.exe</code>. There is nothing to install beforehand — no Node.js, no Chrome, no developer tools. The app carries everything it needs.</p>
+          <p>Double-click <code>WhatsBackUp-Setup-1.3.2.exe</code>. There is nothing to install beforehand — no Node.js, no Chrome, no developer tools. The app carries everything it needs.</p>
         </div>
       </li>
       <li id="step-2">
