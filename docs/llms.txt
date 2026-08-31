@@ -8,7 +8,15 @@
 
 Site: https://whatsbackup.cc/
 Source: https://github.com/tasty-foods/whatsbackup
-Version: 1.2.2 (24 August 2026)
+Version: 1.3.0 (31 August 2026)
+
+New in 1.3.0: Status Studio — automated WhatsApp status posting. Schedules
+(daily/weekly/every N hours) draw from a manual queue, a watched drop folder,
+an AI-sorted album, or an AI writer using the user's own provider key. Text
+statuses are rendered locally as 1080x1920 cards. Ships off, behind its own
+consent; dry-run by default; daily cap, minimum gap, quiet hours; every post
+(or dry-run) logged with the exact card. Automated posting somewhat raises the
+(already disclosed) unofficial-client ban risk; the FAQ says so plainly.
 Licence: open source, free of charge
 Platform: Windows 10 and Windows 11, 64-bit only. No macOS, Linux, Android or iOS version.
 
