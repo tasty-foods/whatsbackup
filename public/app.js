@@ -786,15 +786,19 @@ V.toggle.addEventListener('click', (e) => { const b = e.target.closest('button')
 function setView(v) {
   currentView = v;
   [...V.toggle.children].forEach((c) => c.classList.toggle('active', c.dataset.v === v));
+  const ovEl = document.getElementById('view-overview');
+  if (ovEl) ovEl.classList.toggle('hidden', v !== 'overview');
   V.media.classList.toggle('hidden', v !== 'media');
   V.convo.classList.toggle('hidden', v !== 'convo');
   const statusEl = document.getElementById('view-status');
   if (statusEl) statusEl.classList.toggle('hidden', v !== 'status');
   document.body.classList.toggle('convo-active', v === 'convo');
   document.body.classList.toggle('status-active', v === 'status');
+  document.body.classList.toggle('overview-active', v === 'overview');
   els.search.classList.toggle('hidden', v !== 'media');
   if (v === 'convo') Convo.enter();
   if (v === 'status' && typeof StatusView !== 'undefined') StatusView.enter();
+  if (v === 'overview' && typeof Overview !== 'undefined') Overview.enter();
 }
 
 /* ---------- Conversations ---------- */
@@ -1039,6 +1043,7 @@ const AI = (function () {
     // change — a run that invents a new album or a new tag offers it straight
     // away, without waiting for the panel to be opened again.
     if (typeof refreshFilterOptions === 'function') refreshFilterOptions();
+    renderTagBar();
     // Tiles are built before labels arrive on first load, so redraw once the
     // album each photo belongs to is actually known.
     if (state.labels.size) render(allItems);
@@ -1062,6 +1067,35 @@ const AI = (function () {
       + (unsorted ? chip('unsorted', '', 'Not sorted', unsorted) : '');
     bar.classList.remove('hidden');
   }
+
+  // The tags the model reached for most, as one click each. The dropdown in
+  // Filters holds all sixty; this is the handful worth seeing without opening
+  // anything, and it is the same F.tag underneath, so the two stay in step.
+  const tagBar = $$("tagbar");
+  function renderTagBar() {
+    if (!tagBar) return;
+    const tags = tagCounts(2).slice(0, 14);
+    if (!tags.length) { tagBar.classList.add("hidden"); return; }
+    const cur = (typeof F !== "undefined" && F.tag) || "";
+    tagBar.innerHTML = tags.map((x) =>
+      '<button class="chip tag' + (cur === x.tag ? ' active' : '') + '" data-tag="' + escapeHtml(x.tag) + '">'
+      + escapeHtml(x.tag) + '<span class="n">' + x.count + '</span></button>').join('')
+      + (cur ? '<button class="chip clear" data-tag="">clear</button>' : '');
+    tagBar.classList.remove("hidden");
+  }
+
+  if (tagBar) tagBar.addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-tag]");
+    if (!b) return;
+    const picked = b.dataset.tag;
+    // Clicking the chip that is already on takes it off, which is what a
+    // toggle looks like to anyone who did not read a manual.
+    F.tag = (F.tag === picked) ? "" : picked;
+    const sel = document.getElementById("f-tag");
+    if (sel) sel.value = F.tag;
+    renderTagBar();
+    render(allItems);
+  });
 
   bar.addEventListener('click', (e) => {
     const b = e.target.closest('button[data-album]');
@@ -1135,6 +1169,16 @@ const AI = (function () {
     if (!row || !row.label) return false;
     return (row.label.tags || []).some((x) => String(x || '').toLowerCase().trim() === tag);
   };
+
+  const labelCount = () => state.labels.size;
+
+  // Opening an album from somewhere else has to go through the same state the
+  // album bar uses, or the bar and the gallery disagree about what is showing.
+  function selectAlbum(id) {
+    album = id || 'all';
+    renderAlbumBar();
+    render(allItems);
+  }
 
   const labelFor = (id) => state.labels.get(id) || null;
   const chatLabelFor = (chatId) => state.chatGroups.get(chatId) || null;
@@ -1393,7 +1437,7 @@ const AI = (function () {
 
   return {
     loadLabels, loadChatGroups, ensureChatGroups, loadSettingsTab, refreshEstimate, passes, matchesText, matchesChat,
-    labelFor, chatLabelFor, renderAlbumBar, saveAiSettings, albumPicker, bindAlbumPicker, tagCounts, hasTag,
+    labelFor, chatLabelFor, renderAlbumBar, renderTagBar, saveAiSettings, albumPicker, bindAlbumPicker, tagCounts, hasTag, labelCount, selectAlbum,
     groups: () => state.groups,
     chatGroups, chatGroupIdForName,
   };
@@ -1402,7 +1446,6 @@ const AI = (function () {
 /* ---------- Boot + polling ---------- */
 maybeRunWizard();
 loadState();
-loadItems(true).then(() => { AI.loadLabels(); AI.loadChatGroups(); });
 if (typeof bindFilters === 'function') bindFilters();
 setInterval(loadState, 3000);
 setInterval(() => { if (currentView === 'media') loadItems(false); }, 4000);
@@ -1712,13 +1755,20 @@ function bindFilters() {
     el.addEventListener('change', () => { F[key] = el.value; render(allItems); });
   };
   wire('f-kind', 'kind'); wire('f-dir', 'dir'); wire('f-album', 'album');
-  wire('f-project', 'project'); wire('f-tag', 'tag'); wire('f-from', 'from'); wire('f-to', 'to');
+  wire('f-project', 'project'); wire('f-from', 'from'); wire('f-to', 'to');
+  const tagSel = fEl('f-tag');
+  if (tagSel) tagSel.addEventListener('change', () => {
+    F.tag = tagSel.value;
+    if (typeof AI !== 'undefined' && AI.renderTagBar) AI.renderTagBar();
+    render(allItems);
+  });
   wire('f-sort', 'sort');
   const reset = fEl('f-reset');
   if (reset) reset.addEventListener('click', () => {
     Object.assign(F, { kind: '', dir: '', album: '', project: '', tag: '', from: '', to: '', sort: 'new' });
     for (const id of ['f-kind', 'f-dir', 'f-album', 'f-project', 'f-tag', 'f-from', 'f-to']) { const e = fEl(id); if (e) e.value = ''; }
     const s = fEl('f-sort'); if (s) s.value = 'new';
+    if (typeof AI !== 'undefined' && AI.renderTagBar) AI.renderTagBar();
     render(allItems);
   });
 }
@@ -1876,6 +1926,43 @@ const StatusView = (function () {
     els2.dryrun.checked = !!sum.dryRun;
     els2.paused.checked = !!sum.paused;
     els2.folderLine.textContent = 'Drop folder: ' + sum.folder + ' — anything saved there becomes the next folder-post.';
+    loadLimits();
+  }
+
+  /* ---- the limits ----
+     The scheduler has always enforced these; they were only unreachable. A
+     feature that posts publicly on the user's behalf should show its own
+     brakes, so they are read straight from settings and written back on
+     change rather than hidden behind the Settings modal. */
+  const LIMITS = ["statusMaxPerDay", "statusMinGapMin", "statusCatchupMin",
+    "statusQuietFrom", "statusQuietTo", "statusFolder", "statusFooter"];
+
+  async function loadLimits() {
+    let s = null;
+    try { s = (await (await fetch("/api/settings")).json()).settings; } catch (e) { return; }
+    for (const k of LIMITS) {
+      const el = document.getElementById("set-" + k);
+      if (el && s[k] !== undefined && s[k] !== null) el.value = s[k];
+    }
+  }
+
+  for (const k of LIMITS) {
+    const el = document.getElementById("set-" + k);
+    if (!el) continue;
+    el.addEventListener("change", async () => {
+      const raw = el.value.trim();
+      // A number field left empty would clear a limit rather than keep it, and
+      // "no cap" is not a thing the scheduler offers. Put the old value back.
+      if (el.type === "number" && raw === "") { loadLimits(); return; }
+      const val = el.type === "number" ? parseInt(raw, 10) : raw;
+      if (el.type === "number" && !Number.isFinite(val)) { loadLimits(); return; }
+      const patch = {}; patch[k] = val;
+      await saveSetting(patch);
+      // Read back what was stored: the server clamps to its own range, and a
+      // value silently corrected is worth seeing.
+      loadLimits();
+      refresh();
+    });
   }
 
   /* ---- template swatches ---- */
@@ -2156,3 +2243,136 @@ const Chain = (function () {
 
   return { refresh };
 })();
+
+
+/* ---------- Overview -------------------------------------------------------
+   The archive has been read and grouped; this is the one screen that says so.
+   Everything here is what the model actually produced — no counts are made up
+   and nothing is shown that has not been sorted yet. */
+const Overview = (function () {
+  const statsEl = $('ov-stats');
+  const projEl = $('ov-projects');
+  const albEl = $('ov-albums');
+  const projCount = $('ov-proj-count');
+  const albCount = $('ov-alb-count');
+  if (!statsEl) return { enter() {} };
+
+  let chats = [];
+  let projects = [];
+  let albums = [];
+  let entered = false;
+
+  const card = (bits) =>
+    '<button class="ov-card" data-kind="' + bits.kind + '" data-id="' + escapeHtml(bits.id) + '">'
+    + '<div class="ov-emoji">' + (bits.emoji ? escapeHtml(bits.emoji) : '•') + '</div>'
+    + '<div class="ov-body">'
+    + '<div class="ov-name">' + escapeHtml(bits.name) + '</div>'
+    + (bits.desc ? '<div class="ov-desc">' + escapeHtml(bits.desc) + '</div>' : '')
+    + (bits.foot ? '<div class="ov-foot">' + bits.foot + '</div>' : '')
+    + '</div>'
+    + '<div class="ov-count">' + bits.count + '</div>'
+    + '</button>';
+
+  function stat(n, label) {
+    return '<div class="ov-stat"><div class="ov-n">' + n + '</div><div class="ov-l">' + escapeHtml(label) + '</div></div>';
+  }
+
+  async function render() {
+    const labelled = (typeof AI !== 'undefined' && AI.labelCount) ? AI.labelCount() : 0;
+
+    const photos = allItems.filter((r) => r.kind === 'image' || r.kind === 'sticker').length;
+    const videos = allItems.filter((r) => r.kind === 'video').length;
+
+    statsEl.innerHTML = stat(photos, photos === 1 ? 'photo' : 'photos')
+      + stat(videos, videos === 1 ? 'video' : 'videos')
+      + stat(chats.length, 'conversations')
+      + stat(projects.length, 'projects')
+      + stat(albums.length, 'albums')
+      + stat(labelled, 'read by the AI');
+
+    // Projects, busiest first — a project with two chats in it is less of a
+    // thing than one with thirty, and the eye should land on the thirty.
+    const byName = new Map(chats.map((c) => [c.chatId, c]));
+    const withCounts = projects.map((g) => {
+      const ids = (g.items || []).filter((id) => byName.has(id));
+      const names = ids
+        .map((id) => byName.get(id))
+        .sort((a, b) => (b.lastTs || 0) - (a.lastTs || 0))
+        .slice(0, 3)
+        .map((c) => c.chatName || c.chatId);
+      return { g, n: (g.items || []).length, names };
+    }).sort((a, b) => b.n - a.n);
+
+    projCount.textContent = projects.length ? projects.length + ' found' : '';
+    projEl.innerHTML = withCounts.length
+      ? withCounts.map((x) => card({
+          kind: 'project', id: x.g.id, emoji: x.g.emoji, name: x.g.name,
+          desc: x.g.description, count: x.n,
+          foot: x.names.length ? escapeHtml(x.names.join(' · ')) : '',
+        })).join('')
+      : '<p class="muted small">No projects yet — run the sorting and they appear here.</p>';
+
+    albCount.textContent = albums.length ? albums.length + ' found' : '';
+    albEl.innerHTML = albums.length
+      ? albums.slice().sort((a, b) => (b.items || []).length - (a.items || []).length).map((g) => card({
+          kind: 'album', id: g.id, emoji: g.emoji, name: g.name,
+          desc: g.description, count: (g.items || []).length, foot: '',
+        })).join('')
+      : '<p class="muted small">No albums yet — the pictures are still being read.</p>';
+  }
+
+  const fetchGroups = async (kind) => {
+    try { return (await (await fetch('/api/ai/groups?kind=' + kind)).json()).groups || []; }
+    catch (e) { return []; }
+  };
+
+  async function enter() {
+    if (!entered) { entered = true; }
+    const [c, p, a] = await Promise.all([
+      fetch('/api/chats').then((r) => r.json()).catch(() => []),
+      fetchGroups('chat'),
+      fetchGroups('media'),
+    ]);
+    chats = c; projects = p; albums = a;
+    if (typeof AI !== 'undefined') {
+      try { await AI.ensureChatGroups(); } catch (e) {}
+      try { await AI.loadLabels(); } catch (e) {}
+    }
+    render();
+  }
+
+  // A card is a way in, not an ornament: a project opens the conversations it
+  // is made of, an album opens the pictures in it.
+  const go = (e) => {
+    const b = e.target.closest('.ov-card');
+    if (!b) return;
+    if (b.dataset.kind === 'album') {
+      setView('media');
+      if (typeof AI !== 'undefined' && AI.selectAlbum) AI.selectAlbum(b.dataset.id);
+      return;
+    }
+    const g = projects.find((x) => x.id === b.dataset.id);
+    setView('convo');
+    const box = document.getElementById('convo-search');
+    if (box && g) { box.value = g.name; box.dispatchEvent(new Event('input', { bubbles: true })); }
+  };
+  projEl.addEventListener('click', go);
+  albEl.addEventListener('click', go);
+
+  return { enter, render };
+})();
+
+
+/* Start-up, last: every module above is defined by this point, and a const
+   that has not been reached yet cannot be tested for with typeof. */
+loadItems(true).then(async () => {
+  await AI.loadLabels();
+  await AI.loadChatGroups();
+  // The overview counts photos and videos out of the loaded library, so it is
+  // drawn once that exists rather than showing zeroes for a moment.
+  if (typeof Overview !== 'undefined') Overview.enter();
+});
+// Start on the overview: the tab marked active in the markup and the view
+// actually shown have to be the same one, and this is also the first moment
+// every module above exists to be called.
+setView('overview');

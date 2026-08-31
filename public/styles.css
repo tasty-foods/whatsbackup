@@ -537,3 +537,47 @@ body.status-active .media-only { display: none !important; }
 .chain-row input.chain-model { background: var(--bg); border: 1px solid var(--line); color: var(--text);
   border-radius: 8px; padding: 5px 9px; font: inherit; font-size: 12.5px; min-width: 0; }
 .chain-row input.chain-model:focus { outline: 0; border-color: var(--accent2); }
+
+/* Status limits ---------------------------------------------------------- */
+.st-limits { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px 14px; margin-top: 10px; }
+.st-limits label, .st-wide { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--muted); }
+.st-wide { margin-top: 12px; }
+.st-limits input, .st-wide input { background: var(--bg); border: 1px solid var(--line); color: var(--text);
+  border-radius: 8px; padding: 7px 9px; font: inherit; font-size: 13px; min-width: 0; }
+.st-limits input:focus, .st-wide input:focus { outline: 0; border-color: var(--accent2); }
+
+/* Tag chips -------------------------------------------------------------- */
+.tagbar { display: flex; gap: 7px; flex-wrap: wrap; padding: 10px 18px 0; }
+.tagbar.hidden { display: none; }
+.tagbar .chip.tag { font-size: 12px; padding: 4px 10px; opacity: .88; }
+.tagbar .chip.tag:hover { opacity: 1; }
+.tagbar .chip.clear { font-size: 12px; padding: 4px 10px; background: none; border-style: dashed; opacity: .7; }
+
+/* Overview ---------------------------------------------------------------- */
+.overview { padding: 18px 18px 40px; overflow-y: auto; }
+.overview.hidden { display: none; }
+
+.ov-stats { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 22px; }
+.ov-stat { background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+  padding: 12px 18px; min-width: 96px; }
+.ov-n { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.ov-l { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+
+.ov-sec { margin-bottom: 26px; }
+.ov-sec h2 { font-size: 15px; margin: 0 0 2px; }
+.ov-sec p { margin: 0 0 12px; }
+
+.ov-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+.ov-card { display: flex; gap: 11px; align-items: flex-start; text-align: left;
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+  padding: 13px 14px; color: var(--text); font: inherit; cursor: pointer; width: 100%; }
+.ov-card:hover { border-color: var(--accent2); background: var(--card2, var(--card)); }
+.ov-emoji { font-size: 20px; line-height: 1.2; flex: none; }
+.ov-body { flex: 1; min-width: 0; }
+.ov-name { font-weight: 600; font-size: 13.5px; }
+.ov-desc { color: var(--muted); font-size: 12px; margin-top: 3px;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ov-foot { color: var(--muted); font-size: 11px; margin-top: 6px; opacity: .8;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ov-count { flex: none; font-variant-numeric: tabular-nums; font-weight: 700;
+  font-size: 13px; color: var(--accent); }
