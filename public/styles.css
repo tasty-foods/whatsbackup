@@ -583,3 +583,7 @@ body.status-active .media-only { display: none !important; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ov-count { flex: none; font-variant-numeric: tabular-nums; font-weight: 700;
   font-size: 13px; color: var(--accent); }
+
+/* Exit ------------------------------------------------------------------- */
+.btn.icon.danger { color: var(--muted); }
+.btn.icon.danger:hover { color: #ff8b8b; border-color: #ff8b8b; }

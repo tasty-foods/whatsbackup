@@ -366,6 +366,31 @@ async function loadItems(initial) {
 const bridge = window.desktop && window.desktop.available ? window.desktop : null;
 let appInfo = null;
 
+/* ---------- Quit for real ---------------------------------------------------
+   Closing the window leaves it in the tray on purpose, which is right for
+   something whose job is to be running. It is wrong when the answer to "is it
+   off?" has to be yes. This is the only control that ends it, so it says what
+   stops when it does, and it asks first. */
+const exitBtn = document.getElementById("app-exit");
+if (exitBtn) exitBtn.addEventListener("click", async () => {
+  if (!bridge) {
+    alert("This page is open in a browser, which cannot close the app.\n\nQuit it from the WhatsBackUp icon in the system tray.");
+    return;
+  }
+  const ok = confirm("Close WhatsBackUp completely?\n\nIt will stop saving new photos and messages, and stop posting any scheduled status, until you open it again.\n\nNothing already saved is deleted.");
+  if (!ok) return;
+  exitBtn.disabled = true;
+  exitBtn.textContent = "⏳";
+  try {
+    await bridge.quit();
+  } catch (e) {
+    // Still here means it did not go: say so rather than leave a dead button.
+    exitBtn.disabled = false;
+    exitBtn.textContent = "⏻";
+    alert("Could not close it: " + (e && e.message ? e.message : e) + "\n\nQuit from the tray icon instead.");
+  }
+});
+
 /* ---------- Settings ---------- */
 const $ = (id) => document.getElementById(id);
 
