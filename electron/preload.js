@@ -15,7 +15,7 @@ contextBridge.exposeInMainWorld('desktop', {
   installUpdate: () => ipcRenderer.invoke('wb:installUpdate'),
   quit: () => ipcRenderer.invoke('wb:quit'),
   migrate: (from) => ipcRenderer.invoke('wb:migrate', from),
-  setAiKey: (key) => ipcRenderer.invoke('wb:setAiKey', key),
+  setAiKey: (key, provider) => ipcRenderer.invoke('wb:setAiKey', key, provider),
   hasAiKey: () => ipcRenderer.invoke('wb:hasAiKey'),
   copyDiagnostics: () => ipcRenderer.invoke('wb:copyDiagnostics'),
   onMigrateProgress: (fn) => {

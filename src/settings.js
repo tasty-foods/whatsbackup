@@ -51,6 +51,10 @@ const DEFAULTS = {
   aiModel: 'claude-haiku-4-5',
   aiBaseUrl: '',
   aiKeyEnc: '',              // DPAPI ciphertext; the plaintext key is never stored
+  aiKeysEnc: {},             // provider -> DPAPI ciphertext, for the fallback chain
+  aiChain: [],               // ordered provider names to fall through when one runs out
+  aiChainModels: {},         // provider -> model name, for chained providers with no default
+  aiChainEnabled: false,
   aiMode: 'assist',          // manual | assist (manual, then auto for new items) | auto
   aiAnalyseImages: true,
   aiAnalyseChats: true,

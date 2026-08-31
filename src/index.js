@@ -30,7 +30,13 @@ const server = app.listen(cfg.PORT, '127.0.0.1', () => {
     // so the plaintext never lands in settings.json, a log, or this repo.
     process.parentPort.on('message', (e) => {
       const msg = e && e.data;
-      if (msg && msg.type === 'ai-key') {
+      if (msg && msg.type === 'ai-keys') {
+        const keys = msg.keys || {};
+        require('./ai').setKeys(keys);
+        const n = Object.keys(keys).length;
+        console.log('[ai] ' + (n ? n + ' provider key(s) received: ' + Object.keys(keys).join(', ') : 'keys cleared'));
+      }
+      if (msg && msg.type === 'ai-key') {          // older shell, single key
         require('./ai').setKey(msg.key || '');
         console.log('[ai] key ' + (msg.key ? 'received' : 'cleared'));
       }

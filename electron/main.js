@@ -66,6 +66,44 @@ function icon(name) {
   return nativeImage.createEmpty();
 }
 
+// ---------- trusting the network's own certificate authority ----------
+// Plenty of machines sit behind software that inspects HTTPS — a school or
+// company filter, some antivirus. It re-signs every certificate with a root of
+// its own, which Windows is told to trust. Electron carries its own certificate
+// store and never asks Windows, so to the engine every request to an AI
+// provider looks like a forgery and dies as UNABLE_TO_GET_ISSUER_CERT_LOCALLY —
+// which reads, wrongly, like the provider being broken.
+//
+// So: export what Windows trusts to a PEM once, and point the engine's Node at
+// it. Cached for a week, because it changes about never, and failure here is
+// non-fatal — a machine with no interception works either way.
+const CA_BUNDLE = path.join(HOME, 'system-roots.pem');
+const CA_MAX_AGE = 7 * 24 * 3600 * 1000;
+
+function refreshCaBundle() {
+  try {
+    fs.mkdirSync(path.dirname(CA_BUNDLE), { recursive: true });
+    const st = fs.existsSync(CA_BUNDLE) ? fs.statSync(CA_BUNDLE) : null;
+    if (st && st.size > 1000 && Date.now() - st.mtimeMs < CA_MAX_AGE) return CA_BUNDLE;
+    const ps = '$out = @(); Get-ChildItem Cert:\\LocalMachine\\Root, Cert:\\CurrentUser\\Root '
+      + '-ErrorAction SilentlyContinue | Sort-Object Thumbprint -Unique | ForEach-Object { '
+      + "$out += '-----BEGIN CERTIFICATE-----'; "
+      + "$out += [Convert]::ToBase64String($_.RawData, 'InsertLineBreaks'); "
+      + "$out += '-----END CERTIFICATE-----' }; "
+      // Single-quoted on the PowerShell side: it takes backslashes literally, so
+      // a Windows path needs no escaping — and doubling them would break it.
+      + "Set-Content -LiteralPath '" + CA_BUNDLE + "' -Value $out -Encoding ascii";
+    require('child_process').execFileSync('powershell', ['-NoProfile', '-NonInteractive', '-Command', ps],
+      { timeout: 30000, windowsHide: true });
+    const after = fs.statSync(CA_BUNDLE);
+    console.log('[ca] exported the system certificate roots (' + Math.round(after.size / 1024) + ' KB)');
+    return CA_BUNDLE;
+  } catch (e) {
+    console.error('[ca] could not export system roots:', e.message);
+    return fs.existsSync(CA_BUNDLE) ? CA_BUNDLE : null;
+  }
+}
+
 // ---------- capture engine ----------
 function startEngine() {
   if (restartTimer) { clearTimeout(restartTimer); restartTimer = null; }
@@ -76,6 +114,9 @@ function startEngine() {
     WB_HOME: HOME,
     WB_VERSION: app.getVersion(),
   };
+  // Node reads this at startup, so it has to be in place before the fork.
+  const caBundle = refreshCaBundle();
+  if (caBundle) env.NODE_EXTRA_CA_CERTS = caBundle;
   if (chrome) env.WB_CHROME = chrome;
 
   child = utilityProcess.fork(path.join(ROOT, 'src', 'index.js'), [], {
@@ -226,24 +267,56 @@ function currentPaths() {
 // ---------- the AI key ----------
 // Stored only as DPAPI ciphertext, and handed to the engine in memory. The
 // plaintext never reaches settings.json, the log, or the diagnostic report.
-function saveAiKey(plain) {
-  if (!plain) { settings.write({ aiKeyEnc: '' }); sendAiKey(); return { ok: true, cleared: true }; }
+// A chain needs a key per provider, not one key. Each is encrypted separately
+// and stored under its provider's name; the old single-key field is still read
+// so an existing install keeps working without being asked to paste anything
+// again — it belongs to whichever provider was configured when it was saved.
+function saveAiKey(plain, provider) {
+  const who = (provider || settings.read().aiProvider || '').trim();
+  if (!who) return { ok: false, message: 'Choose a provider before saving its key.' };
+  const keys = { ...(settings.read().aiKeysEnc || {}) };
+  if (!plain) {
+    delete keys[who];
+    const patch = { aiKeysEnc: keys };
+    if (who === settings.read().aiProvider) patch.aiKeyEnc = '';   // clear the legacy slot too
+    settings.write(patch);
+    sendAiKey();
+    return { ok: true, cleared: true };
+  }
   if (!safeStorage.isEncryptionAvailable()) return { ok: false, message: 'Windows could not provide secure storage for the key.' };
-  settings.write({ aiKeyEnc: safeStorage.encryptString(plain).toString('base64') });
+  keys[who] = safeStorage.encryptString(plain).toString('base64');
+  settings.write({ aiKeysEnc: keys });
   sendAiKey();
   return { ok: true };
 }
 
-function readAiKey() {
-  const enc = settings.read().aiKeyEnc;
+const decrypt = (enc) => {
   if (!enc) return '';
   try { return safeStorage.decryptString(Buffer.from(enc, 'base64')); }
   catch (_) { return ''; }   // a different machine or Windows profile can't decrypt it
+};
+
+// provider -> plaintext key, decrypted only here and only into memory.
+function readAiKeys() {
+  const s = settings.read();
+  const out = {};
+  for (const [who, enc] of Object.entries(s.aiKeysEnc || {})) {
+    const k = decrypt(enc);
+    if (k) out[who] = k;
+  }
+  // The pre-chain single key, attributed to the provider it was saved under.
+  if (s.aiKeyEnc && s.aiProvider && !out[s.aiProvider]) {
+    const k = decrypt(s.aiKeyEnc);
+    if (k) out[s.aiProvider] = k;
+  }
+  return out;
 }
+
+const readAiKey = () => readAiKeys()[settings.read().aiProvider] || '';
 
 function sendAiKey() {
   if (!child) return;
-  try { child.postMessage({ type: 'ai-key', key: readAiKey() }); } catch (_) {}
+  try { child.postMessage({ type: 'ai-keys', keys: readAiKeys() }); } catch (_) {}
 }
 
 // ---------- helpers ----------
@@ -411,8 +484,16 @@ function registerIpc() {
 
   // The renderer can set or clear the key and ask whether one is stored — it
   // can never read it back.
-  ipcMain.handle('wb:setAiKey', (_e, plain) => saveAiKey(typeof plain === 'string' ? plain.trim() : ''));
-  ipcMain.handle('wb:hasAiKey', () => ({ stored: !!settings.read().aiKeyEnc, usable: !!readAiKey() }));
+  ipcMain.handle('wb:setAiKey', (_e, plain, provider) => saveAiKey(typeof plain === 'string' ? plain.trim() : '', provider));
+  ipcMain.handle('wb:hasAiKey', () => {
+    const keys = readAiKeys();
+    return {
+      stored: !!settings.read().aiKeyEnc || Object.keys(settings.read().aiKeysEnc || {}).length > 0,
+      usable: !!readAiKey(),
+      // Which providers in the chain actually have a working key behind them.
+      providers: Object.keys(keys),
+    };
+  });
 
   ipcMain.handle('wb:copyDiagnostics', async () => {
     const d = await get('/api/diagnostics');

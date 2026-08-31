@@ -16,9 +16,14 @@ const MAX_ATTEMPTS = 3;
 
 // The key never touches settings.json in the clear and never lands in a log —
 // the shell decrypts it and hands it over in memory.
-let apiKey = process.env.WB_AI_KEY || '';
-const setKey = (k) => { apiKey = k || ''; };
-const hasKey = () => !!apiKey;
+// provider -> key. The shell decrypts and hands these over in memory; the
+// plaintext never lands in settings.json, a log, or this repo.
+let apiKeys = {};
+const setKeys = (map) => { apiKeys = map && typeof map === 'object' ? { ...map } : {}; };
+// An older shell sends one key with no provider; attribute it to the configured one.
+const setKey = (k) => { const who = settings.read().aiProvider; apiKeys = k && who ? { [who]: k } : {}; };
+const keyFor = (who) => apiKeys[who] || '';
+const hasKey = (who) => !!keyFor(who || settings.read().aiProvider);
 
 let state = {
   running: false,
@@ -41,14 +46,81 @@ const noteVisionOff = (c) => { visionOff = visionKey(c); };
 const noteVisionOk = (c) => { if (visionIsOff(c)) visionOff = null; imageRejects = 0; };
 let imageRejects = 0;                                 // consecutive image rejections, reset by any success
 
+// The chain: the configured provider first, then each fallback that has a key.
+// A provider that just refused work is benched, so the runner walks past it
+// instead of asking again every single item.
+const benched = new Map();                 // provider -> ms timestamp it may be used again
+const REST_AFTER_LIMIT = 45 * 60 * 1000;   // a quota usually frees up long before this
+const REST_AFTER_REFUSAL = 6 * 60 * 60 * 1000;
+
+const benchProvider = (who, ms, why) => {
+  if (!who) return;
+  benched.set(who, Date.now() + ms);
+  console.warn(`[ai] ${who} set aside for ${Math.round(ms / 60000)} min — ${why}`);
+};
+const isBenched = (who) => (benched.get(who) || 0) > Date.now();
+
+function chainProviders() {
+  const s = settings.read();
+  const first = s.aiProvider;
+  if (!s.aiChainEnabled) return [first];
+  const rest = (s.aiChain || []).filter((x) => x && x !== first);
+  return [first, ...rest];
+}
+
+// The next provider that could actually do this job: has a key if it needs one,
+// isn't benched, and — for a photograph — hasn't already told us it can't see.
+function pickProvider({ needsVision } = {}) {
+  const order = chainProviders();
+  for (const who of order) {
+    if (!who) continue;
+    const c = configFor(who);
+    if (c.keyRequired && !hasKey(who)) continue;
+    if (!c.model) continue;                 // nothing to ask for
+    if (isBenched(who)) continue;
+    if (needsVision && visionIsOff(c)) continue;
+    return c;
+  }
+  return null;
+}
+
+function configFor(who) {
+  const s = settings.read();
+  const preset = PRESETS[who] || PRESETS.custom;
+  // Model and address follow the provider: the fields the user typed belong to
+  // the provider they were typed for, and a fallback uses its own preset.
+  const isCurrent = who === s.aiProvider;
+  // A fallback uses its own model: the name typed above belongs to the provider
+  // it was typed for, and handing "gemini-2.5-flash" to Groq only earns a 404
+  // and a benched provider. Presets without a default need one set explicitly.
+  const model = isCurrent
+    ? (s.aiModel || preset.defaultModel)
+    : ((s.aiChainModels || {})[who] || preset.defaultModel || '');
+  return {
+    provider: who,
+    model,
+    baseUrl: ((isCurrent && s.aiBaseUrl) || preset.baseUrl || '').trim(),
+    apiKey: keyFor(who),
+    jsonSchema: s.aiJsonSchema !== false,
+    keyRequired: preset.keyRequired,
+    local: !!preset.local,
+  };
+}
+
 function config() {
   const s = settings.read();
-  const preset = PRESETS[s.aiProvider] || PRESETS.demo;
+  // An unknown or blank provider used to fall back to the demo preset, while
+  // provider.js fell back to `custom` for the same value. The two disagreeing
+  // was quietly destructive: demo is marked local and needs no key, so the app
+  // reported itself configured with no key set, called itself a local model,
+  // and sent hundreds of real requests to a real endpoint under that
+  // misapprehension. Same fallback as the dispatcher, so both agree.
+  const preset = PRESETS[s.aiProvider] || PRESETS.custom;
   return {
     provider: s.aiProvider,
     model: s.aiModel || preset.defaultModel,
     baseUrl: (s.aiBaseUrl || preset.baseUrl || '').trim(),
-    apiKey,
+    apiKey: keyFor(s.aiProvider),
     jsonSchema: s.aiJsonSchema !== false,
     keyRequired: preset.keyRequired,
     local: !!preset.local,
@@ -77,6 +149,21 @@ function status() {
     budget: s.aiMonthlyBudget || 0,
     groups: { media: ai.listGroups('media').length, chat: ai.listGroups('chat').length },
     lastRun: ai.lastRun(),
+    chainEnabled: !!s.aiChainEnabled,
+    chain: chainProviders().filter(Boolean).map((who) => {
+      const c = configFor(who);
+      const until = benched.get(who) || 0;
+      return {
+        provider: who,
+        model: c.model,
+        hasKey: !hasKey(who) ? false : true,
+        keyRequired: !!c.keyRequired,
+        needsModel: !c.model,
+        editableModel: who !== s.aiProvider,
+        restingUntil: until > Date.now() ? until : null,
+        blind: visionIsOff(c),
+      };
+    }),
   };
 }
 
@@ -160,6 +247,38 @@ function noteNewMessages(chatId) {
 // library, and this runs once per queued item.
 const recordById = (id) => store.get(id);
 
+// Runs one job against the chain: the first provider that can take it, then
+// the next if that one refuses for a reason another provider might not share.
+// Errors that are about the item rather than the provider (a corrupt file, a
+// reply that isn't JSON) are not worth walking the chain for, and are thrown.
+async function runJobOnChain(job) {
+  const needsVision = job.type === 'label_image';
+  const tried = [];
+  for (;;) {
+    const cfg = pickProvider({ needsVision });
+    if (!cfg) {
+      if (!tried.length) throw new AiError('No provider is available — every one is out of quota or missing a key.', { kind: 'auth' });
+      return { skipped: 'no provider left that can do this (' + tried.join(', ') + ' unavailable)' };
+    }
+    if (tried.includes(cfg.provider)) return { skipped: 'no provider left to try' };
+    tried.push(cfg.provider);
+    try {
+      const r = await runOneJob(cfg, job);
+      return { ...r, provider: cfg.provider };
+    } catch (e) {
+      const status = e instanceof AiError ? e.status : 0;
+      const kind = e instanceof AiError ? e.kind : '';
+      if (status === 429 || kind === 'rate') { benchProvider(cfg.provider, REST_AFTER_LIMIT, 'out of quota'); continue; }
+      if (kind === 'auth' || status === 401 || status === 403) { benchProvider(cfg.provider, REST_AFTER_REFUSAL, 'key refused'); continue; }
+      if (kind === 'model' || status === 404) { benchProvider(cfg.provider, REST_AFTER_REFUSAL, 'model not found there'); continue; }
+      // About the item rather than the provider. Say who was asked, so a
+      // refusal can be pinned on the right one further up.
+      try { e.provider = cfg.provider; } catch (_) {}
+      throw e;
+    }
+  }
+}
+
 async function runOneJob(cfg, job) {
   if (job.type === 'label_image') {
     if (visionIsOff(cfg)) return { skipped: 'this model cannot read images' };
@@ -201,7 +320,7 @@ async function drainQueue(cfg) {
 
     await Promise.all(batch.map(async (job) => {
       try {
-        const r = await runOneJob(cfg, job);
+        const r = await runJobOnChain(job);
         if (r.skipped) { ai.finishJob(job.id, 'skipped', r.skipped); state.skipped++; }
         else {
           ai.finishJob(job.id, 'done');
@@ -222,9 +341,13 @@ async function drainQueue(cfg) {
           // An auth problem, a certificate problem or a model name the service
           // doesn't recognise will fail every remaining item the same way —
           // stop rather than burn the queue down.
+          // With a chain, a single provider refusing is not the end of the run:
+          // runJobOnChain has already benched it and moved on, and only reaches
+          // here when every provider has been tried. Without a chain, one auth
+          // or model failure really does mean the rest will fail the same way.
           if (e instanceof AiError && (e.kind === 'auth' || e.kind === 'cert' || e.kind === 'model')) {
             state.error = e.message;
-            cancelRequested = true;
+            if (chainProviders().length <= 1) cancelRequested = true;
           }
           // A model that refuses one image refuses all of them. Note it once
           // and let the rest of the photos skip past for free; the chats are
@@ -238,8 +361,11 @@ async function drainQueue(cfg) {
             // rejections in a row with no success between, count as "cannot see".
             imageRejects++;
             if (imageRejects >= 2 || /image|vision|multimodal|media/i.test(e.message || '')) {
-              noteVisionOff(cfg);
-              state.message = 'This model cannot read images — photos were left unsorted. Conversations are unaffected.';
+              // Pin it on the provider that actually refused, never on the run's
+              // starting config: one blind model in a chain must not blindfold
+              // the sighted ones behind it.
+              noteVisionOff(e.provider ? configFor(e.provider) : cfg);
+              state.message = 'A model in the chain cannot read images; photos will go to the next one that can.';
             }
           }
         }
@@ -406,7 +532,7 @@ async function kick() {
 }
 
 module.exports = {
-  setKey, hasKey, config, status, estimate, census,
+  setKey, setKeys, hasKey, config, configFor, status, estimate, census, chainProviders,
   run, cancel, kick, queueBacklog, noteNewMedia, noteNewMessages,
   // Testing the connection is also how the runner finds out whether it may
   // send photos at all — a probe here saves a queue of doomed calls later.

@@ -84,6 +84,9 @@ const SETTING_SPEC = {
   aiAnalyseChats: { type: 'bool' },
   aiMonthlyBudget: { type: 'int', min: 0, max: 10000 },
   aiJsonSchema: { type: 'bool' },
+  aiChain: { type: 'list' },
+  aiChainModels: { type: 'map' },
+  aiChainEnabled: { type: 'bool' },
   statusEnabled: { type: 'bool' },
   statusConsent: { type: 'bool' },
   statusPaused: { type: 'bool' },
@@ -108,6 +111,16 @@ function coerce(spec, value) {
   }
   if (spec.type === 'path') return typeof value === 'string' ? value.trim() : undefined;
   if (spec.type === 'list') return Array.isArray(value) ? value.filter((x) => typeof x === 'string').slice(0, 500) : undefined;
+  // A plain string->string map, e.g. provider -> model name. Anything else in
+  // there is dropped rather than trusted.
+  if (spec.type === 'map') {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+    const out = {};
+    for (const [k, v] of Object.entries(value).slice(0, 50)) {
+      if (typeof k === 'string' && typeof v === 'string') out[k.slice(0, 60)] = v.trim().slice(0, 120);
+    }
+    return out;
+  }
   return undefined;
 }
 

@@ -527,6 +527,20 @@
               <span id="ai-test-status" class="muted small"></span>
             </div>
             <div id="ai-probe" class="probe hidden"></div>
+
+            <div class="sec" id="ai-chain-sec" style="margin-top:18px">
+              <div class="sec-title">Fallback chain</div>
+              <p class="muted small">Free tiers run out. Add more providers and the sorting moves down the list when one is exhausted, instead of stopping. Each needs its own key: pick the provider above, paste its key, then add it here.</p>
+              <label class="row toggle">
+                <input type="checkbox" id="set-aiChainEnabled" /><span class="switch"></span>
+                <span>Move to the next provider when one runs out</span>
+              </label>
+              <div id="ai-chain-list"></div>
+              <div class="row">
+                <select id="ai-chain-pick" class="txt" style="max-width:230px"></select>
+                <button class="btn" id="btn-chain-add">Add to chain</button>
+              </div>
+            </div>
           </div>
 
           <div class="sec">

@@ -379,7 +379,7 @@ const FIELDS = {
   mediaRoot: 'text', cloudRoot: 'text', excludedChats: 'lines',
   retentionDays: 'int', port: 'int', downloadTimeoutSec: 'int', logMaxMB: 'int',
   autoImportHours: 'int',
-  aiEnabled: 'bool', aiConsent: 'bool', aiAnalyseImages: 'bool', aiAnalyseChats: 'bool',
+  aiEnabled: 'bool', aiConsent: 'bool', aiAnalyseImages: 'bool', aiAnalyseChats: 'bool', aiChainEnabled: 'bool',
   aiProvider: 'text', aiModel: 'text', aiBaseUrl: 'text', aiMode: 'text', aiMonthlyBudget: 'int',
 };
 
@@ -423,7 +423,7 @@ S.tabs.addEventListener('click', (e) => {
   [...S.tabs.children].forEach((c) => c.classList.toggle('active', c === b));
   document.querySelectorAll('.pane').forEach((p) => p.classList.toggle('hidden', p.dataset.pane !== b.dataset.t));
   if (b.dataset.t === 'storage') loadStorage();
-  if (b.dataset.t === 'ai') AI.loadSettingsTab();
+  if (b.dataset.t === 'ai') { AI.loadSettingsTab(); if (typeof Chain !== 'undefined') Chain.refresh(); }
 });
 
 const fmtBytes = (n) => {
@@ -1234,12 +1234,15 @@ const AI = (function () {
     if (!bridge) return;
     const v = $$('ai-key').value.trim();
     if (!v) return;
-    const r = await bridge.setAiKey(v);
+    // Save it against the provider on screen, so a chain can hold one key each.
+    const who = ($$('set-aiProvider') && $$('set-aiProvider').value) || '';
+    const r = await bridge.setAiKey(v, who);
     $$('ai-key').value = '';
     $$('ai-key').placeholder = r.ok ? '•••••••• (saved on this PC)' : 'Paste your key';
     $$('ai-test-status').innerHTML = r.ok
-      ? '<span class="ok-text">Key saved, encrypted with your Windows account.</span>'
+      ? `<span class="ok-text">Key saved for ${escapeHtml(who || 'this provider')}, encrypted with your Windows account.</span>`
       : `<span class="bad-text">${escapeHtml(r.message || 'Could not save the key')}</span>`;
+    if (typeof Chain !== 'undefined') Chain.refresh();
   });
   $$('btn-ai-clearkey').addEventListener('click', async () => {
     if (!bridge) return;
@@ -1953,4 +1956,91 @@ const StatusView = (function () {
 
   setInterval(() => { if (currentView === 'status' && sum) refresh(); }, 30000);
   return { enter, refresh };
+})();
+
+
+/* ---------- The provider chain ---------------------------------------------
+   Free tiers run out; a chain means the sorting steps to the next provider
+   instead of stopping. Rendered from the engine's own view, so what is shown
+   is what the runner will actually do. */
+const Chain = (function () {
+  const list = document.getElementById('ai-chain-list');
+  const pick = document.getElementById('ai-chain-pick');
+  const add = document.getElementById('btn-chain-add');
+  if (!list) return { refresh() {} };
+
+  let presets = [];
+
+  async function refresh() {
+    let st = null;
+    try { st = await (await fetch('/api/ai/status')).json(); } catch (e) { return; }
+    if (!presets.length) {
+      try { presets = (await (await fetch('/api/ai/presets')).json()).presets || []; } catch (e) {}
+    }
+    const chain = st.chain || [];
+    const box = document.getElementById('set-aiChainEnabled');
+    if (box) box.checked = !!st.chainEnabled;
+
+    list.innerHTML = chain.length ? '' : '<p class="muted small">Only the provider above. Add another to keep going when it runs out.</p>';
+    chain.forEach((c, i) => {
+      const row = document.createElement('div');
+      row.className = 'chain-row';
+      let tag = '<span class="st ready">ready</span>';
+      if (c.keyRequired && !c.hasKey) tag = '<span class="st nokey">needs a key</span>';
+      else if (c.needsModel) tag = '<span class="st nokey">needs a model</span>';
+      else if (c.restingUntil) {
+        const mins = Math.max(1, Math.round((c.restingUntil - Date.now()) / 60000));
+        tag = `<span class="st resting">resting ${mins}m</span>`;
+      } else if (c.blind) tag = '<span class="st blind">text only</span>';
+      const first = i === 0;
+      const modelCell = c.editableModel
+        ? `<input class="mdl chain-model" value="${escapeHtml(c.model || '')}" placeholder="model name for this provider" spellcheck="false">`
+        : `<span class="mdl">${escapeHtml(c.model || '')}</span>`;
+      row.innerHTML = `<span class="ord">${i + 1}</span>
+        <span class="who">${escapeHtml(c.provider || '—')}</span>
+        ${modelCell}
+        ${tag}
+        <button title="${first ? 'The provider above — change it there' : 'Remove from the chain'}" ${first ? 'disabled style="opacity:.3;cursor:default"' : ''}>✕</button>`;
+      const mi = row.querySelector('.chain-model');
+      if (mi) mi.addEventListener('change', async () => {
+        const s = await (await fetch('/api/settings')).json();
+        const models = { ...(s.settings.aiChainModels || {}) };
+        models[c.provider] = mi.value.trim();
+        await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ aiChainModels: models }) });
+        refresh();
+      });
+      if (!first) row.querySelector('button').addEventListener('click', async () => {
+        const s = await (await fetch('/api/settings')).json();
+        const next = (s.settings.aiChain || []).filter((x) => x !== c.provider);
+        await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ aiChain: next }) });
+        refresh();
+      });
+      list.appendChild(row);
+    });
+
+    // Offer only providers that aren't already in the chain.
+    const inChain = new Set(chain.map((c) => c.provider));
+    const offer = presets.filter((p) => !inChain.has(p.id) && p.id !== 'demo');
+    pick.innerHTML = offer.length
+      ? offer.map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.label || p.id)}</option>`).join('')
+      : '<option value="">every provider is already in the chain</option>';
+  }
+
+  if (add) add.addEventListener('click', async () => {
+    const who = pick.value;
+    if (!who) return;
+    const s = await (await fetch('/api/settings')).json();
+    const next = [...(s.settings.aiChain || [])];
+    if (!next.includes(who)) next.push(who);
+    await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ aiChain: next, aiChainEnabled: true }) });
+    refresh();
+  });
+
+  const box = document.getElementById('set-aiChainEnabled');
+  if (box) box.addEventListener('change', async () => {
+    await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ aiChainEnabled: box.checked }) });
+    refresh();
+  });
+
+  return { refresh };
 })();
