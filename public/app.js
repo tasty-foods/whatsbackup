@@ -25,7 +25,7 @@ let allItems = [];         // full list, newest first
 // load, long before the bottom of this file has executed, and a const declared
 // down there is still in its dead zone when the first render reaches it.
 const F = {
-  kind: '', dir: '', album: '', project: '', from: '', to: '', sort: 'new',
+  kind: '', dir: '', album: '', project: '', tag: '', from: '', to: '', sort: 'new',
 };
 const fEl = (id) => document.getElementById(id);
 
@@ -1035,6 +1035,10 @@ const AI = (function () {
       state.groups = g.groups || [];
     } catch (e) { /* AI not set up */ }
     renderAlbumBar();
+    // The menus are built from the labels, so they are rebuilt when the labels
+    // change — a run that invents a new album or a new tag offers it straight
+    // away, without waiting for the panel to be opened again.
+    if (typeof refreshFilterOptions === 'function') refreshFilterOptions();
     // Tiles are built before labels arrive on first load, so redraw once the
     // album each photo belongs to is actually known.
     if (state.labels.size) render(allItems);
@@ -1104,6 +1108,33 @@ const AI = (function () {
     if (!chatGroupsOnce) chatGroupsOnce = loadChatGroups();
     return chatGroupsOnce;
   }
+
+  // The tags are not a fixed list — the model invents them as it reads, so the
+  // only honest source for a tag menu is what is actually on the photos right
+  // now. Counted fresh whenever labels load, which is once per run.
+  function tagCounts(minUses) {
+    const n = new Map();
+    for (const row of state.labels.values()) {
+      const tags = (row && row.label && row.label.tags) || [];
+      const seen = new Set();
+      for (const raw of tags) {
+        const k = String(raw || '').toLowerCase().trim();
+        if (!k || seen.has(k)) continue;      // one photo counts once per tag
+        seen.add(k);
+        n.set(k, (n.get(k) || 0) + 1);
+      }
+    }
+    const min = minUses || 2;
+    return [...n.entries()].filter((e) => e[1] >= min)
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map((e) => ({ tag: e[0], count: e[1] }));
+  }
+
+  const hasTag = (id, tag) => {
+    const row = state.labels.get(id);
+    if (!row || !row.label) return false;
+    return (row.label.tags || []).some((x) => String(x || '').toLowerCase().trim() === tag);
+  };
 
   const labelFor = (id) => state.labels.get(id) || null;
   const chatLabelFor = (chatId) => state.chatGroups.get(chatId) || null;
@@ -1362,7 +1393,7 @@ const AI = (function () {
 
   return {
     loadLabels, loadChatGroups, ensureChatGroups, loadSettingsTab, refreshEstimate, passes, matchesText, matchesChat,
-    labelFor, chatLabelFor, renderAlbumBar, saveAiSettings, albumPicker, bindAlbumPicker,
+    labelFor, chatLabelFor, renderAlbumBar, saveAiSettings, albumPicker, bindAlbumPicker, tagCounts, hasTag,
     groups: () => state.groups,
     chatGroups, chatGroupIdForName,
   };
@@ -1596,7 +1627,7 @@ function openQuickPlay(startId) {
    place to look and the Clear button is one assignment. */
 
 function filtersActive() {
-  return !!(F.kind || F.dir || F.album || F.project || F.from || F.to) || F.sort !== 'new';
+  return !!(F.kind || F.dir || F.album || F.project || F.tag || F.from || F.to) || F.sort !== 'new';
 }
 
 // Applied after the tab strip and the search box have had their say.
@@ -1614,6 +1645,7 @@ function matchesAdvanced(r) {
     const cg = typeof AI !== 'undefined' ? AI.chatGroupIdForName(r.chat) : null;
     if (cg !== F.project) return false;
   }
+  if (F.tag && !(typeof AI !== 'undefined' && AI.hasTag(r.id, F.tag))) return false;
   return true;
 }
 
@@ -1643,6 +1675,21 @@ function refreshFilterOptions() {
   };
   fill(fEl('f-album'), albums, 'Any album');
   fill(fEl('f-project'), projects, 'Any project');
+
+  // The tag menu is rebuilt from the labels themselves, so it always offers
+  // exactly the words this library has been described with — and grows on its
+  // own as more photos are read. A tag used once is noise in a menu; two is
+  // the point at which it groups something.
+  const tags = (AI.tagCounts && AI.tagCounts(2)) || [];
+  const tagSel = fEl('f-tag');
+  if (tagSel) {
+    const keepTag = tagSel.value;
+    tagSel.innerHTML = '<option value="">Any tag</option>'
+      + tags.slice(0, 60).map((x) =>
+        '<option value="' + escapeHtml(x.tag) + '">' + escapeHtml(x.tag) + ' (' + x.count + ')</option>').join('');
+    if ([...tagSel.options].some((o) => o.value === keepTag)) tagSel.value = keepTag;
+    tagSel.disabled = !tags.length;
+  }
   const bar = fEl('filterbar');
   // Nothing to filter by yet is worth saying, rather than two empty menus.
   const none = !albums.length && !projects.length;
@@ -1665,12 +1712,12 @@ function bindFilters() {
     el.addEventListener('change', () => { F[key] = el.value; render(allItems); });
   };
   wire('f-kind', 'kind'); wire('f-dir', 'dir'); wire('f-album', 'album');
-  wire('f-project', 'project'); wire('f-from', 'from'); wire('f-to', 'to');
+  wire('f-project', 'project'); wire('f-tag', 'tag'); wire('f-from', 'from'); wire('f-to', 'to');
   wire('f-sort', 'sort');
   const reset = fEl('f-reset');
   if (reset) reset.addEventListener('click', () => {
-    Object.assign(F, { kind: '', dir: '', album: '', project: '', from: '', to: '', sort: 'new' });
-    for (const id of ['f-kind', 'f-dir', 'f-album', 'f-project', 'f-from', 'f-to']) { const e = fEl(id); if (e) e.value = ''; }
+    Object.assign(F, { kind: '', dir: '', album: '', project: '', tag: '', from: '', to: '', sort: 'new' });
+    for (const id of ['f-kind', 'f-dir', 'f-album', 'f-project', 'f-tag', 'f-from', 'f-to']) { const e = fEl(id); if (e) e.value = ''; }
     const s = fEl('f-sort'); if (s) s.value = 'new';
     render(allItems);
   });
