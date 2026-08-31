@@ -22,7 +22,12 @@ const IMAGE_SCHEMA = {
     caption: { type: 'string', description: 'One sentence describing what is in the picture.' },
     subjects: { type: 'array', items: { type: 'string' }, description: 'The main things visible, 1-5 short nouns.' },
     scene: { type: 'string', description: 'Where this appears to be, in a few words.' },
-    text_in_image: { type: 'string', description: 'Any text legible in the image, verbatim. Empty string if none.' },
+    // Asked for every legible word, a photographed page gets transcribed in
+    // full: one A4 of Dutch product copy here ran past 900 tokens, stopped
+    // mid-sentence, and the item failed for being unparseable. This index
+    // exists to find things, not to reproduce them, so the field is bounded
+    // and pointed at the parts worth searching for.
+    text_in_image: { type: 'string', description: 'The most useful text visible, verbatim, up to about 300 characters - headings, names, prices, dates, reference numbers. Empty string if none.' },
     tags: { type: 'array', items: { type: 'string' }, description: '2-6 short lowercase keywords.' },
   },
   required: ['caption', 'subjects', 'scene', 'text_in_image', 'tags'],
@@ -46,7 +51,7 @@ const CHAT_SCHEMA = {
 const IMAGE_SYSTEM = [
   'You label photographs from a personal WhatsApp archive so they can be grouped later.',
   'Describe only what is actually visible. Do not guess at intent, names, or backstory.',
-  'If text is legible in the image (an invoice, a label, a screenshot), copy it into text_in_image verbatim.',
+  'If text is legible in the image (an invoice, a label, a screenshot), copy the useful part into text_in_image verbatim - headings, names, prices, dates and reference numbers, not the whole page.',
   'Write in the same language as any text in the image; otherwise write in English.',
   'Keep the caption to one plain sentence.',
 ].join(' ');
