@@ -30,6 +30,8 @@ const server = app.listen(cfg.PORT, '127.0.0.1', () => {
     // so the plaintext never lands in settings.json, a log, or this repo.
     process.parentPort.on('message', (e) => {
       const msg = e && e.data;
+      // Resized images come back here; the shrink module owns the matching.
+      if (msg && msg.type === 'shrunk') { require('./ai/shrink').accept(msg); return; }
       if (msg && msg.type === 'ai-keys') {
         const keys = msg.keys || {};
         require('./ai').setKeys(keys);

@@ -69,7 +69,16 @@ async function probe(cfg) {
       schema: COLOUR_SCHEMA, schemaName: 'colour', maxTokens: 300,
     });
     const said = String((r.json && r.json.colour) || r.text || '').toLowerCase();
-    out.vision = /red|rood|rouge|rot|rojo/.test(said)
+    // Asked for a colour word, a model that answers "#ff0000" has read the
+    // square perfectly and only disagreed about the wording. Failing it here is
+    // not cosmetic: a failed probe marks the provider blind, and the runner then
+    // skips every photo. So the hex and rgb spellings count as seeing red too.
+    const flat = said.replace(/\s+/g, '');
+    const saysRed = /red|rood|rouge|rot|rojo|rosso|vermelho|crimson|scarlet/.test(said)
+      || /#?ff0000|#f00(?![0-9a-f])/.test(flat)
+      || /rgba?\(255,0,0/.test(flat)
+      || /(^|[^0-9])255,0,0([^0-9]|$)/.test(flat);
+    out.vision = saysRed
       ? step(true, 'the model can see images')
       : step(false, `shown a red square, it said "${said.slice(0, 40)}" — image sorting will be unavailable`);
   } catch (e) {

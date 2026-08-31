@@ -142,6 +142,29 @@ function startEngine() {
       // existing one as the user left it (no surprise show / focus steal).
       if (!win || win.isDestroyed()) openWindow();
     }
+    // The engine has no image decoder of its own: a utilityProcess gets only
+    // { net, systemPreferences } out of require('electron'). Chromium's is here,
+    // so shrinking a photo before it is sent to a vision model happens here and
+    // the result goes straight back. A failure answers ok:false rather than
+    // going quiet, so the engine falls back to the original bytes instead of
+    // waiting out its timeout.
+    if (msg.type === 'shrink') {
+      let reply = { type: 'shrunk', id: msg.id, ok: false };
+      try {
+        const img = nativeImage.createFromBuffer(Buffer.from(msg.data));
+        const size = img.getSize();
+        const max = Math.max(64, Math.min(4096, msg.max || 1024));
+        const longest = Math.max(size.width, size.height);
+        if (!img.isEmpty() && longest > max) {
+          const scaled = size.width >= size.height
+            ? img.resize({ width: max, quality: 'good' })
+            : img.resize({ height: max, quality: 'good' });
+          const jpeg = scaled.toJPEG(82);
+          if (jpeg && jpeg.length) reply = { type: 'shrunk', id: msg.id, ok: true, data: new Uint8Array(jpeg) };
+        }
+      } catch (_) {}
+      try { child.postMessage(reply); } catch (_) {}
+    }
     if (msg.type === 'restart-requested') restartEngine();
     if (msg.type === 'port-in-use') {
       if (!portConflict) {

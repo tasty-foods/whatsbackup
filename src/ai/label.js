@@ -9,6 +9,7 @@ const store = require('../store');
 const messages = require('../messages');
 const ai = require('./store');
 const { complete } = require('./provider');
+const { shrink } = require('./shrink');
 
 // Anthropic rejects images over 5 MB; anything near that is a photo we don't
 // need at full size anyway.
@@ -175,13 +176,18 @@ async function labelImage(cfg, rec) {
   const hash = ai.sha1(bytes);
   if (ai.isLabelled('image', rec.id, hash)) return { cached: true };
 
+  // Sent smaller: same answer, a quarter of the input tokens, and on a model
+  // running on this machine roughly a fifth of the wait. Falls back to the
+  // original bytes if the shell can't do it.
+  const sending = await shrink(bytes);
+
   const hint = (rec.caption || '').trim();
   const res = await complete(cfg, {
     system: IMAGE_SYSTEM,
     user: `This photo was ${rec.dir === 'out' ? 'sent by the owner' : 'received'} in a chat called "${rec.chat}".`
       + (hint ? `\ncaption: ${hint}` : '')
       + '\nDescribe it.',
-    images: [{ mediaType: rec.mimetype || 'image/jpeg', data: bytes.toString('base64') }],
+    images: [{ mediaType: sending === bytes ? (rec.mimetype || 'image/jpeg') : 'image/jpeg', data: sending.toString('base64') }],
     schema: IMAGE_SCHEMA, schemaName: 'image_label', maxTokens: 400,
   });
   ai.putLabel({ kind: 'image', refId: rec.id, contentHash: hash, label: res.json, model: cfg.model, provider: cfg.provider, usage: res.usage, cost: res.cost });

@@ -52,6 +52,7 @@ let imageRejects = 0;                                 // consecutive image rejec
 const benched = new Map();                 // provider -> ms timestamp it may be used again
 const REST_AFTER_LIMIT = 45 * 60 * 1000;   // a quota usually frees up long before this
 const REST_AFTER_REFUSAL = 6 * 60 * 60 * 1000;
+const REST_AFTER_DOWN = 3 * 60 * 1000;      // long enough to finish on someone else, short enough to come back
 
 const benchProvider = (who, ms, why) => {
   if (!who) return;
@@ -271,6 +272,10 @@ async function runJobOnChain(job) {
       if (status === 429 || kind === 'rate') { benchProvider(cfg.provider, REST_AFTER_LIMIT, 'out of quota'); continue; }
       if (kind === 'auth' || status === 401 || status === 403) { benchProvider(cfg.provider, REST_AFTER_REFUSAL, 'key refused'); continue; }
       if (kind === 'model' || status === 404) { benchProvider(cfg.provider, REST_AFTER_REFUSAL, 'model not found there'); continue; }
+      // Nothing answering. A local model that isn't running would otherwise
+      // fail every item three times over before anyone noticed, so step past it
+      // and look again shortly — it may just be starting up.
+      if (kind === 'down') { benchProvider(cfg.provider, REST_AFTER_DOWN, 'not running'); continue; }
       // About the item rather than the provider. Say who was asked, so a
       // refusal can be pinned on the right one further up.
       try { e.provider = cfg.provider; } catch (_) {}

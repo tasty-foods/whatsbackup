@@ -27,13 +27,38 @@ function wrapNetworkError(e, label) {
       { kind: 'cert' }
     );
   }
-  if (/ECONNREFUSED/i.test(String(code))) {
-    return new AiError(`Nothing is listening at ${label}. If this is a local AI, start it first.`, { kind: 'network' });
+  // Told outright that nothing is there. Distinct from a slow or flaky answer:
+  // there is no point retrying this item against this provider, and the chain
+  // should step past it instead. Most likely a local model that isn't running.
+  if (/ECONNREFUSED|ENOTFOUND|EAI_AGAIN|ECONNRESET/i.test(String(code))) {
+    return new AiError(`Nothing is listening at ${label}. If this is a local AI, start it first.`, { kind: 'down' });
   }
   if (/ABORT_ERR|AbortError/i.test(String(e && e.name) + code)) {
     return new AiError(`${label} took too long to answer.`, { kind: 'network', retryable: true });
   }
   return new AiError(`Could not reach ${label}: ${(e && e.message) || code || 'unknown error'}`, { kind: 'network', retryable: true });
+}
+
+// Turn a JSON Schema into an example of what an answer looks like. Each
+// placeholder carries that property's own description, so the model is told
+// what belongs in the slot at the point it has to write it.
+function skeletonFor(schema) {
+  if (!schema || typeof schema !== 'object') return '<text>';
+  if (schema.type === 'object') {
+    const out = {};
+    for (const [k, v] of Object.entries(schema.properties || {})) out[k] = skeletonFor(v);
+    return out;
+  }
+  // The description of a list lives on the list, not on its items, so pass it
+  // down or every array slot reads a uselessly generic <text>.
+  if (schema.type === 'array') {
+    const items = schema.items || {};
+    return [skeletonFor(items.description ? items : Object.assign({}, items, { description: schema.description }))];
+  }
+  if (schema.type === 'boolean') return true;
+  if (schema.type === 'number' || schema.type === 'integer') return 0;
+  const hint = String(schema.description || 'text').replace(/\s+/g, ' ').replace(/\.$/, '');
+  return '<' + hint + '>';
 }
 
 function statusToError(status, body, label) {
@@ -129,9 +154,17 @@ async function completeOpenAi(cfg, req) {
     body.response_format = cfg.jsonSchema === false
       ? { type: 'json_object' }
       : { type: 'json_schema', json_schema: { name: req.schemaName || 'result', strict: true, schema: req.schema } };
-    // Models without schema enforcement need the shape spelled out to them.
+    // Models without schema enforcement need the shape spelled out to them,
+    // and it has to be an example rather than the schema itself. Shown a JSON
+    // Schema and told to match it, a small local model answers
+    // {"type":"object","properties":{"colour":"Red"}} - it copied the
+    // description instead of filling one in. Seen with qwen2.5vl:3b, which had
+    // read the picture correctly and still returned nothing usable. A skeleton
+    // with the descriptions as placeholders leaves nothing to guess.
     if (cfg.jsonSchema === false) {
-      body.messages[0].content += `\n\nReply with JSON only, matching exactly this shape:\n${JSON.stringify(req.schema)}`;
+      body.messages[0].content += '\n\nReply with JSON only, in exactly this shape, '
+        + 'replacing every <...> with a real value:\n'
+        + JSON.stringify(skeletonFor(req.schema));
     }
   }
 
