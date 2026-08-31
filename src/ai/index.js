@@ -12,6 +12,12 @@ const { PRESETS, costOf } = require('./presets');
 const { AiError } = require('./provider');
 
 const CONCURRENCY = 3;
+// A model on this machine is already using every core for a single request,
+// so asking it for three at once splits the same cores and adds contention
+// rather than throughput. Measured here on qwen2.5vl:3b, one photo: 29s with
+// nothing else running, 97s with three in flight. Remote providers are
+// waiting on a network round trip and still want the parallelism.
+const LOCAL_CONCURRENCY = 1;
 const MAX_ATTEMPTS = 3;
 
 // The key never touches settings.json in the clear and never lands in a log —
@@ -320,7 +326,7 @@ async function drainQueue(cfg) {
   for (;;) {
     if (cancelRequested) return 'cancelled';
     if (budgetExceeded()) return 'budget';
-    const batch = ai.claim(CONCURRENCY);
+    const batch = ai.claim(cfg && cfg.local ? LOCAL_CONCURRENCY : CONCURRENCY);
     if (!batch.length) return 'done';
 
     await Promise.all(batch.map(async (job) => {

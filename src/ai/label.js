@@ -188,7 +188,11 @@ async function labelImage(cfg, rec) {
       + (hint ? `\ncaption: ${hint}` : '')
       + '\nDescribe it.',
     images: [{ mediaType: sending === bytes ? (rec.mimetype || 'image/jpeg') : 'image/jpeg', data: sending.toString('base64') }],
-    schema: IMAGE_SCHEMA, schemaName: 'image_label', maxTokens: 400,
+    // A photographed spec sheet or price list fills text_in_image with the
+    // whole page. At 400 the reply stops mid-string, and a truncated answer is
+    // not valid JSON — the item fails three times and is given up on, for
+    // being too informative. The ceiling only costs anything when it is used.
+    schema: IMAGE_SCHEMA, schemaName: 'image_label', maxTokens: 900,
   });
   ai.putLabel({ kind: 'image', refId: rec.id, contentHash: hash, label: res.json, model: cfg.model, provider: cfg.provider, usage: res.usage, cost: res.cost });
   return { usage: res.usage, cost: res.cost, costCap: res.costCap };
