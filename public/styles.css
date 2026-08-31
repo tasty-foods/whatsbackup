@@ -554,7 +554,9 @@ body.status-active .media-only { display: none !important; }
 .tagbar .chip.clear { font-size: 12px; padding: 4px 10px; background: none; border-style: dashed; opacity: .7; }
 
 /* Overview ---------------------------------------------------------------- */
-.overview { padding: 18px 18px 40px; overflow-y: auto; }
+/* No overflow of its own: the shell scrolls the document under a sticky top
+   bar, and a nested scroll container here takes the page out from under it. */
+.overview { padding: 16px 20px 40px; max-width: 1280px; margin: 0 auto; }
 .overview.hidden { display: none; }
 
 .ov-stats { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 22px; }
