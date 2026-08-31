@@ -319,3 +319,126 @@ code { font-family: var(--mono); font-size: .84em; background: var(--paper-2); p
 .cform input::placeholder,.cform textarea::placeholder{color:var(--ink-3,#6b6455);opacity:.55}
 .cform .actions{display:flex;flex-wrap:wrap;align-items:center;gap:clamp(14px,2vw,22px)}
 @media (max-width:640px){.cform{grid-template-columns:1fr}}
+
+/* ═══ § 04 · Status Studio ══════════════════════════════════════════════════
+   The rest of the site is a contact sheet: things that were photographed and
+   filed. This section is the one that goes back out, so it is cut as film —
+   a strip of frames in the order they leave, at the shape they leave in. The
+   card colours are the four the app actually renders, not decoration. */
+
+.reel { margin: 0 0 clamp(28px, 5vw, 48px); }
+
+.reel-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: 16px; flex-wrap: wrap;
+  font: 600 11px/1.4 var(--mono);
+  letter-spacing: .14em; text-transform: uppercase;
+  color: var(--ink-3);
+  padding-bottom: 10px;
+}
+.reel-slate { color: var(--accent); }
+
+/* The film base. Perforations are drawn, not images, so they stay crisp. */
+/* flex-start, or the frames are stretched to the strip's height and the 9:16
+   card plus its caption overflow into the sprocket edge and get clipped. */
+.strip {
+  display: flex; align-items: flex-start; gap: clamp(10px, 1.6vw, 18px);
+  padding: clamp(16px, 2.4vw, 26px) clamp(14px, 2vw, 22px);
+  background: #17140f;
+  /* Under safelight the base is nearly the page colour, and the strip loses its edge; a hairline keeps it reading as film in both. */
+  border: 1px solid #2a251c;
+  border-radius: 4px;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+  position: relative;
+  background-image:
+    repeating-linear-gradient(to right, #17140f 0 14px, #cbc3ae 14px 24px, #17140f 24px 38px),
+    repeating-linear-gradient(to right, #17140f 0 14px, #cbc3ae 14px 24px, #17140f 24px 38px);
+  background-repeat: repeat-x, repeat-x;
+  background-size: 38px 9px, 38px 9px;
+  background-position: 0 6px, 0 calc(100% - 6px);
+}
+.strip::-webkit-scrollbar { height: 8px; }
+.strip::-webkit-scrollbar-track { background: #221e17; }
+.strip::-webkit-scrollbar-thumb { background: #4a4234; border-radius: 4px; }
+
+.reel-frame { flex: 0 0 auto; width: clamp(122px, 15vw, 168px); scroll-snap-align: start; }
+
+/* 9:16 — the shape a status actually is. */
+.reel-card {
+  aspect-ratio: 9 / 16;
+  border-radius: 3px;
+  padding: 14px 12px;
+  display: flex; flex-direction: column; justify-content: space-between;
+  overflow: hidden;
+  box-shadow: 0 1px 0 rgba(255,255,255,.07) inset;
+}
+.reel-line {
+  margin: 0; font: 500 clamp(11px, 1.15vw, 13px)/1.35 var(--serif);
+  text-wrap: balance;
+}
+.reel-sig {
+  margin: 0; font: 600 8.5px/1 var(--mono);
+  letter-spacing: .16em; text-transform: uppercase; opacity: .72;
+}
+
+/* The four the renderer ships. */
+.reel-card.is-gradient { background: linear-gradient(160deg,#075e54 0%,#128c7e 55%,#1fa855 100%); color: #fff; }
+.reel-card.is-night    { background: radial-gradient(120% 120% at 30% 20%, #1b242e 0%, #0b0f14 70%); color: #e7edf3; }
+.reel-card.is-paper    { background: linear-gradient(180deg,#f7f3e9 0%, #efe7d6 100%); color: #2b2418; }
+.reel-card.is-bold     { background: linear-gradient(150deg,#c8452a 0%, #8f2f1c 100%); color: #fff6f3; }
+
+/* A picture-post, shown as the frame it occupies rather than a stock photo. */
+.reel-card.is-photo {
+  background: linear-gradient(150deg,#5c6b4f 0%, #6f7d5c 100%);
+  align-items: center; justify-content: center;
+}
+.reel-card.is-photo.is-alt { background: linear-gradient(150deg,#6a5a72 0%, #7d6a83 100%); }
+.reel-kind {
+  font: 600 8.5px/1 var(--mono); letter-spacing: .2em;
+  color: rgba(255,255,255,.82);
+  border: 1px solid rgba(255,255,255,.34);
+  border-radius: 2px; padding: 5px 8px;
+}
+
+.reel-foot {
+  display: flex; flex-direction: column; gap: 1px;
+  padding-top: 9px;
+  font: 11px/1.3 var(--mono); color: #b3aa95;
+}
+.reel-foot b { color: #efe9da; font-weight: 700; letter-spacing: .04em; }
+.reel-foot span { font-size: 10px; letter-spacing: .06em; }
+
+.reel-note {
+  margin: 14px 0 0; max-width: var(--measure);
+  color: var(--ink-2); font-size: .95rem;
+}
+
+/* The brakes, given the same weight as the feature. */
+.callsheet {
+  margin-top: clamp(26px, 4vw, 40px);
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--accent);
+  background: var(--paper-2);
+  padding: clamp(18px, 2.6vw, 28px);
+  border-radius: 2px;
+}
+.callsheet-title {
+  margin: 0 0 14px;
+  font: 600 11px/1 var(--mono); letter-spacing: .16em; text-transform: uppercase;
+  color: var(--accent);
+}
+.callsheet ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 11px; }
+.callsheet li {
+  display: grid; grid-template-columns: minmax(0, 15rem) 1fr; gap: 4px 22px;
+  padding-bottom: 11px; border-bottom: 1px solid var(--rule);
+}
+.callsheet li:last-child { border-bottom: 0; padding-bottom: 0; }
+.callsheet li b { font-weight: 700; }
+.callsheet li span { color: var(--ink-2); }
+.callsheet-foot { margin: 16px 0 0; font-size: .9rem; color: var(--ink-3); }
+
+@media (max-width: 640px) {
+  .callsheet li { grid-template-columns: 1fr; gap: 2px; }
+}
