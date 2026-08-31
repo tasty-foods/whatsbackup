@@ -148,8 +148,13 @@ async function arrange(cfg, kind, entries, { signal } = {}) {
     }
   }
 
-  // Enough room for group names plus a few hundred small integers.
-  const maxTokens = Math.min(8000, 1200 + entries.length * 6);
+  // Enough room for group names plus a few hundred small integers. Six tokens
+  // an item was measured against lists of two hundred; at four hundred the
+  // same sum gave 3,618 and the answer stopped mid-array, which reads as
+  // invalid JSON and loses the whole pass. An item costs its number in a
+  // members array plus its share of the group it lands in, so the allowance
+  // per item is doubled and the ceiling raised to match.
+  const maxTokens = Math.min(16000, 2000 + entries.length * 12);
   const res = await complete(cfg, { system: SYSTEM, user, schema: ARRANGE_SCHEMA, schemaName: 'arrangement', maxTokens, signal });
 
   const { groups, placed } = validate(res.json, entries.length);

@@ -107,6 +107,13 @@ async function completeAnthropic(cfg, req) {
   }
 
   const text = (res.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('');
+  // A reply that ran out of room is not a reply in the wrong shape, and saying
+  // so sends the reader to the wrong problem. The half that arrived is real
+  // JSON up to the point it stops, which is exactly what makes it unparseable.
+  if (res.stop_reason === 'max_tokens') {
+    throw new AiError('Anthropic ran out of room mid-answer (' + (res.usage && res.usage.output_tokens)
+      + ' tokens) — the reply was cut off, not malformed.', { kind: 'length', retryable: false });
+  }
   return {
     json: req.schema ? parseJson(text) : null,
     text,
