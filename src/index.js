@@ -40,6 +40,9 @@ const server = app.listen(cfg.PORT, '127.0.0.1', () => {
   // New captures trickle through the labeller when the user asked for that.
   setInterval(() => { try { require('./ai').kick(); } catch (_) {} }, 60000);
 
+  // The status scheduler: armed always, inert until enabled + consented.
+  try { require('./status/scheduler').init(); } catch (e) { console.error('[status] failed to start:', e.message); }
+
   // Run the history import on a schedule when one is set. Checked every ten
   // minutes rather than timed exactly: the machine sleeps, and a missed hour
   // should mean "run it now", not "wait for the next tick a day later".

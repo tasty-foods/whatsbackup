@@ -152,6 +152,21 @@ function digest(chatId, { recent = 30, spread = 30, chars = 200 } = {}) {
   }).join('\n');
 }
 
+// The last two days across every chat, one line per message, for the status
+// writer's optional context. Chat-aware is opt-in and this is all it sees:
+// short lines, newest last, capped hard — enough to be topical, not a feed.
+function recentDigest({ hours = 48, limit = 60, chars = 160 } = {}) {
+  init();
+  const since = Date.now() - hours * 3600000;
+  const rows = db.prepare(`SELECT chat_name, from_me, author, body, ts FROM messages
+    WHERE ts >= ? AND COALESCE(body,'') != '' ORDER BY ts DESC LIMIT ?`).all(since, limit);
+  rows.reverse();
+  return rows.map((r) => {
+    const who = r.from_me ? 'me' : (r.author || r.chat_name || 'them');
+    return `[${r.chat_name || '?'} · ${who}] ${String(r.body).replace(/\s+/g, ' ').slice(0, chars)}`;
+  }).join('\n');
+}
+
 // Chats that actually have something to read. A chat of nothing but photos has
 // no text to summarise, so it should never be counted or costed as work.
 function chatsWithText() {
@@ -170,5 +185,5 @@ function chatFingerprint(chatId) {
 
 module.exports = {
   init, addMessage, addMany, listChats, getThread, getNewer, search, counts, allForExport,
-  handle, digest, chatFingerprint, chatsWithText,
+  handle, digest, recentDigest, chatFingerprint, chatsWithText,
 };

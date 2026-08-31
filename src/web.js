@@ -84,6 +84,19 @@ const SETTING_SPEC = {
   aiAnalyseChats: { type: 'bool' },
   aiMonthlyBudget: { type: 'int', min: 0, max: 10000 },
   aiJsonSchema: { type: 'bool' },
+  statusEnabled: { type: 'bool' },
+  statusConsent: { type: 'bool' },
+  statusPaused: { type: 'bool' },
+  statusDryRun: { type: 'bool' },
+  statusMaxPerDay: { type: 'int', min: 1, max: 12 },
+  statusMinGapMin: { type: 'int', min: 10, max: 720 },
+  statusCatchupMin: { type: 'int', min: 5, max: 720 },
+  statusQuietFrom: { type: 'path' },
+  statusQuietTo: { type: 'path' },
+  statusFolder: { type: 'path' },
+  statusFooter: { type: 'path' },
+  statusAiPrompt: { type: 'path' },
+  statusAiChatAware: { type: 'bool' },
 };
 
 function coerce(spec, value) {
@@ -141,6 +154,7 @@ function createApp() {
   };
   app.get('/media/videos/:name', (req, res) => serveFrom([cfg.VIDEO_DIR, cfg.LOCAL_VIDEO_DIR])(req, res));
   app.get('/media/files/:name', (req, res) => serveFrom([cfg.FILES_DIR])(req, res));
+  app.get('/media/status/:name', (req, res) => serveFrom([require('./status/renderer').STATUS_DIR])(req, res));
 
   // The dashboard's own files must never be served from a stale cache: after an
   // update the browser could hold yesterday's app.js against today's index.html,
@@ -261,6 +275,76 @@ function createApp() {
     if (st.backfill.running) return res.json({ ok: true, alreadyRunning: true });
     Promise.resolve(runBackfill(limit)).catch((e) => console.error('[history] import crashed:', e.message));
     res.json({ ok: true, started: true });
+  });
+
+  // ---- Status Studio ----
+  const statusMod = () => require('./status/scheduler');
+  const statusStore = () => require('./status/store');
+
+  app.get('/api/status/summary', (req, res) => {
+    try { res.json(statusMod().summary()); } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+  app.get('/api/status/slots', (req, res) => res.json(statusStore().listSlots()));
+  app.post('/api/status/slots', sameOrigin, (req, res) => {
+    const b = req.body || {};
+    try {
+      if (b.id) {
+        statusStore().updateSlot(b.id, { ...b, nextRunAt: null });   // times changed: recompute on next tick
+        return res.json({ ok: true, id: b.id });
+      }
+      const id = statusStore().addSlot(b);
+      res.json({ ok: true, id });
+    } catch (e) { res.status(400).json({ ok: false, error: e.message }); }
+  });
+  app.post('/api/status/slots/delete', sameOrigin, (req, res) => {
+    statusStore().deleteSlot((req.body || {}).id);
+    res.json({ ok: true });
+  });
+
+  app.get('/api/status/queue', (req, res) => res.json(statusStore().listQueue()));
+  app.post('/api/status/queue', sameOrigin, (req, res) => {
+    const b = req.body || {};
+    try {
+      let item = null;
+      if (b.recordId) {
+        const rec = store.get(b.recordId);
+        if (!rec) return res.status(404).json({ ok: false, error: 'No such gallery item.' });
+        if (rec.kind !== 'image' && rec.kind !== 'video') return res.status(400).json({ ok: false, error: 'Only photos and videos can be queued.' });
+        const base = rec.kind === 'video' ? cfg.VIDEO_DIR : cfg.IMAGES_DIR;
+        item = { type: rec.kind, body: path.join(base, rec.filename), caption: b.caption || '' };
+      } else if (b.text) {
+        item = { type: 'text', body: String(b.text).slice(0, 700), template: b.template || 'gradient' };
+      } else {
+        return res.status(400).json({ ok: false, error: 'Send text or a gallery recordId.' });
+      }
+      const id = statusStore().enqueue(item);
+      res.json({ ok: true, id });
+    } catch (e) { res.status(400).json({ ok: false, error: e.message }); }
+  });
+  app.post('/api/status/queue/delete', sameOrigin, (req, res) => {
+    statusStore().removeQueued((req.body || {}).id);
+    res.json({ ok: true });
+  });
+  app.post('/api/status/queue/reorder', sameOrigin, (req, res) => {
+    const ids = (req.body || {}).ids;
+    if (Array.isArray(ids)) statusStore().reorderQueue(ids.map(Number));
+    res.json({ ok: true });
+  });
+
+  app.get('/api/status/history', (req, res) => res.json(statusStore().listHistory(80)));
+  app.get('/api/status/templates', (req, res) => res.json(require('./status/renderer').TEMPLATE_NAMES));
+
+  app.post('/api/status/preview', sameOrigin, async (req, res) => {
+    try { res.json(await statusMod().preview(req.body || {})); }
+    catch (e) { res.status(400).json({ error: e.message }); }
+  });
+  // Posting is the one outward-facing thing this app does; it stays behind the
+  // consent switch even here, so no API call can jump the notice.
+  app.post('/api/status/test', sameOrigin, async (req, res) => {
+    const st = settings.read();
+    if (!st.statusConsent) return res.status(403).json({ ok: false, error: 'Accept the status notice first.' });
+    try { res.json(await statusMod().postNow(req.body || {})); }
+    catch (e) { res.status(400).json({ ok: false, error: e.message }); }
   });
 
   // ---- Connection ----

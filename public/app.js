@@ -267,8 +267,15 @@ function showCurrent() {
     <span class="m-sub">${r.dir === 'out' ? 'Sent' : 'Received'} · ${new Date(r.ts).toLocaleString()} · ${sizeKb}${cloudTag}</span>
     ${aiBlock}
     ${typeof AI !== 'undefined' && AI.groups().length ? AI.albumPicker(r) : ''}
-    <a href="${r.serve}" download>⭳ Download</a>`;
+    <a href="${r.serve}" download>⭳ Download</a>
+    ${(r.kind === 'image' || r.kind === 'video') ? '<a href="#" id="lb-queue-status" title="Add to the status queue">📣 Queue as status</a>' : ''}`;
   if (typeof AI !== 'undefined') AI.bindAlbumPicker(r);
+  const qs = document.getElementById('lb-queue-status');
+  if (qs) qs.addEventListener('click', async (e) => {
+    e.preventDefault();
+    const resp = await fetch('/api/status/queue', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recordId: r.id }) }).then((x) => x.json());
+    qs.textContent = resp.ok ? '✓ In the status queue' : ('✗ ' + (resp.error || 'failed'));
+  });
   els.lbPrev.style.visibility = i > 0 ? 'visible' : 'hidden';
   els.lbNext.style.visibility = i < filteredCache.length - 1 ? 'visible' : 'hidden';
 }
@@ -781,9 +788,13 @@ function setView(v) {
   [...V.toggle.children].forEach((c) => c.classList.toggle('active', c.dataset.v === v));
   V.media.classList.toggle('hidden', v !== 'media');
   V.convo.classList.toggle('hidden', v !== 'convo');
+  const statusEl = document.getElementById('view-status');
+  if (statusEl) statusEl.classList.toggle('hidden', v !== 'status');
   document.body.classList.toggle('convo-active', v === 'convo');
-  els.search.classList.toggle('hidden', v === 'convo');
+  document.body.classList.toggle('status-active', v === 'status');
+  els.search.classList.toggle('hidden', v !== 'media');
   if (v === 'convo') Convo.enter();
+  if (v === 'status' && typeof StatusView !== 'undefined') StatusView.enter();
 }
 
 /* ---------- Conversations ---------- */
@@ -1709,4 +1720,237 @@ async function refreshUpdateStatus() {
   });
   refreshUpdateStatus();
   setInterval(refreshUpdateStatus, 15000);
+})();
+
+/* ---------- Status Studio -------------------------------------------------
+   The dashboard for automated statuses. Everything here talks to the engine
+   over the same local API as the rest; nothing posts unless consent is on,
+   and nothing posts for real while dry-run is on. */
+const StatusView = (function () {
+  const $$id = (x) => document.getElementById(x);
+  const els2 = {
+    consent: $$id('st-consent'), consentCheck: $$id('st-consent-check'), consentGo: $$id('st-consent-go'),
+    main: $$id('st-main'),
+    pillMode: $$id('st-pill-mode'), pillToday: $$id('st-pill-today'), pillNext: $$id('st-pill-next'),
+    dryrun: $$id('st-dryrun'), paused: $$id('st-paused'),
+    text: $$id('st-text'), templates: $$id('st-templates'),
+    postNow: $$id('st-post-now'), queueAdd: $$id('st-queue-add'), composeNote: $$id('st-compose-note'),
+    aiPrompt: $$id('st-ai-prompt'), chatAware: $$id('st-chat-aware'), aiWrite: $$id('st-ai-write'), aiNote: $$id('st-ai-note'),
+    slots: $$id('st-slots'), folderLine: $$id('st-folder-line'),
+    nsKind: $$id('ns-kind'), nsWeekday: $$id('ns-weekday'), nsAt: $$id('ns-at'), nsEvery: $$id('ns-every'),
+    nsSource: $$id('ns-source'), nsAlbum: $$id('ns-album'), nsAdd: $$id('ns-add'),
+    queue: $$id('st-queue'), queueCount: $$id('st-queue-count'),
+    history: $$id('st-history'),
+  };
+  if (!els2.main) return { enter() {} };
+
+  let template = 'gradient';
+  let sum = null;
+
+  const jpost = (url, body) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) }).then((r) => r.json());
+  const saveSetting = (patch) => jpost('/api/settings', patch);
+
+  /* ---- header pills ---- */
+  function renderSummary() {
+    if (!sum) return;
+    els2.pillMode.textContent = sum.dryRun ? 'dry run — nothing sends' : 'LIVE';
+    els2.pillMode.className = 'pill ' + (sum.dryRun ? 'warn' : 'live');
+    els2.pillToday.textContent = `${sum.postsToday} posted today`;
+    const nexts = (sum.slots || []).filter((s) => s.enabled && s.next_run_at).map((s) => s.next_run_at).sort();
+    els2.pillNext.textContent = nexts.length ? 'next: ' + new Date(nexts[0]).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' }) : 'no schedule yet';
+    els2.dryrun.checked = !!sum.dryRun;
+    els2.paused.checked = !!sum.paused;
+    els2.folderLine.textContent = 'Drop folder: ' + sum.folder + ' — anything saved there becomes the next folder-post.';
+  }
+
+  /* ---- template swatches ---- */
+  const TPLS = [['gradient', 'Green'], ['night', 'Night'], ['paper', 'Paper'], ['bold', 'Bold'], ['native', 'Plain text']];
+  function renderTemplates() {
+    els2.templates.innerHTML = TPLS.map(([id, label]) =>
+      `<div class="st-tpl${template === id ? ' sel' : ''}" data-t="${id}" title="${label}">${label}</div>`).join('');
+  }
+  els2.templates.addEventListener('click', (e) => {
+    const el = e.target.closest('.st-tpl');
+    if (!el) return;
+    template = el.dataset.t;
+    renderTemplates();
+  });
+
+  /* ---- slots ---- */
+  const KINDS = { daily: 'Every day', weekly: 'Weekly', interval: 'Every N hours' };
+  const SRC = { queue: 'from the queue', folder: 'from the drop folder', album: 'from an album', ai: 'AI writes it' };
+  const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  function slotWhen(s) {
+    if (s.kind === 'interval') return `every ${s.every_hours || '?'}h`;
+    if (s.kind === 'weekly') return `${DAYS[s.weekday ?? 1]} ${s.at}`;
+    return `daily ${s.at}`;
+  }
+  function renderSlots() {
+    const slots = (sum && sum.slots) || [];
+    els2.slots.innerHTML = slots.length ? '' : '<p class="muted small">No schedule yet — add one below. Until then, only “Post now” posts.</p>';
+    for (const s of slots) {
+      const row = document.createElement('div');
+      row.className = 'st-slot';
+      const albumNote = s.source === 'album' && s.config && s.config.albumName ? ` · ${escapeHtml(s.config.albumName)}` : '';
+      row.innerHTML = `<label class="row toggle" style="margin:0"><input type="checkbox" ${s.enabled ? 'checked' : ''}><span class="switch"></span></label>
+        <span class="when">${slotWhen(s)}</span>
+        <span class="src">${SRC[s.source] || s.source}${albumNote}</span>
+        <span class="next">${s.enabled && s.next_run_at ? new Date(s.next_run_at).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' }) : ''}</span>
+        <button title="Remove">✕</button>`;
+      row.querySelector('input').addEventListener('change', async (e) => {
+        await jpost('/api/status/slots', { ...s, enabled: e.target.checked, config: s.config });
+        refresh();
+      });
+      row.querySelector('button').addEventListener('click', async () => {
+        await jpost('/api/status/slots/delete', { id: s.id });
+        refresh();
+      });
+      els2.slots.appendChild(row);
+    }
+  }
+
+  els2.nsKind.addEventListener('change', () => {
+    els2.nsWeekday.classList.toggle('hidden', els2.nsKind.value !== 'weekly');
+    els2.nsAt.classList.toggle('hidden', els2.nsKind.value === 'interval');
+    els2.nsEvery.classList.toggle('hidden', els2.nsKind.value !== 'interval');
+  });
+  els2.nsSource.addEventListener('change', async () => {
+    const isAlbum = els2.nsSource.value === 'album';
+    els2.nsAlbum.classList.toggle('hidden', !isAlbum);
+    if (isAlbum && typeof AI !== 'undefined') {
+      const groups = AI.groups() || [];
+      els2.nsAlbum.innerHTML = groups.length
+        ? groups.map((g) => `<option value="${escapeHtml(g.id)}">${escapeHtml((g.emoji ? g.emoji + ' ' : '') + g.name)}</option>`).join('')
+        : '<option value="">no albums yet — run sorting first</option>';
+    }
+  });
+  els2.nsAdd.addEventListener('click', async () => {
+    const kind = els2.nsKind.value;
+    const source = els2.nsSource.value;
+    const config = {};
+    if (source === 'ai') { config.prompt = ''; config.template = template === 'native' ? 'gradient' : template; }
+    if (source === 'album') {
+      config.albumId = els2.nsAlbum.value;
+      const opt = els2.nsAlbum.selectedOptions[0];
+      config.albumName = opt ? opt.textContent : '';
+      if (!config.albumId) return;
+    }
+    await jpost('/api/status/slots', {
+      kind, at: els2.nsAt.value || '09:00',
+      weekday: kind === 'weekly' ? parseInt(els2.nsWeekday.value, 10) : null,
+      everyHours: kind === 'interval' ? parseInt(els2.nsEvery.value, 10) || 6 : null,
+      source, config,
+    });
+    refresh();
+  });
+
+  /* ---- queue ---- */
+  async function renderQueue() {
+    const q = await (await fetch('/api/status/queue')).json();
+    els2.queueCount.textContent = q.length ? `· ${q.length} waiting` : '';
+    els2.queue.innerHTML = q.length ? '' : '<p class="muted small">Empty. “Add to queue” above, or queue any photo from its lightbox.</p>';
+    for (const item of q) {
+      const row = document.createElement('div');
+      row.className = 'st-qitem';
+      const what = item.type === 'text'
+        ? `“${escapeHtml(item.body.slice(0, 70))}”`
+        : `${item.type}: ${escapeHtml(decodeURIComponent(String(item.body).split(/[\\/]/).pop()))}`;
+      row.innerHTML = `<span class="what">${what}</span><button title="Remove">✕</button>`;
+      row.querySelector('button').addEventListener('click', async () => {
+        await jpost('/api/status/queue/delete', { id: item.id });
+        renderQueue();
+      });
+      els2.queue.appendChild(row);
+    }
+  }
+
+  /* ---- history ---- */
+  async function renderHistory() {
+    const h = await (await fetch('/api/status/history')).json();
+    els2.history.innerHTML = h.length ? '' : '<p class="muted small">Nothing yet. The first post — real or dry-run — lands here.</p>';
+    for (const row of h) {
+      const el = document.createElement('div');
+      el.className = 'st-hitem';
+      const tag = row.ok ? (row.dry ? '<span class="tag dry">dry run</span>' : '<span class="tag ok">posted</span>') : '<span class="tag fail">failed</span>';
+      const thumb = row.card_file ? `<img loading="lazy" src="/media/status/${encodeURIComponent(row.card_file)}">` : '';
+      const line = row.type === 'skip' || row.type === 'error'
+        ? escapeHtml(row.error || '')
+        : escapeHtml(row.body ? String(row.body).split(/[\\/]/).pop().slice(0, 80) : (row.type || ''));
+      el.innerHTML = `${thumb}<div class="what"><div class="l1">${line}</div>
+        <div class="when">${new Date(row.at).toLocaleString()} · ${escapeHtml(row.source || '')}</div></div>${tag}`;
+      els2.history.appendChild(el);
+    }
+  }
+
+  /* ---- compose actions ---- */
+  els2.postNow.addEventListener('click', async () => {
+    const text = els2.text.value.trim();
+    if (!text) { els2.composeNote.textContent = 'Write something first.'; return; }
+    els2.composeNote.textContent = sum && sum.dryRun ? 'Dry run…' : 'Posting…';
+    const r = await jpost('/api/status/test', { direct: { type: 'text', text, template } });
+    els2.composeNote.textContent = r.ok ? (r.dry ? 'Dry run recorded — see history.' : 'Posted ✓') : ('Failed: ' + (r.error || ''));
+    if (r.ok) els2.text.value = '';
+    refresh();
+  });
+  els2.queueAdd.addEventListener('click', async () => {
+    const text = els2.text.value.trim();
+    if (!text) { els2.composeNote.textContent = 'Write something first.'; return; }
+    const r = await jpost('/api/status/queue', { text, template });
+    els2.composeNote.textContent = r.ok ? 'Queued.' : ('Failed: ' + (r.error || ''));
+    if (r.ok) els2.text.value = '';
+    renderQueue();
+  });
+  els2.aiWrite.addEventListener('click', async () => {
+    const prompt = els2.aiPrompt.value.trim();
+    if (!prompt) { els2.aiNote.textContent = 'Give it instructions first.'; return; }
+    els2.aiNote.textContent = 'Writing…';
+    await saveSetting({ statusAiPrompt: prompt, statusAiChatAware: els2.chatAware.checked });
+    const r = await jpost('/api/status/preview', { source: 'ai', config: { prompt, template } });
+    if (r.error) { els2.aiNote.textContent = r.error; return; }
+    els2.text.value = r.text || '';
+    els2.aiNote.textContent = 'Draft ready — edit it, then Post now or queue it.';
+  });
+
+  /* ---- toggles ---- */
+  els2.dryrun.addEventListener('change', async () => {
+    if (!els2.dryrun.checked && !confirm('Go live?\n\nScheduled and manual posts will really be published to your status from now on.')) {
+      els2.dryrun.checked = true;
+      return;
+    }
+    await saveSetting({ statusDryRun: els2.dryrun.checked });
+    refresh();
+  });
+  els2.paused.addEventListener('change', async () => {
+    await saveSetting({ statusPaused: els2.paused.checked });
+    refresh();
+  });
+
+  /* ---- consent gate ---- */
+  els2.consentCheck.addEventListener('change', () => { els2.consentGo.disabled = !els2.consentCheck.checked; });
+  els2.consentGo.addEventListener('click', async () => {
+    await saveSetting({ statusConsent: true, statusEnabled: true });
+    enter();
+  });
+
+  /* ---- entry ---- */
+  async function refresh() {
+    try { sum = await (await fetch('/api/status/summary')).json(); } catch (e) { return; }
+    renderSummary(); renderSlots(); renderQueue(); renderHistory();
+  }
+  async function enter() {
+    let consent = false;
+    try { consent = (await (await fetch('/api/status/summary')).json()).consent; } catch (e) {}
+    els2.consent.classList.toggle('hidden', consent);
+    els2.main.classList.toggle('hidden', !consent);
+    if (consent) {
+      const s2 = await (await fetch('/api/settings')).json();
+      els2.aiPrompt.value = s2.settings.statusAiPrompt || '';
+      els2.chatAware.checked = !!s2.settings.statusAiChatAware;
+      renderTemplates();
+      refresh();
+    }
+  }
+
+  setInterval(() => { if (currentView === 'status' && sum) refresh(); }, 30000);
+  return { enter, refresh };
 })();

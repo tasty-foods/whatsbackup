@@ -20,6 +20,7 @@
       <div class="tabs viewtoggle" id="viewtoggle">
         <button data-v="media" class="active">🖼 Media</button>
         <button data-v="convo">💬 Conversations</button>
+        <button data-v="status">📣 Status</button>
       </div>
       <input id="search" type="search" placeholder="Filter by chat / contact…" autocomplete="off" />
       <div class="tabs media-only" id="tabs">
@@ -118,6 +119,109 @@
         <div class="thread-placeholder">Pick a chat on the left to read the conversation. Text stays on this PC; media opens from your gallery.</div>
       </div>
     </section>
+  </div>
+
+  <!-- ===== Status Studio ===== -->
+  <div id="view-status" class="statusview hidden">
+
+    <!-- The notice. Automated posting is the one thing this app does outward,
+         so it gets its own consent, its own words, and dry-run as the default. -->
+    <section id="st-consent" class="link">
+      <div class="link-card" style="max-width:560px;text-align:left">
+        <h2>Post your status automatically</h2>
+        <p class="muted">Before switching this on, the honest version:</p>
+        <ul class="muted" style="padding-left:20px;line-height:1.6">
+          <li>Statuses will be posted <b>from your account</b>, on the schedule you set, visible to whoever your WhatsApp status privacy allows.</li>
+          <li>This uses the same unofficial connection as capture. Automated posting looks more bot-like than reading ever did — the small ban risk is <b>somewhat higher</b> here.</li>
+          <li>Nothing posts while <b>dry run</b> is on: the app does everything except send, and the history shows what <i>would</i> have gone out. Going live is a separate switch.</li>
+          <li>AI-written statuses use your configured AI provider and count against the same monthly budget. The optional chat-aware mode sends a two-day digest of recent messages to that provider — it is a separate toggle, off by default.</li>
+        </ul>
+        <label class="row toggle" style="margin-top:14px">
+          <input type="checkbox" id="st-consent-check" />
+          <span class="switch"></span>
+          <span>I understand — posting happens from my account</span>
+        </label>
+        <div class="wz-actions">
+          <button class="btn primary" id="st-consent-go" disabled>Open Status Studio</button>
+        </div>
+      </div>
+    </section>
+
+    <div id="st-main" class="hidden">
+      <div class="st-head">
+        <div class="st-pills">
+          <span class="pill" id="st-pill-mode">dry run</span>
+          <span class="pill" id="st-pill-today"></span>
+          <span class="pill" id="st-pill-next"></span>
+        </div>
+        <div class="st-actions">
+          <label class="row toggle" title="Everything runs, nothing sends"><input type="checkbox" id="st-dryrun" /><span class="switch"></span><span>Dry run</span></label>
+          <label class="row toggle"><input type="checkbox" id="st-paused" /><span class="switch"></span><span>Paused</span></label>
+        </div>
+      </div>
+
+      <div class="st-grid">
+
+        <section class="st-card" id="st-compose">
+          <h3>Compose</h3>
+          <textarea id="st-text" rows="3" placeholder="Type a status — or press ✨ to let the AI write from your instructions below"></textarea>
+          <div class="st-templates" id="st-templates"></div>
+          <div class="row st-row">
+            <button class="btn primary" id="st-post-now">Post now</button>
+            <button class="btn" id="st-queue-add">Add to queue</button>
+            <span class="muted small" id="st-compose-note"></span>
+          </div>
+          <div class="st-ai">
+            <div class="sec-title small">✨ AI writer</div>
+            <textarea id="st-ai-prompt" rows="2" placeholder="e.g. A short warm daily greeting for my customers, in Dutch. Mention it's {weekday}."></textarea>
+            <label class="row toggle small"><input type="checkbox" id="st-chat-aware" /><span class="switch"></span>
+              <span>Chat-aware — may read a 2-day digest of recent messages for context</span></label>
+            <div class="row st-row">
+              <button class="btn" id="st-ai-write">✨ Write one</button>
+              <span class="muted small" id="st-ai-note"></span>
+            </div>
+          </div>
+        </section>
+
+        <section class="st-card" id="st-planner">
+          <h3>Schedule</h3>
+          <div id="st-slots"></div>
+          <div class="st-newslot">
+            <select id="ns-kind">
+              <option value="daily">Every day</option>
+              <option value="weekly">Weekly</option>
+              <option value="interval">Every N hours</option>
+            </select>
+            <select id="ns-weekday" class="hidden">
+              <option value="1">Mon</option><option value="2">Tue</option><option value="3">Wed</option>
+              <option value="4">Thu</option><option value="5">Fri</option><option value="6">Sat</option><option value="0">Sun</option>
+            </select>
+            <input id="ns-at" type="time" value="09:00" />
+            <input id="ns-every" type="number" min="1" max="48" value="6" class="hidden num" title="hours" />
+            <select id="ns-source">
+              <option value="queue">from the queue</option>
+              <option value="folder">from the drop folder</option>
+              <option value="album">from an album</option>
+              <option value="ai">AI writes it</option>
+            </select>
+            <select id="ns-album" class="hidden"></select>
+            <button class="btn" id="ns-add">Add</button>
+          </div>
+          <p class="muted small" id="st-folder-line"></p>
+        </section>
+
+        <section class="st-card" id="st-queue-card">
+          <h3>Queue <span class="muted small" id="st-queue-count"></span></h3>
+          <div id="st-queue"></div>
+        </section>
+
+        <section class="st-card" id="st-history-card">
+          <h3>History</h3>
+          <div id="st-history"></div>
+        </section>
+
+      </div>
+    </div>
   </div>
 
   <!-- Lightbox -->

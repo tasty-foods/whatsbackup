@@ -61,6 +61,22 @@ const DEFAULTS = {
   logMaxMB: 5,
   retentionDays: 0,          // 0 = keep everything
 
+  // Status Studio. Off until the notice is accepted, and dry-run until the
+  // user deliberately goes live — the two most reversible defaults there are.
+  statusEnabled: false,
+  statusConsent: false,
+  statusPaused: false,
+  statusDryRun: true,
+  statusMaxPerDay: 3,
+  statusMinGapMin: 120,
+  statusCatchupMin: 120,
+  statusQuietFrom: '',
+  statusQuietTo: '',
+  statusFolder: '',
+  statusFooter: '',
+  statusAiPrompt: '',
+  statusAiChatAware: false,
+
   // First run
   setupComplete: false,
   consentAccepted: false,

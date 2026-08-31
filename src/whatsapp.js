@@ -419,6 +419,34 @@ async function runBackfill(limitPerChat) {
   return backfill;
 }
 
+// ---------- status stories ----------
+// The one door through which a status leaves this machine. Content is
+// {type:'text'|'image'|'video', text?, filePath?, caption?}. The library has
+// first-class support — sendMessage to status@broadcast — and returns null
+// (with a console warning) rather than throwing when it refuses a type, so
+// null is turned back into an error the caller can log and count.
+async function sendStatus(content) {
+  if (!client) throw new Error('Not running');
+  if (state.status !== 'ready') throw new Error('Not linked — status ' + state.status);
+  const { MessageMedia } = require('whatsapp-web.js');
+  let payload;
+  const options = {};
+  if (content.type === 'text') {
+    payload = String(content.text || '').trim().slice(0, 700);
+    if (!payload) throw new Error('Empty status text');
+  } else {
+    payload = MessageMedia.fromFilePath(content.filePath);
+    if (content.caption) options.caption = String(content.caption).slice(0, 700);
+  }
+  const timeoutMs = content.type === 'video' ? 240000 : 90000;
+  const msg = await withTimeout(client.sendMessage('status@broadcast', payload, options), timeoutMs, 'status post');
+  if (!msg) throw new Error('WhatsApp refused this status type (see engine log)');
+  return { id: msgKey(msg), ts: msg.timestamp ? msg.timestamp * 1000 : Date.now() };
+}
+
+// The status-card renderer borrows the browser this client already owns.
+const getBrowser = () => (client && client.pupBrowser) || null;
+
 function buildClient() {
   // Chromium's sandbox works out of the box on Windows — the --no-sandbox pair
   // this used to carry are Linux/CI habits, and running unsandboxed while
@@ -528,4 +556,4 @@ function reconnectNow() {
   return { ok: true };
 }
 
-module.exports = { startClient, getState, runBackfill, unlink, reconnectNow };
+module.exports = { startClient, getState, runBackfill, unlink, reconnectNow, sendStatus, getBrowser };
