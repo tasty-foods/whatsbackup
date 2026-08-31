@@ -118,6 +118,10 @@ function validate(result, itemCount) {
   return { groups, placed: claimed.size };
 }
 
+// What of a local model's context can be spent on the list itself. Ollama's
+// default is 4096 for everything, and the reply needs room too.
+const LOCAL_PROMPT_TOKENS = 2800;
+
 // entries: [{ kind, refId, label, chat, when }]
 async function arrange(cfg, kind, entries, { signal } = {}) {
   if (entries.length < 4) return { groups: 0, placed: 0, unsorted: entries.length, note: 'too few items to group' };
@@ -125,6 +129,24 @@ async function arrange(cfg, kind, entries, { signal } = {}) {
   const list = entries.map((e, i) => factLine(i + 1, e)).join('\n');
   const user = `Here are ${entries.length} items.\n\n${list}${existingBlock(kind)}${housRules()}`
     + '\n\nGroup them. Refer to items by their number only.';
+
+  // A model on this machine answers 200 whatever it is sent: Ollama drops
+  // what will not fit its context from the front of the prompt and says
+  // nothing. Measured here, an 18,000-token list was reported back as 2,050
+  // tokens and answered from the tail of it alone. A set of albums built from
+  // the last tenth of the library, presented as if it had seen all of it, is
+  // worse than no albums at all — so this is not attempted blind. Existing
+  // albums are left exactly as they are.
+  if (cfg.local) {
+    const approx = Math.round((SYSTEM.length + user.length) / 4);
+    if (approx > LOCAL_PROMPT_TOKENS) {
+      return {
+        groups: 0, placed: 0, unsorted: entries.length, coverage: 0,
+        note: 'too many items to group on a model running here (' + entries.length + ' items, about '
+          + approx + ' tokens against a ' + LOCAL_PROMPT_TOKENS + ' budget) — the labels are all there, and the albums were left alone',
+      };
+    }
+  }
 
   // Enough room for group names plus a few hundred small integers.
   const maxTokens = Math.min(8000, 1200 + entries.length * 6);
