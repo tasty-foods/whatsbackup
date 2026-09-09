@@ -620,3 +620,5 @@ body.cleanup-active .media-only { display: none !important; }
 .cl-keep img { width: 22px; height: 22px; object-fit: cover; border-radius: 3px; }
 .cl-quar { margin-top: 26px; border-top: 1px solid var(--line); padding-top: 16px; }
 .cl-quar h3 { margin: 0 0 10px; font-size: 15px; }
+
+.badge.in.gm { background: rgba(66,133,244,.22); color: #cfe0ff; }

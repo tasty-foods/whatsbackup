@@ -53,6 +53,7 @@ const server = app.listen(cfg.PORT, '127.0.0.1', () => {
 
   // The second source. Inert until connected and enabled.
   try { require('./chatgpt').init(); } catch (e) { console.error('[chatgpt] failed to start:', e.message); }
+  try { require('./gemini').init(); } catch (e) { console.error('[gemini] failed to start:', e.message); }
 
   // Run the history import on a schedule when one is set. Checked every ten
   // minutes rather than timed exactly: the machine sleeps, and a missed hour

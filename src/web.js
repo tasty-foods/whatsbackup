@@ -102,6 +102,8 @@ const SETTING_SPEC = {
   statusAiChatAware: { type: 'bool' },
   chatgptEnabled: { type: 'bool' },
   chatgptScanHours: { type: 'int', min: 1, max: 168 },
+  geminiEnabled: { type: 'bool' },
+  geminiScanHours: { type: 'int', min: 1, max: 168 },
 };
 
 function coerce(spec, value) {
@@ -251,6 +253,7 @@ function createApp() {
     // The schedule reads settings when it is armed, not continuously, so a
     // change to it has to re-arm it or it would wait out the old interval.
     if ('chatgptEnabled' in patch || 'chatgptScanHours' in patch) { try { require('./chatgpt').schedule(); } catch (_) {} }
+    if ('geminiEnabled' in patch || 'geminiScanHours' in patch) { try { require('./gemini').schedule(); } catch (_) {} }
     res.json({ ok: true, settings: publicSettings(), restartRequired, rejected });
   });
 
@@ -417,6 +420,14 @@ function createApp() {
   app.post('/api/chatgpt/scan', sameOrigin, (req, res) => { chatgpt.scan({ reason: 'manual' }); res.json({ ok: true, started: true }); });
   app.post('/api/chatgpt/disconnect', sameOrigin, async (req, res) => res.json(await chatgpt.disconnect()));
   app.post('/api/chatgpt/check', sameOrigin, async (req, res) => res.json({ linked: await chatgpt.checkLink() }));
+
+  // ---- Gemini as a source ----
+  const gemini = require('./gemini');
+  app.get('/api/gemini/state', (req, res) => res.json(gemini.getState()));
+  app.post('/api/gemini/connect', sameOrigin, (req, res) => { gemini.connect(); res.json({ ok: true, started: true }); });
+  app.post('/api/gemini/scan', sameOrigin, (req, res) => { gemini.scan({ reason: 'manual' }); res.json({ ok: true, started: true }); });
+  app.post('/api/gemini/disconnect', sameOrigin, async (req, res) => res.json(await gemini.disconnect()));
+  app.post('/api/gemini/check', sameOrigin, async (req, res) => res.json({ linked: await gemini.checkLink() }));
 
   // ---- Clean up ----
   const cleanup = require('./cleanup');

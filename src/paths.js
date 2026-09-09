@@ -23,4 +23,5 @@ module.exports = {
   // ChatGPT gets a Chromium profile of its own, so a problem with one linked
   // account can never cost the other its session.
   CHATGPT_DIR: path.join(APP_HOME, 'chatgpt-session'),
+  GEMINI_DIR: path.join(APP_HOME, 'gemini-session'),
 };

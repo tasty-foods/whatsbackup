@@ -77,6 +77,7 @@
             <option value="">Anywhere</option>
             <option value="whatsapp">WhatsApp</option>
             <option value="chatgpt">ChatGPT</option>
+            <option value="gemini">Gemini</option>
           </select>
         </label>
         <label>Album
@@ -472,6 +473,33 @@
             <div class="row">
               <label class="muted small">Look for new pictures every
                 <select id="set-chatgptScanHours" class="txt" style="max-width:160px;margin-left:8px">
+                  <option value="1">hour</option>
+                  <option value="3">3 hours</option>
+                  <option value="6">6 hours</option>
+                  <option value="12">12 hours</option>
+                  <option value="24">day</option>
+                </select>
+              </label>
+            </div>
+          </div>
+
+          <div class="sec" id="gem-sec">
+            <div class="sec-title">Gemini</div>
+            <p class="muted small">Every picture Gemini made for you, from its Library. You sign in with Google once, in a window that opens; nothing is typed for you and the password is never seen by this app.</p>
+            <div class="row"><span id="gem-status" class="muted">&hellip;</span></div>
+            <div class="row"><span id="gem-last" class="muted small"></span></div>
+            <div class="row wrap">
+              <button id="gem-connect" class="btn primary">Connect Gemini&hellip;</button>
+              <button id="gem-scan" class="btn">Back up now</button>
+              <button id="gem-disconnect" class="btn danger">Forget this account&hellip;</button>
+            </div>
+            <label class="row toggle">
+              <input type="checkbox" id="set-geminiEnabled" /><span class="switch"></span>
+              <span>Keep backing up on a schedule</span>
+            </label>
+            <div class="row">
+              <label class="muted small">Look for new pictures every
+                <select id="set-geminiScanHours" class="txt" style="max-width:160px;margin-left:8px">
                   <option value="1">hour</option>
                   <option value="3">3 hours</option>
                   <option value="6">6 hours</option>

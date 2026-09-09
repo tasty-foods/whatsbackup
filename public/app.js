@@ -87,6 +87,7 @@ function tile(r) {
   // gallery cannot otherwise answer.
   const badge = r.source === 'chatgpt'
     ? (r.dir === 'out' ? '<span class="badge out">↑ To ChatGPT</span>' : '<span class="badge in cg">✦ ChatGPT</span>')
+    : r.source === 'gemini' ? '<span class="badge in gm">✦ Gemini</span>'
     : (r.dir === 'out' ? '<span class="badge out">↑ Sent</span>' : '<span class="badge in">↓ Received</span>');
   const lbl = typeof AI !== 'undefined' ? AI.labelFor(r.id) : null;
   const albumTag = lbl && lbl.groupName
@@ -396,24 +397,25 @@ if (exitBtn) exitBtn.addEventListener("click", async () => {
   }
 });
 
-/* ---------- ChatGPT as a source -------------------------------------------
-   The card in Settings. State is polled while the modal is open, because a
-   connect or a scan runs in the engine for minutes and the card should say
-   so rather than go quiet. */
-const ChatGptSource = (function () {
+/* ---------- Linked sources -----------------------------------------------
+   One card per outside account (ChatGPT, Gemini), all the same shape: a
+   status line, what the last look found, connect / back up / forget. State
+   is polled while Settings is open, because a connect or a scan runs in the
+   engine for minutes and the card should say so rather than go quiet. */
+function makeSourceCard(prefix, api, label) {
   const el = (id) => document.getElementById(id);
-  const status = el("cgpt-status"), last = el("cgpt-last");
-  const bConnect = el("cgpt-connect"), bScan = el("cgpt-scan"), bForget = el("cgpt-disconnect");
+  const status = el(prefix + "-status"), last = el(prefix + "-last");
+  const bConnect = el(prefix + "-connect"), bScan = el(prefix + "-scan"), bForget = el(prefix + "-disconnect");
   if (!status) return { refresh() {}, start() {}, stop() {} };
   let timer = null;
 
   const ago = (ms) => { const m = Math.round((Date.now() - ms) / 60000); return m < 1 ? "just now" : m < 60 ? m + " min ago" : Math.round(m / 60) + " h ago"; };
   const inWhen = (ms) => { const m = Math.round((ms - Date.now()) / 60000); return m < 60 ? "in " + Math.max(1, m) + " min" : "in " + Math.round(m / 60) + " h"; };
-  const span = (cls, text) => "<span class=\"" + cls + "\">" + text + "</span>";
+  const span = (cls, text) => "<span class=" + String.fromCharCode(34) + cls + String.fromCharCode(34) + ">" + text + "</span>";
 
   async function refresh() {
     let s = null;
-    try { s = await (await fetch("/api/chatgpt/state")).json(); } catch (e) { return; }
+    try { s = await (await fetch(api + "/state")).json(); } catch (e) { return; }
     const busy = !!s.busy;
     let line;
     if (s.status === "connecting") line = span("warn-text", "● A window is open — sign in there");
@@ -424,7 +426,7 @@ const ChatGptSource = (function () {
     status.innerHTML = line;
 
     const bits = [];
-    if (s.lastRun) bits.push((s.lastRun.saved ? s.lastRun.saved + " new" : "nothing new") + " of " + s.lastRun.images + " pictures in " + s.lastRun.conversations + " chats, " + ago(s.lastRun.at));
+    if (s.lastRun) bits.push((s.lastRun.saved ? s.lastRun.saved + " new" : "nothing new") + " of " + s.lastRun.images + " pictures" + (s.lastRun.conversations ? " in " + s.lastRun.conversations + " chats" : "") + ", " + ago(s.lastRun.at));
     else if (s.linked) bits.push("not backed up yet");
     if (s.enabled && s.nextScanAt && !busy) bits.push("next look " + inWhen(s.nextScanAt));
     if (!s.enabled && s.linked) bits.push("schedule off — only when you press Back up now");
@@ -432,7 +434,7 @@ const ChatGptSource = (function () {
     last.innerHTML = bits.join(" · ");
 
     bConnect.disabled = busy;
-    bConnect.textContent = s.linked ? "Sign in again…" : "Connect ChatGPT…";
+    bConnect.textContent = s.linked ? "Sign in again…" : "Connect " + label + "…";
     bScan.disabled = busy || !s.linked;
     bForget.disabled = busy || !s.linked;
     clearTimeout(timer); timer = null;
@@ -440,155 +442,21 @@ const ChatGptSource = (function () {
   }
 
   const post = (url) => fetch(url, { method: "POST" });
-  bConnect.addEventListener("click", async () => { bConnect.disabled = true; await post("/api/chatgpt/connect"); refresh(); });
-  bScan.addEventListener("click", async () => { bScan.disabled = true; await post("/api/chatgpt/scan"); refresh(); });
+  bConnect.addEventListener("click", async () => { bConnect.disabled = true; await post(api + "/connect"); refresh(); });
+  bScan.addEventListener("click", async () => { bScan.disabled = true; await post(api + "/scan"); refresh(); });
   bForget.addEventListener("click", async () => {
-    if (!confirm("Forget the ChatGPT account on this PC?\n\nThe pictures already saved stay. To back up again you would sign in again.")) return;
-    await post("/api/chatgpt/disconnect"); refresh();
+    if (!confirm("Forget the " + label + " account on this PC?" + String.fromCharCode(10, 10) + "The pictures already saved stay. To back up again you would sign in again.")) return;
+    await post(api + "/disconnect"); refresh();
   });
 
   let modalTimer = null;
   const start = () => { refresh(); clearInterval(modalTimer); modalTimer = setInterval(refresh, 8000); };
   const stop = () => { clearInterval(modalTimer); modalTimer = null; clearTimeout(timer); timer = null; };
   return { refresh, start, stop };
-})();
-
-/* ---------- Clean up ------------------------------------------------------
-   The engine says what could go and why; this screen lets you tick it and
-   move it. Selection lives here, not in the engine, so looking again never
-   loses what was ticked. */
-const Cleanup = (function () {
-  const $c = (id) => document.getElementById(id);
-  const groupsEl = $c("cl-groups"), summary = $c("cl-summary");
-  const bQuar = $c("cl-quarantine"), bRefresh = $c("cl-refresh");
-  const quarList = $c("cl-quar-list"), quarCount = $c("cl-quar-count");
-  const bRestore = $c("cl-restore"), bPurge = $c("cl-purge");
-  if (!groupsEl) return { enter() {} };
-
-  const picked = new Set();      // ids ticked in the suggestions
-  const pickedQ = new Set();     // ids ticked in quarantine
-  let data = null;
-
-  const mb = (b) => b >= 1e9 ? (b / 1e9).toFixed(2) + " GB" : b >= 1e6 ? (b / 1e6).toFixed(1) + " MB" : Math.round(b / 1024) + " KB";
-  const thumb = (it) => it.kind === "video"
-    ? "<div class=" + q("cl-thumb vid") + ">&#9654;</div>"
-    : "<img class=" + q("cl-thumb") + " loading=" + q("lazy") + " src=" + q(it.serve || "") + " alt=" + q("") + ">";
-  function q(s) { return String.fromCharCode(34) + s + String.fromCharCode(34); }
-
-  function renderGroups() {
-    if (!data) return;
-    if (!data.groups.length) {
-      groupsEl.innerHTML = "<p class=" + q("muted") + " style=" + q("padding:20px 0") + ">Nothing to suggest. The library is tidy.</p>";
-      summary.textContent = data.library + " items looked at, nothing to suggest.";
-      bQuar.disabled = true; return;
-    }
-    summary.textContent = data.totalCount + " items, " + mb(data.totalBytes) + ", could go - from " + data.library + " in the library.";
-    groupsEl.innerHTML = "";
-    for (const g of data.groups) {
-      const sec = document.createElement("section");
-      sec.className = "cl-group";
-      const allOn = g.items.every((it) => picked.has(it.id));
-      sec.innerHTML = "<div class=" + q("cl-group-head") + ">"
-        + "<label class=" + q("cl-all") + "><input type=" + q("checkbox") + " " + (allOn ? "checked" : "") + " data-all=" + q(g.reason) + "> <b>" + escapeHtml(g.label) + "</b></label>"
-        + "<span class=" + q("cl-sure " + g.sure) + ">" + g.sure + "</span>"
-        + "<span class=" + q("muted small") + ">" + g.count + " items - " + mb(g.bytes) + "</span>"
-        + "</div>"
-        + "<p class=" + q("muted small cl-detail") + ">" + escapeHtml(g.detail) + "</p>"
-        + "<div class=" + q("cl-grid") + ">" + g.items.map((it) => 
-            "<label class=" + q("cl-item" + (picked.has(it.id) ? " on" : "")) + " data-id=" + q(it.id) + ">"
-            + "<input type=" + q("checkbox") + " " + (picked.has(it.id) ? "checked" : "") + ">"
-            + thumb(it)
-            + "<span class=" + q("cl-meta") + ">" + escapeHtml((it.chat || "").slice(0, 26)) + "<i>" + mb(it.bytes) + "</i></span>"
-            + (it.keep ? "<span class=" + q("cl-keep") + " title=" + q("the one that is kept") + ">keeps <img src=" + q(it.keep.serve || "") + " alt=" + q("") + "></span>" : "")
-            + "</label>").join("")
-        + "</div>";
-      groupsEl.appendChild(sec);
-    }
-    bQuar.disabled = picked.size === 0;
-    bQuar.textContent = picked.size ? "Move " + picked.size + " to quarantine (" + mb(pickedBytes()) + ")" : "Move selected to quarantine";
-  }
-  function pickedBytes() {
-    let n = 0; if (!data) return 0;
-    for (const g of data.groups) for (const it of g.items) if (picked.has(it.id)) n += it.bytes || 0;
-    return n;
-  }
-
-  groupsEl.addEventListener("change", (e) => {
-    const all = e.target.closest("input[data-all]");
-    if (all) {
-      const g = data.groups.find((x) => x.reason === all.dataset.all);
-      for (const it of g.items) { if (all.checked) picked.add(it.id); else picked.delete(it.id); }
-      renderGroups(); return;
-    }
-    const item = e.target.closest(".cl-item");
-    if (!item) return;
-    if (e.target.checked) picked.add(item.dataset.id); else picked.delete(item.dataset.id);
-    item.classList.toggle("on", e.target.checked);
-    bQuar.disabled = picked.size === 0;
-    bQuar.textContent = picked.size ? "Move " + picked.size + " to quarantine (" + mb(pickedBytes()) + ")" : "Move selected to quarantine";
-  });
-
-  async function load() {
-    summary.textContent = "Looking…";
-    try { data = await (await fetch("/api/cleanup/suggest")).json(); } catch (e) { summary.textContent = "Could not look: " + e.message; return; }
-    // Drop ticks for things that are no longer suggested.
-    const live = new Set(); for (const g of data.groups) for (const it of g.items) live.add(it.id);
-    for (const id of [...picked]) if (!live.has(id)) picked.delete(id);
-    renderGroups();
-    loadQuar();
-  }
-
-  async function loadQuar() {
-    let qd = null;
-    try { qd = await (await fetch("/api/cleanup/list")).json(); } catch (e) { return; }
-    quarCount.textContent = qd.count ? qd.count + " items - " + mb(qd.bytes) : "empty";
-    quarList.innerHTML = qd.count ? "<div class=" + q("cl-grid") + ">" + qd.items.map((it) =>
-        "<label class=" + q("cl-item" + (pickedQ.has(it.id) ? " on" : "")) + " data-qid=" + q(it.id) + ">"
-        + "<input type=" + q("checkbox") + " " + (pickedQ.has(it.id) ? "checked" : "") + ">"
-        + thumb({ kind: it.kind, serve: "/quarantine/" + encodeURIComponent(it.filename) })
-        + "<span class=" + q("cl-meta") + ">" + escapeHtml((it.chat || "").slice(0, 26)) + "<i>" + mb(it.bytes) + "</i></span>"
-        + "</label>").join("") + "</div>"
-      : "<p class=" + q("muted small") + ">Nothing here.</p>";
-    const any = pickedQ.size > 0;
-    bRestore.disabled = !any; bPurge.disabled = !any;
-  }
-  quarList.addEventListener("change", (e) => {
-    const item = e.target.closest(".cl-item"); if (!item) return;
-    if (e.target.checked) pickedQ.add(item.dataset.qid); else pickedQ.delete(item.dataset.qid);
-    item.classList.toggle("on", e.target.checked);
-    const any = pickedQ.size > 0; bRestore.disabled = !any; bPurge.disabled = !any;
-  });
-
-  const post = (url, body) => fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then((r) => r.json());
-
-  bQuar.addEventListener("click", async () => {
-    if (!picked.size) return;
-    bQuar.disabled = true;
-    const r = await post("/api/cleanup/quarantine", { ids: [...picked], reason: "chosen" });
-    picked.clear();
-    if (r.failed && r.failed.length) alert(r.failed.length + " could not be moved. The rest were.");
-    load();
-    if (typeof loadItems === "function") loadItems(true);
-  });
-  bRefresh.addEventListener("click", load);
-  bRestore.addEventListener("click", async () => {
-    if (!pickedQ.size) return;
-    await post("/api/cleanup/restore", { ids: [...pickedQ] });
-    pickedQ.clear(); load();
-    if (typeof loadItems === "function") loadItems(true);
-  });
-  bPurge.addEventListener("click", async () => {
-    if (!pickedQ.size) return;
-    const n = pickedQ.size;
-    if (!confirm("Delete " + n + " item" + (n === 1 ? "" : "s") + " forever?" + String.fromCharCode(10, 10) + "This cannot be undone.")) return;
-    if (!confirm("Last check - really delete " + n + " forever?")) return;
-    await post("/api/cleanup/purge", { ids: [...pickedQ] });
-    pickedQ.clear(); loadQuar();
-  });
-
-  return { enter: load };
-})();
-
+}
+const ChatGptSource = makeSourceCard("cgpt", "/api/chatgpt", "ChatGPT");
+const GeminiSource = makeSourceCard("gem", "/api/gemini", "Gemini");
+const SourceCards = [ChatGptSource, GeminiSource];
 /* ---------- Settings ---------- */
 const $ = (id) => document.getElementById(id);
 
@@ -605,6 +473,7 @@ const FIELDS = {
   aiEnabled: 'bool', aiConsent: 'bool', aiAnalyseImages: 'bool', aiAnalyseChats: 'bool', aiChainEnabled: 'bool',
   aiProvider: 'text', aiModel: 'text', aiBaseUrl: 'text', aiMode: 'text', aiMonthlyBudget: 'int',
   chatgptEnabled: 'bool', chatgptScanHours: 'int',
+  geminiEnabled: 'bool', geminiScanHours: 'int',
 };
 
 const S = {
@@ -642,8 +511,8 @@ function writeField(key, type, value) {
   else el.value = value === undefined || value === null ? '' : value;
 }
 
-function openSettings() { S.modal.classList.remove('hidden'); loadSettings(); if (typeof ChatGptSource !== 'undefined') ChatGptSource.start(); }
-function closeSettings() { S.modal.classList.add('hidden'); if (typeof ChatGptSource !== 'undefined') ChatGptSource.stop(); }
+function openSettings() { S.modal.classList.remove('hidden'); loadSettings(); if (typeof SourceCards !== 'undefined') SourceCards.forEach((c) => c.start()); }
+function closeSettings() { S.modal.classList.add('hidden'); if (typeof SourceCards !== 'undefined') SourceCards.forEach((c) => c.stop()); }
 S.open.addEventListener('click', openSettings);
 S.close.addEventListener('click', closeSettings);
 S.modal.addEventListener('click', (e) => { if (e.target === S.modal) closeSettings(); });

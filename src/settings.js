@@ -58,6 +58,8 @@ const DEFAULTS = {
   // ChatGPT as a second source: off until connected, then read on a schedule.
   chatgptEnabled: false,
   chatgptScanHours: 6,
+  geminiEnabled: false,
+  geminiScanHours: 6,
   aiChainEnabled: false,
   aiMode: 'assist',          // manual | assist (manual, then auto for new items) | auto
   aiAnalyseImages: true,
