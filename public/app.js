@@ -447,7 +447,7 @@ function makeSourceCard(prefix, api, label) {
     status.innerHTML = line;
 
     const bits = [];
-    if (s.lastRun) bits.push((s.lastRun.saved ? s.lastRun.saved + " new" : "nothing new") + " of " + s.lastRun.images + " pictures" + (s.lastRun.conversations ? " in " + s.lastRun.conversations + " chats" : "") + ", " + ago(s.lastRun.at));
+    if (s.lastRun) bits.push((s.lastRun.saved ? s.lastRun.saved + " new" : "nothing new") + " of " + s.lastRun.images + " photos" + (s.lastRun.conversations ? " in " + s.lastRun.conversations + " chats" : "") + ", " + ago(s.lastRun.at));
     else if (s.linked) bits.push("not backed up yet");
     if (s.enabled && s.nextScanAt && !busy) bits.push("next look " + inWhen(s.nextScanAt));
     if (!s.enabled && s.linked) bits.push("schedule off — only when you press Back up now");
@@ -543,7 +543,7 @@ const Cleanup = (function () {
       summary.textContent = data.library + " items looked at, nothing to suggest.";
       bQuar.disabled = true; return;
     }
-    summary.textContent = data.totalCount + " items, " + mb(data.totalBytes) + ", could go - from " + data.library + " in the library.";
+    summary.textContent = data.totalCount + " item" + (data.totalCount === 1 ? "" : "s") + " (" + mb(data.totalBytes) + ") could be tidied away — out of " + data.library + " in your library.";
     groupsEl.innerHTML = "";
     for (const g of data.groups) {
       const sec = document.createElement("section");
@@ -551,8 +551,8 @@ const Cleanup = (function () {
       const allOn = g.items.every((it) => picked.has(it.id));
       sec.innerHTML = "<div class=" + q("cl-group-head") + ">"
         + "<label class=" + q("cl-all") + "><input type=" + q("checkbox") + " " + (allOn ? "checked" : "") + " data-all=" + q(g.reason) + "> <b>" + escapeHtml(g.label) + "</b></label>"
-        + "<span class=" + q("cl-sure " + g.sure) + ">" + g.sure + "</span>"
-        + "<span class=" + q("muted small") + ">" + g.count + " items - " + mb(g.bytes) + "</span>"
+        + "<span class=" + q("cl-sure " + g.sure) + ">" + ({ certain: "Safe to go", likely: "Probably", optional: "Your call" })[g.sure] + "</span>"
+        + "<span class=" + q("muted small") + ">" + g.count + " item" + (g.count === 1 ? "" : "s") + " · " + mb(g.bytes) + "</span>"
         + "</div>"
         + "<p class=" + q("muted small cl-detail") + ">" + escapeHtml(g.detail) + "</p>"
         + "<div class=" + q("cl-grid") + ">" + g.items.map((it) => 
@@ -560,7 +560,7 @@ const Cleanup = (function () {
             + "<input type=" + q("checkbox") + " " + (picked.has(it.id) ? "checked" : "") + ">"
             + thumb(it)
             + "<span class=" + q("cl-meta") + ">" + escapeHtml((it.chat || "").slice(0, 26)) + "<i>" + mb(it.bytes) + "</i></span>"
-            + (it.keep ? "<span class=" + q("cl-keep") + " title=" + q("the one that is kept") + ">keeps <img src=" + q(it.keep.serve || "") + " alt=" + q("") + "></span>" : "")
+            + (it.keep ? "<span class=" + q("cl-keep") + " title=" + q("the one that is kept") + ">keeping <img src=" + q(it.keep.serve || "") + " alt=" + q("") + "></span>" : "")
             + "</label>").join("")
         + "</div>";
       groupsEl.appendChild(sec);
@@ -586,12 +586,12 @@ const Cleanup = (function () {
     if (e.target.checked) picked.add(item.dataset.id); else picked.delete(item.dataset.id);
     item.classList.toggle("on", e.target.checked);
     bQuar.disabled = picked.size === 0;
-    bQuar.textContent = picked.size ? "Move " + picked.size + " to quarantine (" + mb(pickedBytes()) + ")" : "Move selected to quarantine";
+    bQuar.textContent = picked.size ? "Set aside " + picked.size + " (" + mb(pickedBytes()) + ")" : "Set aside selected";
   });
 
   async function load() {
-    summary.textContent = "Looking…";
-    try { data = await (await fetch("/api/cleanup/suggest")).json(); } catch (e) { summary.textContent = "Could not look: " + e.message; return; }
+    summary.textContent = "Checking your library…";
+    try { data = await (await fetch("/api/cleanup/suggest")).json(); } catch (e) { summary.textContent = "Couldn’t check the library — " + e.message; return; }
     // Drop ticks for things that are no longer suggested.
     const live = new Set(); for (const g of data.groups) for (const it of g.items) live.add(it.id);
     for (const id of [...picked]) if (!live.has(id)) picked.delete(id);
@@ -602,14 +602,14 @@ const Cleanup = (function () {
   async function loadQuar() {
     let qd = null;
     try { qd = await (await fetch("/api/cleanup/list")).json(); } catch (e) { return; }
-    quarCount.textContent = qd.count ? qd.count + " items - " + mb(qd.bytes) : "empty";
+    quarCount.textContent = qd.count ? qd.count + " item" + (qd.count === 1 ? "" : "s") + " · " + mb(qd.bytes) : "empty";
     quarList.innerHTML = qd.count ? "<div class=" + q("cl-grid") + ">" + qd.items.map((it) =>
         "<label class=" + q("cl-item" + (pickedQ.has(it.id) ? " on" : "")) + " data-qid=" + q(it.id) + ">"
         + "<input type=" + q("checkbox") + " " + (pickedQ.has(it.id) ? "checked" : "") + ">"
         + thumb({ kind: it.kind, serve: "/quarantine/" + encodeURIComponent(it.filename) })
         + "<span class=" + q("cl-meta") + ">" + escapeHtml((it.chat || "").slice(0, 26)) + "<i>" + mb(it.bytes) + "</i></span>"
         + "</label>").join("") + "</div>"
-      : "<p class=" + q("muted small") + ">Nothing here.</p>";
+      : "<p class=" + q("muted small") + ">Nothing set aside.</p>";
     const any = pickedQ.size > 0;
     bRestore.disabled = !any; bPurge.disabled = !any;
   }
@@ -627,7 +627,7 @@ const Cleanup = (function () {
     bQuar.disabled = true;
     const r = await post("/api/cleanup/quarantine", { ids: [...picked], reason: "chosen" });
     picked.clear();
-    if (r.failed && r.failed.length) alert(r.failed.length + " could not be moved. The rest were.");
+    if (r.failed && r.failed.length) alert(r.failed.length + " couldn’t be set aside. The rest were.");
     load();
     if (typeof loadItems === "function") loadItems(true);
   });
@@ -663,7 +663,7 @@ const FIELDS = {
   mediaRoot: 'text', cloudRoot: 'text', excludedChats: 'lines',
   port: 'int', downloadTimeoutSec: 'int', logMaxMB: 'int',
   autoImportHours: 'int',
-  aiEnabled: 'bool', aiConsent: 'bool', aiAnalyseImages: 'bool', aiAnalyseChats: 'bool', aiChainEnabled: 'bool',
+  aiEnabled: 'bool', aiConsent: 'bool', aiAnalyseImages: 'bool', aiAnalyseChats: 'bool',
   aiProvider: 'text', aiModel: 'text', aiBaseUrl: 'text', aiMode: 'text', aiMonthlyBudget: 'int',
   chatgptEnabled: 'bool', chatgptScanHours: 'int',
   geminiEnabled: 'bool', geminiScanHours: 'int',
@@ -708,6 +708,33 @@ function openSettings() { S.modal.classList.remove('hidden'); loadSettings(); if
 function closeSettings() { S.modal.classList.add('hidden'); if (typeof SourceCards !== 'undefined') SourceCards.forEach((c) => c.stop()); }
 S.open.addEventListener('click', openSettings);
 S.close.addEventListener('click', closeSettings);
+
+// A switch or a menu applies the moment it is set, and says so; the footer
+// Save is for the things you type. Anything that is not a set-* field, or is
+// typed, is left to Save — including a number typed into a box.
+let savedFlash = null;
+function flashSaved(text) {
+  if (!S.saveStatus) return;
+  S.saveStatus.innerHTML = '<span class="ok-text">' + escapeHtml(text || 'Saved ✓') + '</span>';
+  clearTimeout(savedFlash);
+  savedFlash = setTimeout(() => { if (S.saveStatus) S.saveStatus.textContent = ''; }, 1800);
+}
+S.modal.addEventListener('change', async (e) => {
+  const el = e.target;
+  if (!el || !el.id || !el.id.startsWith('set-')) return;
+  const key = el.id.slice(4);
+  const type = FIELDS[key];
+  if (!type) return;
+  if (type === 'text' || type === 'lines') return;
+  if (type === 'int' && el.tagName !== 'SELECT') return;
+  const v = readField(key, type);
+  if (v === undefined) return;
+  try {
+    if (key === 'startWithWindows' && bridge) await bridge.setStartup(v);
+    const r = await (await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ [key]: v }) })).json();
+    flashSaved(r && r.restartRequired ? 'Saved ✓ — applies after a restart' : 'Saved ✓');
+  } catch (err) { flashSaved('Could not save'); }
+});
 S.modal.addEventListener('click', (e) => { if (e.target === S.modal) closeSettings(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !S.modal.classList.contains('hidden')) closeSettings(); });
 
@@ -1110,7 +1137,7 @@ const Convo = (function () {
   let searchMode = false;
 
   const fmtT = (ms) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  const TYPE_LABEL = { ptt: '🎤 voice message', audio: '🎵 audio', document: '📄 document', sticker: '🌟 sticker', location: '📍 location', vcard: '👤 contact', multi_vcard: '👤 contacts', call_log: '📞 call' };
+  const TYPE_LABEL = { ptt: '🎤 voice note', audio: '🎵 audio', document: '📄 document', sticker: '🌟 sticker', location: '📍 location', vcard: '👤 contact', multi_vcard: '👤 contacts', call_log: '📞 call' };
   const prettyType = (t) => TYPE_LABEL[t] || `[${escapeHtml(t)}]`;
   function shortDay(ms) {
     const d = new Date(ms), n = new Date();
@@ -1162,7 +1189,7 @@ const Convo = (function () {
   function renderChats(chats) {
     lastChats = chats;
     renderProjectChips();
-    if (!chats.length) { chatsEl.innerHTML = '<div class="convo-empty empty-state">No conversations stored yet. Turn on “Capture message text” in ⚙︎ Settings, then Import older.</div>'; return; }
+    if (!chats.length) { chatsEl.innerHTML = '<div class="convo-empty empty-state">No conversations saved yet. In Settings → What to save, turn on “Store message text”, then Settings → Import older.</div>'; return; }
     chatsEl.innerHTML = '';
     let list = chats.slice();
     if (project) list = list.filter((c) => { const p = projectOf(c.chatId); return p && p.groupId === project; });
@@ -1184,7 +1211,7 @@ const Convo = (function () {
     for (const c of list) {
       if (grouped) {
         const p = projectOf(c.chatId);
-        const name = (p && p.groupName) || 'Not in a project';
+        const name = (p && p.groupName) || 'No project yet';
         if (name !== lastProject) {
           lastProject = name;
           const h = document.createElement('div');
@@ -1335,7 +1362,7 @@ const Convo = (function () {
     if (res.length) {
       const head = document.createElement('div');
       head.className = 'projecthead';
-      head.textContent = 'Messages that say it (' + res.length + ')';
+      head.textContent = 'Messages with these words (' + res.length + ')';
       chatsEl.appendChild(head);
       for (const m of res) {
         const el = document.createElement('div');
@@ -1397,7 +1424,7 @@ const AI = (function () {
       `<button class="chip${(F.album || 'all') === id ? ' active' : ''}" data-album="${id}">${emoji ? escapeHtml(emoji) + ' ' : ''}${escapeHtml(name)}<span class="n">${count}</span></button>`;
     bar.innerHTML = chip('all', '', 'All', allItems.length)
       + state.groups.map((g) => chip(g.id, g.emoji, g.name, g.items.length)).join('')
-      + (unsorted ? chip('unsorted', '', 'Not sorted', unsorted) : '');
+      + (unsorted ? chip('unsorted', '', 'No album yet', unsorted) : '');
     bar.classList.remove('hidden');
   }
 
@@ -2584,7 +2611,7 @@ const Chain = (function () {
     const box = document.getElementById('set-aiChainEnabled');
     if (box) box.checked = !!st.chainEnabled;
 
-    list.innerHTML = chain.length ? '' : '<p class="muted small">Only the provider above. Add another to keep going when it runs out.</p>';
+    list.innerHTML = chain.length ? '' : '<p class="muted small">Just the service above. Add a spare so organising carries on when it runs out.</p>';
     chain.forEach((c, i) => {
       const row = document.createElement('div');
       row.className = 'chain-row';
@@ -2593,8 +2620,8 @@ const Chain = (function () {
       else if (c.needsModel) tag = '<span class="st nokey">needs a model</span>';
       else if (c.restingUntil) {
         const mins = Math.max(1, Math.round((c.restingUntil - Date.now()) / 60000));
-        tag = `<span class="st resting">resting ${mins}m</span>`;
-      } else if (c.blind) tag = '<span class="st blind">text only</span>';
+        tag = `<span class="st resting">paused ${mins} min (limit reached)</span>`;
+      } else if (c.blind) tag = '<span class="st blind">can’t see photos</span>';
       const first = i === 0;
       const modelCell = c.editableModel
         ? `<input class="mdl chain-model" value="${escapeHtml(c.model || '')}" placeholder="model name for this provider" spellcheck="false">`
