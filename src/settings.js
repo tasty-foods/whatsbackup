@@ -54,6 +54,10 @@ const DEFAULTS = {
   aiKeysEnc: {},             // provider -> DPAPI ciphertext, for the fallback chain
   aiChain: [],               // ordered provider names to fall through when one runs out
   aiChainModels: {},         // provider -> model name, for chained providers with no default
+
+  // ChatGPT as a second source: off until connected, then read on a schedule.
+  chatgptEnabled: false,
+  chatgptScanHours: 6,
   aiChainEnabled: false,
   aiMode: 'assist',          // manual | assist (manual, then auto for new items) | auto
   aiAnalyseImages: true,

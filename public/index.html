@@ -22,6 +22,7 @@
         <button data-v="media">🖼 Media</button>
         <button data-v="convo">💬 Conversations</button>
         <button data-v="status">📣 Status</button>
+        <button data-v="cleanup">&#129529; Clean up</button>
       </div>
       <input id="search" type="search" placeholder="Search what is in the photos…" autocomplete="off" />
       <div class="tabs media-only" id="tabs">
@@ -69,6 +70,13 @@
             <option value="">Both ways</option>
             <option value="in">Received</option>
             <option value="out">Sent</option>
+          </select>
+        </label>
+        <label>Source
+          <select id="f-source">
+            <option value="">Anywhere</option>
+            <option value="whatsapp">WhatsApp</option>
+            <option value="chatgpt">ChatGPT</option>
           </select>
         </label>
         <label>Album
@@ -139,6 +147,29 @@
       <h2>Albums <span class="muted small" id="ov-alb-count"></span></h2>
       <p class="muted small">What your pictures turned out to be about. Click one to see them.</p>
       <div class="ov-grid" id="ov-albums"></div>
+    </div>
+  </div>
+
+  <div id="view-cleanup" class="cleanup hidden">
+    <div class="cl-head">
+      <div>
+        <h2>What could go</h2>
+        <p class="muted small" id="cl-summary">Looking&hellip;</p>
+      </div>
+      <div class="cl-actions">
+        <button class="btn" id="cl-refresh">Look again</button>
+        <button class="btn primary" id="cl-quarantine" disabled>Move selected to quarantine</button>
+      </div>
+    </div>
+    <p class="muted small cl-note">Nothing is deleted here. What you move goes to a quarantine folder and stops showing; bring it back with one click. Only <em>Delete forever</em>, below, is final.</p>
+    <div id="cl-groups"></div>
+    <div class="cl-quar">
+      <h3>In quarantine <span class="muted small" id="cl-quar-count"></span></h3>
+      <div id="cl-quar-list"></div>
+      <div class="row wrap" id="cl-quar-actions" style="margin-top:10px">
+        <button class="btn" id="cl-restore" disabled>Bring selected back</button>
+        <button class="btn danger" id="cl-purge" disabled>Delete selected forever&hellip;</button>
+      </div>
     </div>
   </div>
 
@@ -422,6 +453,33 @@
               <button id="btn-unlink" class="btn danger">Unlink this device…</button>
             </div>
             <p class="muted small">Unlinking forgets the link on this PC and shows a fresh QR code. Your saved media is not touched.</p>
+          </div>
+
+          <div class="sec" id="cgpt-sec">
+            <div class="sec-title">ChatGPT</div>
+            <p class="muted small">Every picture you uploaded to ChatGPT or had it make, kept here with the rest and sorted the same way. You sign in once, in a window that opens; nothing is typed for you and the password is never seen by this app.</p>
+            <div class="row"><span id="cgpt-status" class="muted">&hellip;</span></div>
+            <div class="row"><span id="cgpt-last" class="muted small"></span></div>
+            <div class="row wrap">
+              <button id="cgpt-connect" class="btn primary">Connect ChatGPT&hellip;</button>
+              <button id="cgpt-scan" class="btn">Back up now</button>
+              <button id="cgpt-disconnect" class="btn danger">Forget this account&hellip;</button>
+            </div>
+            <label class="row toggle">
+              <input type="checkbox" id="set-chatgptEnabled" /><span class="switch"></span>
+              <span>Keep backing up on a schedule</span>
+            </label>
+            <div class="row">
+              <label class="muted small">Look for new pictures every
+                <select id="set-chatgptScanHours" class="txt" style="max-width:160px;margin-left:8px">
+                  <option value="1">hour</option>
+                  <option value="3">3 hours</option>
+                  <option value="6">6 hours</option>
+                  <option value="12">12 hours</option>
+                  <option value="24">day</option>
+                </select>
+              </label>
+            </div>
           </div>
         </div>
 

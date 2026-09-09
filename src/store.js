@@ -8,6 +8,22 @@ let records = [];
 const seen = new Set();
 const byId = new Map();
 
+// Items moved to quarantine by the cleanup pass. Kept beside the index rather
+// than in it: the index is append-only, and a hidden record is still a record
+// - it comes back with one click.
+const hidden = new Set();
+const hiddenFile = () => require('path').join(cfg.DATA_DIR, 'quarantine.json');
+function loadHidden() {
+  hidden.clear();
+  try { for (const id of JSON.parse(fs.readFileSync(hiddenFile(), 'utf8'))) hidden.add(id); } catch (_) {}
+}
+function saveHidden() {
+  try { fs.writeFileSync(hiddenFile(), JSON.stringify([...hidden])); } catch (_) {}
+}
+function hide(ids) { for (const id of ids) hidden.add(id); saveHidden(); }
+function unhide(ids) { for (const id of ids) hidden.delete(id); saveHidden(); }
+const hiddenIds = () => new Set(hidden);
+
 function ensureDirs() {
   for (const d of [cfg.IMAGES_DIR, cfg.VIDEO_DIR, cfg.FILES_DIR, cfg.DATA_DIR, cfg.LOGS_DIR]) {
     try { fs.mkdirSync(d, { recursive: true }); } catch (_) {}   // a missing cloud drive must not stop startup
@@ -22,6 +38,7 @@ function loadAll() {
   records = [];
   seen.clear();
   byId.clear();
+  loadHidden();
   try {
     const raw = fs.readFileSync(cfg.INDEX_FILE, 'utf8');
     for (const line of raw.split('\n')) {
@@ -47,6 +64,7 @@ function addRecord(rec) {
 function listRecords({ kind, since, direction, chat } = {}) {
   const q = chat ? chat.toLowerCase() : null;
   const out = records.filter((r) => {
+    if (hidden.has(r.id)) return false;      // in quarantine
     if (kind && r.kind !== kind) return false;
     if (direction && r.dir !== direction) return false;
     // `<` (not `<=`) so items sharing the newest whole-second timestamp are still
@@ -60,8 +78,8 @@ function listRecords({ kind, since, direction, chat } = {}) {
 
 function counts() {
   let images = 0, videos = 0;
-  for (const r of records) { if (r.kind === 'image') images++; else if (r.kind === 'video') videos++; }
+  for (const r of records) { if (hidden.has(r.id)) continue; if (r.kind === 'image') images++; else if (r.kind === 'video') videos++; }
   return { images, videos };
 }
 
-module.exports = { ensureDirs, loadAll, has, get, addRecord, listRecords, counts };
+module.exports = { ensureDirs, loadAll, has, get, addRecord, listRecords, counts, hide, unhide, hiddenIds };

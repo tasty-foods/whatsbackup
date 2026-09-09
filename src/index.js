@@ -51,6 +51,9 @@ const server = app.listen(cfg.PORT, '127.0.0.1', () => {
   // The status scheduler: armed always, inert until enabled + consented.
   try { require('./status/scheduler').init(); } catch (e) { console.error('[status] failed to start:', e.message); }
 
+  // The second source. Inert until connected and enabled.
+  try { require('./chatgpt').init(); } catch (e) { console.error('[chatgpt] failed to start:', e.message); }
+
   // Run the history import on a schedule when one is set. Checked every ten
   // minutes rather than timed exactly: the machine sleeps, and a missed hour
   // should mean "run it now", not "wait for the next tick a day later".

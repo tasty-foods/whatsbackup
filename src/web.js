@@ -100,6 +100,8 @@ const SETTING_SPEC = {
   statusFooter: { type: 'path' },
   statusAiPrompt: { type: 'path' },
   statusAiChatAware: { type: 'bool' },
+  chatgptEnabled: { type: 'bool' },
+  chatgptScanHours: { type: 'int', min: 1, max: 168 },
 };
 
 function coerce(spec, value) {
@@ -246,6 +248,9 @@ function createApp() {
       if (spec.restart && JSON.stringify(clean) !== JSON.stringify(current[key])) restartRequired = true;
     }
     settings.write(patch);
+    // The schedule reads settings when it is armed, not continuously, so a
+    // change to it has to re-arm it or it would wait out the old interval.
+    if ('chatgptEnabled' in patch || 'chatgptScanHours' in patch) { try { require('./chatgpt').schedule(); } catch (_) {} }
     res.json({ ok: true, settings: publicSettings(), restartRequired, rejected });
   });
 
@@ -403,12 +408,37 @@ function createApp() {
     });
   });
 
+  // ---- ChatGPT as a source ----
+  const chatgpt = require('./chatgpt');
+  app.get('/api/chatgpt/state', (req, res) => res.json(chatgpt.getState()));
+  // Connecting opens a real window for the person to sign in; nothing is typed
+  // for them. It runs to completion in the background and state says how it went.
+  app.post('/api/chatgpt/connect', sameOrigin, (req, res) => { chatgpt.connect(); res.json({ ok: true, started: true }); });
+  app.post('/api/chatgpt/scan', sameOrigin, (req, res) => { chatgpt.scan({ reason: 'manual' }); res.json({ ok: true, started: true }); });
+  app.post('/api/chatgpt/disconnect', sameOrigin, async (req, res) => res.json(await chatgpt.disconnect()));
+  app.post('/api/chatgpt/check', sameOrigin, async (req, res) => res.json({ linked: await chatgpt.checkLink() }));
+
+  // ---- Clean up ----
+  const cleanup = require('./cleanup');
+  app.get('/api/cleanup/suggest', (req, res) => { try { res.json(cleanup.suggest()); } catch (e) { res.status(500).json({ error: e.message }); } });
+  app.get('/api/cleanup/list', (req, res) => res.json(cleanup.list()));
+  // Quarantined files are still shown, so a choice can be checked before it is final.
+  app.use('/quarantine', express.static(cleanup.QUARANTINE_DIR, { index: false, dotfiles: 'ignore' }));
+  const ids = (req) => (req.body && Array.isArray(req.body.ids)) ? req.body.ids.filter((x) => typeof x === 'string').slice(0, 5000) : [];
+  app.post('/api/cleanup/quarantine', sameOrigin, (req, res) => res.json(cleanup.quarantine(ids(req), req.body && req.body.reason)));
+  app.post('/api/cleanup/restore', sameOrigin, (req, res) => res.json(cleanup.restore(ids(req))));
+  // Final. Only reaches what is already in quarantine, and the page asks twice.
+  app.post('/api/cleanup/purge', sameOrigin, (req, res) => res.json(cleanup.purge(ids(req))));
+
   // ---- AI sorting ----
   const ai = require('./ai');
 
   app.get('/api/ai/status', (req, res) => res.json(ai.status()));
+  // Models running on this PC are not offered: the sorting is meant to run on
+  // free online providers that keep working without a machine kept awake.
+  const HIDDEN_PRESETS = new Set(['ollama', 'lmstudio']);
   app.get('/api/ai/presets', (req, res) => res.json({
-    presets: Object.entries(ai.PRESETS).map(([id, p]) => ({
+    presets: Object.entries(ai.PRESETS).filter(([id]) => !HIDDEN_PRESETS.has(id)).map(([id, p]) => ({
       id, label: p.label, keyRequired: p.keyRequired, keyHint: p.keyHint,
       baseUrl: p.baseUrl || '', models: p.models || [], defaultModel: p.defaultModel || '', local: !!p.local,
     })),

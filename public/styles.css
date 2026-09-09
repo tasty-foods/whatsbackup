@@ -587,3 +587,36 @@ body.status-active .media-only { display: none !important; }
 /* Exit ------------------------------------------------------------------- */
 .btn.icon.danger { color: var(--muted); }
 .btn.icon.danger:hover { color: #ff8b8b; border-color: #ff8b8b; }
+
+/* A picture that came from ChatGPT rather than a chat --------------------- */
+.badge.in.cg { background: rgba(155,120,255,.22); color: #d9ccff; }
+
+/* Clean up ---------------------------------------------------------------- */
+.cleanup { padding: 16px 20px 40px; max-width: 1280px; margin: 0 auto; }
+.cleanup.hidden { display: none; }
+body.cleanup-active .media-only { display: none !important; }
+.cl-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+.cl-head h2 { margin: 0 0 4px; font-size: 18px; }
+.cl-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.cl-note { margin: 10px 0 18px; max-width: 70ch; }
+.cl-group { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-bottom: 14px; background: var(--card); }
+.cl-group-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.cl-all { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.cl-sure { font-size: 11px; font-weight: 700; border-radius: 999px; padding: 2px 9px; text-transform: uppercase; letter-spacing: .04em; }
+.cl-sure.certain { background: rgba(37,211,102,.14); color: var(--accent); }
+.cl-sure.likely { background: rgba(245,166,35,.14); color: #f5a623; }
+.cl-sure.optional { background: rgba(143,162,179,.16); color: var(--muted); }
+.cl-detail { margin: 6px 0 12px; }
+.cl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 10px; }
+.cl-item { position: relative; display: block; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--bg); cursor: pointer; }
+.cl-item.on { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(37,211,102,.25); }
+.cl-item input { position: absolute; top: 8px; left: 8px; z-index: 2; width: 18px; height: 18px; }
+.cl-thumb { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; background: var(--panel2); }
+.cl-thumb.vid { display: grid; place-items: center; font-size: 26px; color: var(--muted); }
+.cl-meta { display: flex; justify-content: space-between; gap: 6px; padding: 6px 8px; font-size: 11px; color: var(--text); }
+.cl-meta i { color: var(--muted); font-style: normal; white-space: nowrap; }
+.cl-keep { position: absolute; right: 6px; top: 6px; display: flex; align-items: center; gap: 4px; font-size: 10px; color: #fff;
+  background: rgba(0,0,0,.55); border-radius: 6px; padding: 2px 5px; }
+.cl-keep img { width: 22px; height: 22px; object-fit: cover; border-radius: 3px; }
+.cl-quar { margin-top: 26px; border-top: 1px solid var(--line); padding-top: 16px; }
+.cl-quar h3 { margin: 0 0 10px; font-size: 15px; }

@@ -20,4 +20,7 @@ module.exports = {
   // The linked device is a Chromium profile. Installed it sits in the app home;
   // from source it keeps its original name so an existing dev session survives.
   AUTH_DIR: PACKAGED ? path.join(APP_HOME, 'session') : path.join(PROJECT_ROOT, '.wwebjs_auth'),
+  // ChatGPT gets a Chromium profile of its own, so a problem with one linked
+  // account can never cost the other its session.
+  CHATGPT_DIR: path.join(APP_HOME, 'chatgpt-session'),
 };
