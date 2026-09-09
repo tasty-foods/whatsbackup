@@ -298,6 +298,7 @@ async function handleMessage(msg) {
       noteCaptureOk();
       console.log(`[capture] ${new Date(rec.ts).toLocaleString()}  ${rec.kind.toUpperCase()} ${rec.dir === 'out' ? '→sent' : '←recv'}  ${rec.chat}  (${(rec.size / 1024).toFixed(0)} KB)`);
       try { require('./ai').noteNewMedia(rec); } catch (_) {}
+      try { require('./backup').nudge(); } catch (_) {}
     }
   } catch (e) {
     if (e && e.storage) {

@@ -18,24 +18,13 @@
     </div>
     <div class="controls">
       <div class="tabs viewtoggle" id="viewtoggle">
-        <button data-v="overview" class="active">&#9673; Overview</button>
-        <button data-v="media">🖼 Media</button>
-        <button data-v="convo">💬 Conversations</button>
-        <button data-v="status">📣 Status</button>
-        <button data-v="cleanup">&#129529; Clean up</button>
+        <button data-v="overview" class="active">Overview</button>
+        <button data-v="media">Gallery</button>
+        <button data-v="convo">Conversations</button>
+        <button data-v="status">Status Studio</button>
+        <button data-v="cleanup">Clean up</button>
       </div>
-      <input id="search" type="search" placeholder="Search what is in the photos…" autocomplete="off" />
-      <div class="tabs media-only" id="tabs">
-        <button data-f="all" class="active">All</button>
-        <button data-f="image">Images</button>
-        <button data-f="video">Videos</button>
-        <button data-f="file">Files</button>
-        <button data-f="in">Received</button>
-        <button data-f="out">Sent</button>
-      </div>
-      <button id="filters-open" class="btn media-only" title="Filter by type, date, album, project">⚙ Filters</button>
-      <button id="reels-open" class="btn media-only" title="Play your videos one after another">▶ Quick play</button>
-      <a id="zip" class="btn media-only" href="/api/zip" title="Videos stay in your video folder">⭳ Download all images</a>
+      <button id="cloud-pill" class="pill cloud" hidden title="Where your backup stands — click for the Overview"></button>
       <button id="open-settings" class="btn icon" title="Settings">⚙︎</button>
       <button id="app-exit" class="btn icon danger" title="Close WhatsBackUp completely - it stops capturing until you open it again">&#9211;</button>
     </div>
@@ -48,36 +37,60 @@
     <button class="btn small ghost" id="health-dismiss">Dismiss</button>
   </div>
 
+  <!-- The cloud folder is the product's whole point; its absence is said out loud -->
+  <div id="cloud-banner" class="banner hidden">
+    <span id="cloud-text"></span>
+    <button class="btn small" id="cloud-check">Check now</button>
+    <button class="btn small" id="cloud-settings">Open storage settings</button>
+    <button class="btn small ghost" id="cloud-dismiss">Dismiss</button>
+  </div>
+
   <!-- ===== Media view ===== -->
   <div id="view-media">
+    <!-- Everything that narrows or orders the gallery lives here, on the gallery. -->
+    <div class="toolbar" id="media-toolbar">
+      <div class="seg" id="source" title="Which source to show"></div>
+      <div class="seg" id="kind" title="What kind of item to show">
+        <button data-kind="" class="active">All</button>
+        <button data-kind="photos">Photos</button>
+        <button data-kind="videos">Videos</button>
+        <button data-kind="files">Files</button>
+      </div>
+      <input id="search" class="grow" type="search" placeholder="Search chats, captions, file names and what is in the photos…" autocomplete="off" />
+      <div class="right">
+        <select id="f-sort" class="sort" title="Sort by">
+          <option value="new">Newest first</option>
+          <option value="old">Oldest first</option>
+          <option value="big">Largest first</option>
+          <option value="small">Smallest first</option>
+          <option value="chat">By chat A–Z</option>
+        </select>
+        <button id="filters-open" class="btn" title="More ways to narrow: sent or received, exact type, album, project, tag, dates, backup">⚙ Filters</button>
+        <button id="reels-open" class="btn" title="Play your videos one after another">▶ Quick play</button>
+        <a id="zip" class="btn" href="/api/zip" title="Videos stay in your video folder">⭳ Download all photos</a>
+      </div>
+    </div>
+    <div class="activebar" id="activebar"></div>
     <div id="albumbar" class="albumbar hidden"></div>
     <div id="tagbar" class="tagbar hidden"></div>
     <div id="filterbar" class="filterbar hidden">
       <div class="fb-row">
-        <label>Type
-          <select id="f-kind">
-            <option value="">Anything</option>
-            <option value="image">Photos</option>
-            <option value="video">Videos</option>
-            <option value="sticker">Stickers</option>
-            <option value="voice">Voice notes</option>
-            <option value="audio">Audio</option>
-            <option value="document">Documents</option>
-          </select>
-        </label>
-        <label>Direction
+        <label>Sent or received
           <select id="f-dir">
-            <option value="">Both ways</option>
+            <option value="">Both</option>
             <option value="in">Received</option>
             <option value="out">Sent</option>
           </select>
         </label>
-        <label>Source
-          <select id="f-source">
-            <option value="">Anywhere</option>
-            <option value="whatsapp">WhatsApp</option>
-            <option value="chatgpt">ChatGPT</option>
-            <option value="gemini">Gemini</option>
+        <label>Exactly
+          <select id="f-exact">
+            <option value="">Any</option>
+            <option value="image">Photos</option>
+            <option value="video">Videos</option>
+            <option value="sticker">Stickers</option>
+            <option value="ptt">Voice notes</option>
+            <option value="audio">Audio</option>
+            <option value="document">Documents</option>
           </select>
         </label>
         <label>Album
@@ -91,17 +104,13 @@
         </label>
         <label>From <input id="f-from" type="date"></label>
         <label>To <input id="f-to" type="date"></label>
-        <label>Order
-          <select id="f-sort">
-            <option value="new">Newest first</option>
-            <option value="old">Oldest first</option>
-            <option value="big">Largest first</option>
-            <option value="small">Smallest first</option>
-            <option value="chat">By chat A–Z</option>
+        <label>Backed up
+          <select id="f-backup">
+            <option value="">Any</option>
+            <option value="cloud">In pCloud</option>
+            <option value="local">On this PC only</option>
           </select>
         </label>
-        <button class="btn small ghost" id="f-reset">Clear</button>
-        <span class="fb-count muted small" id="f-count"></span>
       </div>
     </div>
     <section id="link" class="link hidden">
@@ -138,7 +147,13 @@
 
   <!-- ===== Status Studio ===== -->
   <div id="view-overview" class="overview hidden">
+    <section class="ov-backup" id="ov-backup" data-state="none"></section>
+    <div class="ov-sources"><span class="muted small">Show</span><div class="seg" id="ov-sources"></div></div>
     <div class="ov-stats" id="ov-stats"></div>
+    <div class="ov-sec">
+      <h2 class="section-title">Keep it up to date</h2>
+      <div class="ov-upkeep" id="ov-upkeep"></div>
+    </div>
     <div class="ov-sec">
       <h2>Projects <span class="muted small" id="ov-proj-count"></span></h2>
       <p class="muted small">What your conversations turned out to be about. Click one to read it.</p>

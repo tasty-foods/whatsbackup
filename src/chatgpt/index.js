@@ -40,14 +40,32 @@ let timer = null;
 let browser = null;
 
 const log = (...a) => console.log('[chatgpt]', ...a);
-const hasProfile = () => { try { return fs.existsSync(path.join(PROFILE_DIR, 'Default')); } catch (_) { return false; } };
+const MARKER = () => path.join(PROFILE_DIR, 'linked.json');
+// A profile folder exists the moment the window opens, signed in or not.
+// Only a session check that came back positive writes the marker, and a
+// session check that comes back negative removes it — so linked means what
+// the card says it means.
+const hasProfile = () => { try { return fs.existsSync(MARKER()); } catch (_) { return false; } };
+const markLinked = (on) => { try { if (on) { fs.mkdirSync(PROFILE_DIR, { recursive: true }); fs.writeFileSync(MARKER(), JSON.stringify({ at: Date.now() })); } else fs.rmSync(MARKER(), { force: true }); } catch (_) {} };
 
 async function launch({ headed = false } = {}) {
   const puppeteer = require('puppeteer');
   fs.mkdirSync(PROFILE_DIR, { recursive: true });
-  const args = ['--disable-gpu', '--no-first-run', '--no-default-browser-check'];
+  // chatgpt.com sits behind Cloudflare, which answers a browser that announces
+  // itself as automated with an interstitial and a 403 on the session call —
+  // measured: the same profile, same cookies, 403 with the flags on and 200
+  // with them off. Two things carry the announcement: a switch Chromium is
+  // started with, and the word Headless in the user agent.
+  const args = ['--disable-gpu', '--no-first-run', '--no-default-browser-check', '--disable-blink-features=AutomationControlled'];
   if (process.env.WB_NO_SANDBOX === '1') args.push('--no-sandbox', '--disable-setuid-sandbox');
-  const opts = { headless: !headed, args, userDataDir: PROFILE_DIR, defaultViewport: headed ? null : { width: 1280, height: 900 } };
+  const opts = {
+    headless: !headed, args, userDataDir: PROFILE_DIR,
+    ignoreDefaultArgs: ['--enable-automation'],
+    defaultViewport: headed ? null : { width: 1280, height: 900 },
+    // Listing runs as one call into the page and reads every conversation;
+    // the three-minute default was measured too short at twenty-one.
+    protocolTimeout: 15 * 60 * 1000,
+  };
   if (cfg.CHROME_PATH) opts.executablePath = cfg.CHROME_PATH;
   browser = await puppeteer.launch(opts);
   return browser;
@@ -61,6 +79,7 @@ async function closeBrowser() {
 async function openPage(b) {
   const page = await b.newPage();
   page.setDefaultTimeout(PAGE_TIMEOUT_MS);
+  try { const ua = await b.userAgent(); if (/HeadlessChrome/.test(ua)) await page.setUserAgent(ua.replace('HeadlessChrome', 'Chrome')); } catch (_) {}
   for (let i = 0; i <= NAV_RETRIES; i++) {
     try { await page.goto(ORIGIN + '/', { waitUntil: 'domcontentloaded' }); return page; }
     catch (e) { if (i === NAV_RETRIES) throw e; }
@@ -101,11 +120,13 @@ async function connect() {
       if (!token) await new Promise((r) => setTimeout(r, 2500));
     }
     if (!token) throw new Error(page.isClosed() ? 'the window was closed before signing in' : 'no sign-in within ten minutes');
+    markLinked(true);
     state.linked = true; state.status = 'linked';
     log('linked');
     return { ok: true };
   } catch (e) {
-    state.linked = hasProfile() && state.linked;
+    markLinked(false);
+    state.linked = false;
     state.status = state.linked ? 'linked' : 'unlinked';
     state.lastError = e.message;
     return { ok: false, error: e.message };
@@ -135,6 +156,7 @@ async function checkLink() {
     const page = await openPage(b);
     const token = await sessionToken(page);
     state.linked = !!token;
+    markLinked(!!token);
     state.status = token ? 'linked' : 'unlinked';
     if (!token) state.lastError = 'signed out — connect again';
     return state.linked;
@@ -247,7 +269,7 @@ async function scan({ reason = 'manual' } = {}) {
     const b = await launch();
     const page = await openPage(b);
     const token = await sessionToken(page);
-    if (!token) { state.linked = false; throw new Error('signed out — connect again'); }
+    if (!token) { markLinked(false); state.linked = false; throw new Error('signed out — connect again'); }
     state.linked = true;
 
     const listed = await listImages(page, token);
@@ -293,6 +315,7 @@ async function scan({ reason = 'manual' } = {}) {
     state.lastScanAt = Date.now();
     state.lastRun = run;
     state.status = 'linked';
+    if (run.saved) { try { require('../backup').nudge(); } catch (_) {} }
     log(`scan (${reason}): ${run.conversations} conversations, ${run.images} images, ${run.saved} new, ${run.skipped} already had, ${run.failed} failed`);
     return { ok: true, ...run };
   } catch (e) {

@@ -429,6 +429,11 @@ function createApp() {
   app.post('/api/gemini/disconnect', sameOrigin, async (req, res) => res.json(await gemini.disconnect()));
   app.post('/api/gemini/check', sameOrigin, async (req, res) => res.json({ linked: await gemini.checkLink() }));
 
+  // ---- Backup: what is actually on pCloud ----
+  const backup = require('./backup');
+  app.get('/api/backup/status', (req, res) => { try { res.json(backup.status({ ids: req.query.ids !== '0' })); } catch (e) { res.status(500).json({ error: e.message }); } });
+  app.post('/api/backup/sweep', sameOrigin, async (req, res) => res.json(await backup.sweep({ reason: 'manual' })));
+
   // ---- Clean up ----
   const cleanup = require('./cleanup');
   app.get('/api/cleanup/suggest', (req, res) => { try { res.json(cleanup.suggest()); } catch (e) { res.status(500).json({ error: e.message }); } });

@@ -42,7 +42,13 @@ let timer = null;
 let browser = null;
 
 const log = (...a) => console.log('[gemini]', ...a);
-const hasProfile = () => { try { return fs.existsSync(path.join(PROFILE_DIR, 'Default')); } catch (_) { return false; } };
+const MARKER = () => path.join(PROFILE_DIR, 'linked.json');
+// A profile folder exists the moment the window opens, signed in or not.
+// Only a session check that came back positive writes the marker, and a
+// session check that comes back negative removes it — so linked means what
+// the card says it means.
+const hasProfile = () => { try { return fs.existsSync(MARKER()); } catch (_) { return false; } };
+const markLinked = (on) => { try { if (on) { fs.mkdirSync(PROFILE_DIR, { recursive: true }); fs.writeFileSync(MARKER(), JSON.stringify({ at: Date.now() })); } else fs.rmSync(MARKER(), { force: true }); } catch (_) {} };
 
 async function launch({ headed = false } = {}) {
   const puppeteer = require('puppeteer');
@@ -55,6 +61,7 @@ async function launch({ headed = false } = {}) {
     headless: !headed, args, userDataDir: PROFILE_DIR,
     ignoreDefaultArgs: ['--enable-automation'],
     defaultViewport: headed ? null : { width: 1280, height: 900 },
+    protocolTimeout: 15 * 60 * 1000,
   };
   if (cfg.CHROME_PATH) opts.executablePath = cfg.CHROME_PATH;
   browser = await puppeteer.launch(opts);
@@ -69,6 +76,7 @@ async function closeBrowser() {
 async function openPage(b, pathname) {
   const page = await b.newPage();
   page.setDefaultTimeout(PAGE_TIMEOUT_MS);
+  try { const ua = await b.userAgent(); if (/HeadlessChrome/.test(ua)) await page.setUserAgent(ua.replace('HeadlessChrome', 'Chrome')); } catch (_) {}
   for (let i = 0; i <= NAV_RETRIES; i++) {
     try { await page.goto(ORIGIN + pathname, { waitUntil: 'domcontentloaded' }); return page; }
     catch (e) { if (i === NAV_RETRIES) throw e; }
@@ -102,11 +110,13 @@ async function connect() {
       if (!ok) await new Promise((r) => setTimeout(r, 2500));
     }
     if (!ok) throw new Error(page.isClosed() ? 'the window was closed before signing in' : 'no sign-in within ten minutes');
+    markLinked(true);
     state.linked = true; state.status = 'linked';
     log('linked');
     return { ok: true };
   } catch (e) {
-    state.linked = hasProfile() && state.linked;
+    markLinked(false);
+    state.linked = false;
     state.status = state.linked ? 'linked' : 'unlinked';
     state.lastError = e.message;
     return { ok: false, error: e.message };
@@ -134,7 +144,7 @@ async function checkLink() {
     const page = await openPage(b, '/app');
     await new Promise((r) => setTimeout(r, 3000));
     const ok = await signedIn(page);
-    state.linked = ok; state.status = ok ? 'linked' : 'unlinked';
+    state.linked = ok; markLinked(ok); state.status = ok ? 'linked' : 'unlinked';
     if (!ok) state.lastError = 'signed out — connect again';
     return ok;
   } catch (e) {
@@ -184,6 +194,7 @@ async function listLibrary(page) {
 async function fetchImage(b, base) {
   const page = await b.newPage();
   page.setDefaultTimeout(PAGE_TIMEOUT_MS);
+  try { const ua = await b.userAgent(); if (/HeadlessChrome/.test(ua)) await page.setUserAgent(ua.replace('HeadlessChrome', 'Chrome')); } catch (_) {}
   try {
     for (const suffix of ['=s0', '=d', '=w2048-h2048', '']) {
       let res;
@@ -222,7 +233,7 @@ async function scan({ reason = 'manual' } = {}) {
     const b = await launch();
     const page = await openPage(b, '/library');
     await new Promise((r) => setTimeout(r, 3500));
-    if (!(await signedIn(page))) { state.linked = false; throw new Error('signed out — connect again'); }
+    if (!(await signedIn(page))) { markLinked(false); state.linked = false; throw new Error('signed out — connect again'); }
     state.linked = true;
 
     const items = await listLibrary(page);
@@ -263,6 +274,7 @@ async function scan({ reason = 'manual' } = {}) {
     state.lastScanAt = Date.now();
     state.lastRun = run;
     state.status = 'linked';
+    if (run.saved) { try { require('../backup').nudge(); } catch (_) {} }
     log(`scan (${reason}): ${run.images} pictures in the library, ${run.saved} new, ${run.skipped} already had, ${run.failed} failed`);
     return { ok: true, ...run };
   } catch (e) {

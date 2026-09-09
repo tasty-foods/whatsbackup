@@ -8,7 +8,7 @@ const els = {
   gallery: document.getElementById('gallery'),
   empty: document.getElementById('empty'),
   search: document.getElementById('search'),
-  tabs: document.getElementById('tabs'),
+  tabs: document.getElementById('kind'),
   zip: document.getElementById('zip'),
   lightbox: document.getElementById('lightbox'),
   lbStage: document.getElementById('lb-stage'),
@@ -18,14 +18,23 @@ const els = {
   lbNext: document.getElementById('lb-next'),
 };
 
-let filter = 'all';        // all | image | video | in | out
-let query = '';
+// Where a record came from. Records older than the second source carry no
+// source at all, and those are WhatsApp's.
+const SOURCES = [
+  { id: 'whatsapp', label: 'WhatsApp', glyph: '💬', badgeIn: '↓ Received', badgeOut: '↑ Sent' },
+  { id: 'chatgpt', label: 'ChatGPT', glyph: '✦', badgeIn: '✦ ChatGPT', badgeOut: '↑ To ChatGPT' },
+  { id: 'gemini', label: 'Gemini', glyph: '✦', badgeIn: '✦ Gemini', badgeOut: '✦ Gemini' },
+];
+const srcOf = (r) => r.source || 'whatsapp';
 let allItems = [];         // full list, newest first
 // Filter state lives up here with the rest: render() runs during the first
 // load, long before the bottom of this file has executed, and a const declared
 // down there is still in its dead zone when the first render reaches it.
+// One object decides what the gallery shows. Every control reads and writes
+// this and re-renders from it; none keeps a private copy. If two controls
+// could disagree, one of them would be wrong.
 const F = {
-  kind: '', dir: '', album: '', project: '', tag: '', source: '', from: '', to: '', sort: 'new',
+  q: '', source: '', kind: '', exact: '', dir: '', album: '', project: '', tag: '', backup: '', from: '', to: '', sort: 'new',
 };
 const fEl = (id) => document.getElementById(id);
 
@@ -57,17 +66,13 @@ const KIND_ICON = { voice: '🎤', audio: '🎵', document: '📄', sticker: '�
 const KIND_LABEL = { voice: 'Voice note', audio: 'Audio', document: 'Document', sticker: 'Sticker' };
 
 function matchesFilter(r) {
-  // Search matches the chat name or, once labelled, what is actually in the picture.
-  if (query && !((r.chat || '').toLowerCase().includes(query))
-    && !(typeof AI !== 'undefined' && AI.matchesText(r, query))) return false;
-  if (typeof AI !== 'undefined' && !AI.passes(r)) return false;
-  if (typeof matchesAdvanced === 'function' && !matchesAdvanced(r)) return false;
-  if (filter === 'all') return true;
-  if (filter === 'image') return r.kind === 'image' || r.kind === 'sticker';
-  if (filter === 'video') return r.kind === 'video';
-  if (filter === 'file') return FILE_KINDS.has(r.kind);
-  if (filter === 'in' || filter === 'out') return r.dir === filter;
-  return true;
+  // Search reads the chat, the caption, a file name and — once labelled —
+  // what is actually in the picture.
+  if (F.q) {
+    const hay = [r.chat, r.caption, r.docName].filter(Boolean).join(' ').toLowerCase();
+    if (!hay.includes(F.q) && !(typeof AI !== 'undefined' && AI.matchesText(r, F.q))) return false;
+  }
+  return typeof matchesAdvanced === 'function' ? matchesAdvanced(r) : true;
 }
 
 function makeDayLabel(ms) {
@@ -85,14 +90,16 @@ function tile(r) {
   // A picture from ChatGPT is still sent or received - you uploaded it, or it
   // made it - but the badge says which source, since that is the question the
   // gallery cannot otherwise answer.
-  const badge = r.source === 'chatgpt'
-    ? (r.dir === 'out' ? '<span class="badge out">↑ To ChatGPT</span>' : '<span class="badge in cg">✦ ChatGPT</span>')
-    : r.source === 'gemini' ? '<span class="badge in gm">✦ Gemini</span>'
-    : (r.dir === 'out' ? '<span class="badge out">↑ Sent</span>' : '<span class="badge in">↓ Received</span>');
+  const s = SOURCES.find((x) => x.id === srcOf(r)) || SOURCES[0];
+  const badge = '<span class="badge ' + (r.dir === 'out' ? 'out' : 'in') + '" data-source="' + s.id + '">' + (r.dir === 'out' ? s.badgeOut : s.badgeIn) + '</span>';
   const lbl = typeof AI !== 'undefined' ? AI.labelFor(r.id) : null;
   const albumTag = lbl && lbl.groupName
     ? `<span class="albumtag">${escapeHtml(lbl.groupEmoji || '📁')} ${escapeHtml(lbl.groupName)}</span>` : '';
-  const cap = `<div class="cap"><span class="chat">${escapeHtml(r.chat)}</span><span class="time">${fmtTime(r.ts)}</span></div>${albumTag}`;
+  // Backed up is the norm and goes unmarked; only what is still on this PC
+  // alone gets a mark, and only when there is a cloud folder to be missing from.
+  const local = typeof Backup !== 'undefined' && Backup.configured() && Backup.onlyHere().has(r.id);
+  const bk = local ? '<span class="bk local" title="On this PC only — not yet in your cloud folder">⚠</span>' : '';
+  const cap = `<div class="cap"><span class="chat">${escapeHtml(r.chat)}</span>${bk}<span class="time">${fmtTime(r.ts)}</span></div>${albumTag}`;
   if (r.kind === 'image' || r.kind === 'sticker') {
     el.innerHTML = `<img loading="lazy" src="${r.serve}" alt="" onerror="this.classList.add('imgerr')" />${badge}${cap}`;
   } else if (r.kind === 'video') {
@@ -207,7 +214,15 @@ function render(all) {
   if (typeof updateFilterCount === 'function') updateFilterCount(filteredCache.length, allItems.length);
   els.gallery.innerHTML = '';
   renderedCount = 0; lastDayRendered = null; sentinel = null;
-  els.empty.classList.toggle('hidden', filteredCache.length > 0);
+  const none = filteredCache.length === 0;
+  els.empty.classList.toggle('hidden', !none);
+  if (none) {
+    els.empty.innerHTML = allItems.length
+      ? 'Nothing matches. <button class="btn small" id="empty-clear">Clear all</button>'
+      : 'No photos or videos yet. New ones appear here the moment they arrive — or open <b>⚙︎ Settings → Import older</b> to pull in what came before.';
+    const ec = document.getElementById('empty-clear'); if (ec) ec.addEventListener('click', clearAll);
+  }
+  if (els.zip) els.zip.textContent = filtersActive() ? '⭳ Download all photos' : '⭳ Download all photos';
   if (io) io.disconnect();
   io = new IntersectionObserver((entries) => {
     if (entries.some((e) => e.isIntersecting) && renderedCount < filteredCache.length) appendChunk();
@@ -261,7 +276,9 @@ function showCurrent() {
   };
   els.lbStage.appendChild(el);
   const sizeKb = r.size ? (r.size / 1024).toFixed(0) + ' KB' : '';
-  const cloudTag = r.kind === 'video' && r.cloud ? ' · <span class="m-sub">saved to your cloud folder</span>' : '';
+  const cloudTag = typeof Backup !== 'undefined' && Backup.configured()
+    ? (Backup.onlyHere().has(r.id) ? ' · <span class="tag warn">⚠ On this PC only</span>' : ' · <span class="tag ok">☁ Backed up to pCloud</span>')
+    : '';
   const lbl = typeof AI !== 'undefined' ? AI.labelFor(r.id) : null;
   const l = lbl && lbl.label;
   const aiBlock = l ? `<span class="m-ai">${escapeHtml(l.caption || l.summary || '')}
@@ -305,17 +322,20 @@ document.addEventListener('keydown', (e) => {
 });
 
 /* ---------- Controls ---------- */
-els.tabs.addEventListener('click', (e) => {
-  const b = e.target.closest('button'); if (!b) return;
-  [...els.tabs.children].forEach((c) => c.classList.remove('active'));
-  b.classList.add('active');
-  filter = b.dataset.f;
+function syncKindUi() {
+  if (!els.tabs) return;
+  [...els.tabs.querySelectorAll('button[data-kind]')].forEach((c) => c.classList.toggle('active', (c.dataset.kind || '') === (F.kind || '')));
+}
+if (els.tabs) els.tabs.addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-kind]'); if (!b) return;
+  F.kind = b.dataset.kind || '';
+  syncKindUi();
   render(allItems);
 });
 let searchT;
 els.search.addEventListener('input', () => {
   clearTimeout(searchT);
-  searchT = setTimeout(() => { query = els.search.value.trim().toLowerCase(); render(allItems); }, 150);
+  searchT = setTimeout(() => { F.q = els.search.value.trim().toLowerCase(); render(allItems); }, 150);
 });
 
 /* ---------- Data + live updates ---------- */
@@ -328,9 +348,8 @@ async function loadState() {
     const status = s.status;
     if (status === 'ready') {
       els.link.classList.add('hidden');
-      const cloud = s.cloudAvailable ? 'videos → pCloud' : 'videos → local (cloud drive offline)';
       const synced = typeof syncLine === 'function' ? syncLine(s) : '';
-      els.sub.innerHTML = `<span class="dot ok"></span>Linked${s.me ? ' as ' + escapeHtml(s.me) : ''} · ${s.counts.images} images · ${s.counts.videos} videos · ${cloud}${synced}`;
+      els.sub.innerHTML = `<span class="dot ok"></span>Linked${s.me ? ' as ' + escapeHtml(s.me) : ''} · ${s.counts.images} photos · ${s.counts.videos} videos${synced}`;
     } else if (status === 'qr') {
       els.link.classList.remove('hidden');
       els.linkTitle.textContent = 'Link your WhatsApp';
@@ -347,6 +366,7 @@ async function loadState() {
   } catch (e) {
     els.sub.innerHTML = `<span class="dot bad"></span>Dashboard offline`;
   }
+  if (typeof Backup !== 'undefined') Backup.noteState(lastStateSeen);
 }
 
 async function loadItems(initial) {
@@ -457,6 +477,142 @@ function makeSourceCard(prefix, api, label) {
 const ChatGptSource = makeSourceCard("cgpt", "/api/chatgpt", "ChatGPT");
 const GeminiSource = makeSourceCard("gem", "/api/gemini", "Gemini");
 const SourceCards = [ChatGptSource, GeminiSource];
+/* ---------- Clean up ------------------------------------------------------
+   The engine says what could go and why; this screen lets you tick it and
+   move it. Selection lives here, not in the engine, so looking again never
+   loses what was ticked. */
+const Cleanup = (function () {
+  const $c = (id) => document.getElementById(id);
+  const groupsEl = $c("cl-groups"), summary = $c("cl-summary");
+  const bQuar = $c("cl-quarantine"), bRefresh = $c("cl-refresh");
+  const quarList = $c("cl-quar-list"), quarCount = $c("cl-quar-count");
+  const bRestore = $c("cl-restore"), bPurge = $c("cl-purge");
+  if (!groupsEl) return { enter() {} };
+
+  const picked = new Set();      // ids ticked in the suggestions
+  const pickedQ = new Set();     // ids ticked in quarantine
+  let data = null;
+
+  const mb = (b) => b >= 1e9 ? (b / 1e9).toFixed(2) + " GB" : b >= 1e6 ? (b / 1e6).toFixed(1) + " MB" : Math.round(b / 1024) + " KB";
+  const thumb = (it) => it.kind === "video"
+    ? "<div class=" + q("cl-thumb vid") + ">&#9654;</div>"
+    : "<img class=" + q("cl-thumb") + " loading=" + q("lazy") + " src=" + q(it.serve || "") + " alt=" + q("") + ">";
+  function q(s) { return String.fromCharCode(34) + s + String.fromCharCode(34); }
+
+  function renderGroups() {
+    if (!data) return;
+    if (!data.groups.length) {
+      groupsEl.innerHTML = "<p class=" + q("muted") + " style=" + q("padding:20px 0") + ">Nothing to suggest. The library is tidy.</p>";
+      summary.textContent = data.library + " items looked at, nothing to suggest.";
+      bQuar.disabled = true; return;
+    }
+    summary.textContent = data.totalCount + " items, " + mb(data.totalBytes) + ", could go - from " + data.library + " in the library.";
+    groupsEl.innerHTML = "";
+    for (const g of data.groups) {
+      const sec = document.createElement("section");
+      sec.className = "cl-group";
+      const allOn = g.items.every((it) => picked.has(it.id));
+      sec.innerHTML = "<div class=" + q("cl-group-head") + ">"
+        + "<label class=" + q("cl-all") + "><input type=" + q("checkbox") + " " + (allOn ? "checked" : "") + " data-all=" + q(g.reason) + "> <b>" + escapeHtml(g.label) + "</b></label>"
+        + "<span class=" + q("cl-sure " + g.sure) + ">" + g.sure + "</span>"
+        + "<span class=" + q("muted small") + ">" + g.count + " items - " + mb(g.bytes) + "</span>"
+        + "</div>"
+        + "<p class=" + q("muted small cl-detail") + ">" + escapeHtml(g.detail) + "</p>"
+        + "<div class=" + q("cl-grid") + ">" + g.items.map((it) => 
+            "<label class=" + q("cl-item" + (picked.has(it.id) ? " on" : "")) + " data-id=" + q(it.id) + ">"
+            + "<input type=" + q("checkbox") + " " + (picked.has(it.id) ? "checked" : "") + ">"
+            + thumb(it)
+            + "<span class=" + q("cl-meta") + ">" + escapeHtml((it.chat || "").slice(0, 26)) + "<i>" + mb(it.bytes) + "</i></span>"
+            + (it.keep ? "<span class=" + q("cl-keep") + " title=" + q("the one that is kept") + ">keeps <img src=" + q(it.keep.serve || "") + " alt=" + q("") + "></span>" : "")
+            + "</label>").join("")
+        + "</div>";
+      groupsEl.appendChild(sec);
+    }
+    bQuar.disabled = picked.size === 0;
+    bQuar.textContent = picked.size ? "Move " + picked.size + " to quarantine (" + mb(pickedBytes()) + ")" : "Move selected to quarantine";
+  }
+  function pickedBytes() {
+    let n = 0; if (!data) return 0;
+    for (const g of data.groups) for (const it of g.items) if (picked.has(it.id)) n += it.bytes || 0;
+    return n;
+  }
+
+  groupsEl.addEventListener("change", (e) => {
+    const all = e.target.closest("input[data-all]");
+    if (all) {
+      const g = data.groups.find((x) => x.reason === all.dataset.all);
+      for (const it of g.items) { if (all.checked) picked.add(it.id); else picked.delete(it.id); }
+      renderGroups(); return;
+    }
+    const item = e.target.closest(".cl-item");
+    if (!item) return;
+    if (e.target.checked) picked.add(item.dataset.id); else picked.delete(item.dataset.id);
+    item.classList.toggle("on", e.target.checked);
+    bQuar.disabled = picked.size === 0;
+    bQuar.textContent = picked.size ? "Move " + picked.size + " to quarantine (" + mb(pickedBytes()) + ")" : "Move selected to quarantine";
+  });
+
+  async function load() {
+    summary.textContent = "Looking…";
+    try { data = await (await fetch("/api/cleanup/suggest")).json(); } catch (e) { summary.textContent = "Could not look: " + e.message; return; }
+    // Drop ticks for things that are no longer suggested.
+    const live = new Set(); for (const g of data.groups) for (const it of g.items) live.add(it.id);
+    for (const id of [...picked]) if (!live.has(id)) picked.delete(id);
+    renderGroups();
+    loadQuar();
+  }
+
+  async function loadQuar() {
+    let qd = null;
+    try { qd = await (await fetch("/api/cleanup/list")).json(); } catch (e) { return; }
+    quarCount.textContent = qd.count ? qd.count + " items - " + mb(qd.bytes) : "empty";
+    quarList.innerHTML = qd.count ? "<div class=" + q("cl-grid") + ">" + qd.items.map((it) =>
+        "<label class=" + q("cl-item" + (pickedQ.has(it.id) ? " on" : "")) + " data-qid=" + q(it.id) + ">"
+        + "<input type=" + q("checkbox") + " " + (pickedQ.has(it.id) ? "checked" : "") + ">"
+        + thumb({ kind: it.kind, serve: "/quarantine/" + encodeURIComponent(it.filename) })
+        + "<span class=" + q("cl-meta") + ">" + escapeHtml((it.chat || "").slice(0, 26)) + "<i>" + mb(it.bytes) + "</i></span>"
+        + "</label>").join("") + "</div>"
+      : "<p class=" + q("muted small") + ">Nothing here.</p>";
+    const any = pickedQ.size > 0;
+    bRestore.disabled = !any; bPurge.disabled = !any;
+  }
+  quarList.addEventListener("change", (e) => {
+    const item = e.target.closest(".cl-item"); if (!item) return;
+    if (e.target.checked) pickedQ.add(item.dataset.qid); else pickedQ.delete(item.dataset.qid);
+    item.classList.toggle("on", e.target.checked);
+    const any = pickedQ.size > 0; bRestore.disabled = !any; bPurge.disabled = !any;
+  });
+
+  const post = (url, body) => fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then((r) => r.json());
+
+  bQuar.addEventListener("click", async () => {
+    if (!picked.size) return;
+    bQuar.disabled = true;
+    const r = await post("/api/cleanup/quarantine", { ids: [...picked], reason: "chosen" });
+    picked.clear();
+    if (r.failed && r.failed.length) alert(r.failed.length + " could not be moved. The rest were.");
+    load();
+    if (typeof loadItems === "function") loadItems(true);
+  });
+  bRefresh.addEventListener("click", load);
+  bRestore.addEventListener("click", async () => {
+    if (!pickedQ.size) return;
+    await post("/api/cleanup/restore", { ids: [...pickedQ] });
+    pickedQ.clear(); load();
+    if (typeof loadItems === "function") loadItems(true);
+  });
+  bPurge.addEventListener("click", async () => {
+    if (!pickedQ.size) return;
+    const n = pickedQ.size;
+    if (!confirm("Delete " + n + " item" + (n === 1 ? "" : "s") + " forever?" + String.fromCharCode(10, 10) + "This cannot be undone.")) return;
+    if (!confirm("Last check - really delete " + n + " forever?")) return;
+    await post("/api/cleanup/purge", { ids: [...pickedQ] });
+    pickedQ.clear(); loadQuar();
+  });
+
+  return { enter: load };
+})();
+
 /* ---------- Settings ---------- */
 const $ = (id) => document.getElementById(id);
 
@@ -894,11 +1050,6 @@ function setView(v) {
   V.convo.classList.toggle('hidden', v !== 'convo');
   const statusEl = document.getElementById('view-status');
   if (statusEl) statusEl.classList.toggle('hidden', v !== 'status');
-  document.body.classList.toggle('convo-active', v === 'convo');
-  document.body.classList.toggle('status-active', v === 'status');
-  document.body.classList.toggle('overview-active', v === 'overview');
-  document.body.classList.toggle('cleanup-active', v === 'cleanup');
-  els.search.classList.toggle('hidden', v !== 'media');
   if (v === 'convo') Convo.enter();
   if (v === 'status' && typeof StatusView !== 'undefined') StatusView.enter();
   if (v === 'overview' && typeof Overview !== 'undefined') Overview.enter();
@@ -1128,7 +1279,6 @@ const Convo = (function () {
 /* ---------- AI sorting ---------- */
 const AI = (function () {
   const state = { labels: new Map(), groups: [], chatGroups: new Map(), status: null, presets: [] };
-  let album = 'all';          // 'all' | group id | 'unsorted'
   let pollTimer = null;
 
   const bar = $('albumbar');
@@ -1165,7 +1315,7 @@ const AI = (function () {
     if (!state.groups.length) { bar.classList.add('hidden'); return; }
     const unsorted = allItems.filter((r) => !(state.labels.get(r.id) || {}).groupId).length;
     const chip = (id, emoji, name, count) =>
-      `<button class="chip${album === id ? ' active' : ''}" data-album="${id}">${emoji ? escapeHtml(emoji) + ' ' : ''}${escapeHtml(name)}<span class="n">${count}</span></button>`;
+      `<button class="chip${(F.album || 'all') === id ? ' active' : ''}" data-album="${id}">${emoji ? escapeHtml(emoji) + ' ' : ''}${escapeHtml(name)}<span class="n">${count}</span></button>`;
     bar.innerHTML = chip('all', '', 'All', allItems.length)
       + state.groups.map((g) => chip(g.id, g.emoji, g.name, g.items.length)).join('')
       + (unsorted ? chip('unsorted', '', 'Not sorted', unsorted) : '');
@@ -1204,20 +1354,11 @@ const AI = (function () {
   bar.addEventListener('click', (e) => {
     const b = e.target.closest('button[data-album]');
     if (!b) return;
-    album = b.dataset.album;
+    F.album = b.dataset.album === 'all' ? '' : b.dataset.album;
+    const sel = fEl('f-album'); if (sel) sel.value = F.album === 'unsorted' ? '' : F.album;
     renderAlbumBar();
     render(allItems);
   });
-
-  // Called by matchesFilter so albums and text search compose with the
-  // existing kind/direction filters instead of replacing them.
-  function passes(r) {
-    if (album !== 'all') {
-      const g = (state.labels.get(r.id) || {}).groupId || null;
-      if (album === 'unsorted' ? g : g !== album) return false;
-    }
-    return true;
-  }
 
   // Text search should find a photo by what is in it, not just by chat name.
   function matchesText(r, q) {
@@ -1279,7 +1420,8 @@ const AI = (function () {
   // Opening an album from somewhere else has to go through the same state the
   // album bar uses, or the bar and the gallery disagree about what is showing.
   function selectAlbum(id) {
-    album = id || 'all';
+    F.album = !id || id === 'all' ? '' : id;
+    const sel = fEl('f-album'); if (sel) sel.value = F.album === 'unsorted' ? '' : F.album;
     renderAlbumBar();
     render(allItems);
   }
@@ -1540,7 +1682,7 @@ const AI = (function () {
   }
 
   return {
-    loadLabels, loadChatGroups, ensureChatGroups, loadSettingsTab, refreshEstimate, passes, matchesText, matchesChat,
+    loadLabels, loadChatGroups, ensureChatGroups, loadSettingsTab, refreshEstimate, matchesText, matchesChat,
     labelFor, chatLabelFor, renderAlbumBar, renderTagBar, saveAiSettings, albumPicker, bindAlbumPicker, tagCounts, hasTag, labelCount, selectAlbum,
     groups: () => state.groups,
     chatGroups, chatGroupIdForName,
@@ -1773,19 +1915,105 @@ function openQuickPlay(startId) {
    what order to read them in. Kept in one object so matchesFilter has a single
    place to look and the Clear button is one assignment. */
 
-function filtersActive() {
-  return !!(F.kind || F.dir || F.album || F.project || F.tag || F.source || F.from || F.to) || F.sort !== 'new';
+// Which sources have anything to show. WhatsApp and ChatGPT are always
+// offered; Gemini appears the moment its first picture arrives.
+function visibleSources() {
+  const have = new Set(allItems.map(srcOf));
+  return SOURCES.filter((s) => s.id === 'whatsapp' || s.id === 'chatgpt' || have.has(s.id));
 }
+function renderSourceBar() {
+  const counts = {};
+  for (const r of allItems) counts[srcOf(r)] = (counts[srcOf(r)] || 0) + 1;
+  const btn = (id, label, n) => '<button data-source="' + id + '"' + ((F.source || '') === id ? ' class="active"' : '') + '>' + escapeHtml(label) + '<span class="n">' + n + '</span></button>';
+  const html = btn('', 'All', allItems.length) + visibleSources().map((s) => btn(s.id, s.glyph + ' ' + s.label, counts[s.id] || 0)).join('');
+  for (const id of ['source', 'ov-sources']) { const el = fEl(id); if (el) el.innerHTML = html; }
+}
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('#source button[data-source], #ov-sources button[data-source]');
+  if (!b) return;
+  F.source = b.dataset.source || '';
+  renderSourceBar();
+  render(allItems);
+  if (typeof Overview !== 'undefined') Overview.render();
+});
+
+// Sort is never a filter: it changes the order, not what is shown.
+function filtersActive() {
+  return !!(F.q || F.source || F.kind || F.exact || F.dir || F.album || F.project || F.tag || F.backup || F.from || F.to);
+}
+
+// Everything the gallery can be narrowed by, one line each, so the bar above
+// the gallery can say exactly what is in force and take any one of them off.
+const ACTIVE_LABELS = {
+  q: (v) => '“' + v + '”',
+  source: (v) => (SOURCES.find((s) => s.id === v) || { label: v }).label,
+  kind: (v) => ({ photos: 'Photos', videos: 'Videos', files: 'Files' })[v] || v,
+  exact: (v) => ({ image: 'Photos only', video: 'Videos only', sticker: 'Stickers', ptt: 'Voice notes', audio: 'Audio', document: 'Documents' })[v] || v,
+  dir: (v) => v === 'in' ? 'Received' : 'Sent',
+  album: (v) => v === 'unsorted' ? 'No album yet' : 'Album: ' + (((typeof AI !== 'undefined' && AI.groups()) || []).find((g) => g.id === v) || { name: v }).name,
+  project: (v) => 'Project: ' + (((typeof AI !== 'undefined' && AI.chatGroups()) || []).find((g) => g.id === v) || { name: v }).name,
+  tag: (v) => '#' + v,
+  backup: (v) => v === 'local' ? 'On this PC only' : 'In pCloud',
+  from: (v) => 'From ' + v,
+  to: (v) => 'To ' + v,
+};
+function renderActiveBar() {
+  const bar = fEl('activebar');
+  if (!bar) return;
+  const chips = [];
+  for (const k of Object.keys(ACTIVE_LABELS)) {
+    if (!F[k]) continue;
+    chips.push('<button class="chip active" data-clear="' + k + '">' + escapeHtml(ACTIVE_LABELS[k](F[k])) + '<span class="x">×</span></button>');
+  }
+  if (!chips.length) { bar.innerHTML = ''; return; }
+  bar.innerHTML = chips.join('')
+    + '<button class="chip clear" data-clear="*">Clear all</button>'
+    + '<span class="count">showing ' + filteredCache.length + ' of ' + allItems.length + '</span>';
+}
+function clearAll() {
+  Object.assign(F, { q: '', source: '', kind: '', exact: '', dir: '', album: '', project: '', tag: '', backup: '', from: '', to: '' });
+  if (els.search) els.search.value = '';
+  for (const id of ['f-exact', 'f-dir', 'f-album', 'f-project', 'f-tag', 'f-backup', 'f-from', 'f-to']) { const e = fEl(id); if (e) e.value = ''; }
+  syncKindUi();
+  if (typeof renderSourceBar === 'function') renderSourceBar();
+  if (typeof AI !== 'undefined') { AI.renderAlbumBar(); AI.renderTagBar(); }
+  render(allItems);
+}
+function clearOne(k) {
+  if (k === '*') return clearAll();
+  F[k] = '';
+  if (k === 'q' && els.search) els.search.value = '';
+  const ids = { exact: 'f-exact', dir: 'f-dir', album: 'f-album', project: 'f-project', tag: 'f-tag', backup: 'f-backup', from: 'f-from', to: 'f-to' };
+  if (ids[k]) { const e = fEl(ids[k]); if (e) e.value = ''; }
+  if (k === 'kind') syncKindUi();
+  if (k === 'source' && typeof renderSourceBar === 'function') renderSourceBar();
+  if (k === 'album' && typeof AI !== 'undefined') AI.renderAlbumBar();
+  if (k === 'tag' && typeof AI !== 'undefined') AI.renderTagBar();
+  render(allItems);
+}
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('#activebar button[data-clear]');
+  if (b) clearOne(b.dataset.clear);
+});
 
 // Applied after the tab strip and the search box have had their say.
 function matchesAdvanced(r) {
-  if (F.kind && r.kind !== F.kind) return false;
+  if (F.source && srcOf(r) !== F.source) return false;
+  if (F.kind === 'photos' && !(r.kind === 'image' || r.kind === 'sticker')) return false;
+  if (F.kind === 'videos' && r.kind !== 'video') return false;
+  if (F.kind === 'files' && !FILE_KINDS.has(r.kind)) return false;
+  if (F.exact && r.kind !== F.exact) return false;
+  if (F.backup && typeof Backup !== 'undefined' && Backup.configured()) {
+    const local = Backup.onlyHere().has(r.id);
+    if (F.backup === 'local' ? !local : local) return false;
+  }
   if (F.dir && r.dir !== F.dir) return false;
   if (F.from && r.ts < Date.parse(F.from + 'T00:00:00')) return false;
   if (F.to && r.ts > Date.parse(F.to + 'T23:59:59')) return false;
   if (F.album) {
     const g = (typeof AI !== 'undefined' && AI.labelFor(r.id)) || null;
-    if (!g || g.groupId !== F.album) return false;
+    const inAlbum = g && g.groupId;
+    if (F.album === 'unsorted' ? inAlbum : (!g || g.groupId !== F.album)) return false;
   }
   if (F.project) {
     // A media item belongs to a project through the chat it arrived in.
@@ -1793,8 +2021,6 @@ function matchesAdvanced(r) {
     if (cg !== F.project) return false;
   }
   if (F.tag && !(typeof AI !== 'undefined' && AI.hasTag(r.id, F.tag))) return false;
-  // Records written before there was a second source carry no source at all.
-  if (F.source && (r.source || 'whatsapp') !== F.source) return false;
   return true;
 }
 
@@ -1860,8 +2086,10 @@ function bindFilters() {
     if (!el) return;
     el.addEventListener('change', () => { F[key] = el.value; render(allItems); });
   };
-  wire('f-kind', 'kind'); wire('f-dir', 'dir'); wire('f-album', 'album');
-  wire('f-project', 'project'); wire('f-source', 'source'); wire('f-from', 'from'); wire('f-to', 'to');
+  wire('f-exact', 'exact'); wire('f-backup', 'backup'); wire('f-dir', 'dir'); wire('f-album', 'album');
+  wire('f-project', 'project'); wire('f-from', 'from'); wire('f-to', 'to');
+  const albSel = fEl('f-album');
+  if (albSel) albSel.addEventListener('change', () => { F.album = albSel.value; if (typeof AI !== 'undefined') AI.renderAlbumBar(); render(allItems); });
   const tagSel = fEl('f-tag');
   if (tagSel) tagSel.addEventListener('change', () => {
     F.tag = tagSel.value;
@@ -1869,24 +2097,15 @@ function bindFilters() {
     render(allItems);
   });
   wire('f-sort', 'sort');
-  const reset = fEl('f-reset');
-  if (reset) reset.addEventListener('click', () => {
-    Object.assign(F, { kind: '', dir: '', album: '', project: '', tag: '', source: '', from: '', to: '', sort: 'new' });
-    for (const id of ['f-kind', 'f-dir', 'f-album', 'f-project', 'f-tag', 'f-source', 'f-from', 'f-to']) { const e = fEl(id); if (e) e.value = ''; }
-    const s = fEl('f-sort'); if (s) s.value = 'new';
-    if (typeof AI !== 'undefined' && AI.renderTagBar) AI.renderTagBar();
-    render(allItems);
-  });
+  // Clearing lives in the active bar above the gallery now (clearAll).
 }
 
 // "Showing 12 of 431" only when something is actually narrowing the view —
 // otherwise it is noise restating the count already in the header.
-function updateFilterCount(shown, total) {
-  const el = fEl('f-count');
-  if (!el) return;
-  el.textContent = filtersActive() && shown !== total ? `showing ${shown} of ${total}` : '';
+function updateFilterCount() {
+  renderActiveBar();
   const open = fEl('filters-open');
-  if (open) open.classList.toggle('on', filtersActive());
+  if (open) open.classList.toggle('on', !!(F.exact || F.dir || F.album || F.project || F.tag || F.backup || F.from || F.to));
 }
 
 /* ---------- Last synced ---------- */
@@ -2351,6 +2570,61 @@ const Chain = (function () {
 })();
 
 
+/* ---------- Backup: what is actually on pCloud ------------------------------
+   The engine checks the cloud folder itself and says which items are not in
+   it. This keeps that answer, marks the tiles, fills the card on the Overview,
+   the pill in the header and the banner when the folder goes away. */
+let lastStateSeen = null;
+const Backup = (function () {
+  let st = null;                 // last /api/backup/status
+  let only = new Set();
+  let dismissed = false, wasUp = null;
+  const configured = () => !!(st && st.configured);
+  const onlyHere = () => only;
+  async function refresh() {
+    try { st = await (await fetch('/api/backup/status')).json(); } catch (e) { return; }
+    only = new Set(st.onlyHereIds || []);
+    renderPill(); renderBanner();
+    if (typeof Overview !== 'undefined') Overview.renderBackup();
+    if (currentView === 'media') render(allItems);
+  }
+  function noteState(s) { lastStateSeen = s; renderPill(); renderBanner(); }
+  function describe() {
+    if (!st) return null;
+    if (!st.configured) return { state: 'none', short: '☁ No cloud folder', text: 'Not backed up — no cloud folder is set.' };
+    if (!st.available) return { state: 'warn', short: '☁ pCloud not reachable', text: 'Your cloud folder is not reachable — new photos and videos stay on this PC until it is back.' };
+    if (st.onlyHere > 0) return { state: 'warn', short: '☁ ' + st.onlyHere + ' not backed up', text: st.onlyHere + ' item' + (st.onlyHere === 1 ? ' is' : 's are') + ' on this PC only.' };
+    return { state: 'ok', short: '☁ Backed up', text: 'Everything is backed up to pCloud.' };
+  }
+  function renderPill() {
+    const p = fEl('cloud-pill'); if (!p) return;
+    const d = describe();
+    p.hidden = !d;
+    if (!d) return;
+    p.textContent = d.short;
+    p.className = 'pill cloud ' + (d.state === 'ok' ? 'ok' : d.state === 'warn' ? 'warn' : '');
+    p.title = d.text + ' Click for the Overview.';
+  }
+  function renderBanner() {
+    const b = fEl('cloud-banner'); if (!b || !st) return;
+    const down = st.configured && !st.available;
+    if (down && wasUp !== false) dismissed = false;     // a fresh outage is said again
+    wasUp = !down;
+    b.classList.toggle('hidden', !down || dismissed);
+    if (down) fEl('cloud-text').textContent = 'Your cloud folder ' + (st.root || '') + ' is not reachable. New photos and videos are being kept on this PC only.';
+  }
+  async function sweep() {
+    try { await fetch('/api/backup/sweep', { method: 'POST' }); } catch (e) {}
+    await refresh();
+  }
+  const pill = fEl('cloud-pill'); if (pill) pill.addEventListener('click', () => setView('overview'));
+  const chk = fEl('cloud-check'); if (chk) chk.addEventListener('click', sweep);
+  const dis = fEl('cloud-dismiss'); if (dis) dis.addEventListener('click', () => { dismissed = true; renderBanner(); });
+  const cs = fEl('cloud-settings'); if (cs) cs.addEventListener('click', () => { openSettings(); const tab = document.querySelector('#settabs [data-t="storage"]'); if (tab) tab.click(); });
+  setInterval(refresh, 60000);
+  return { refresh, sweep, configured, onlyHere, describe, status: () => st, noteState };
+})();
+
 /* ---------- Overview -------------------------------------------------------
    The archive has been read and grouped; this is the one screen that says so.
    Everything here is what the model actually produced — no counts are made up
@@ -2379,6 +2653,39 @@ const Overview = (function () {
     + '<div class="ov-count">' + bits.count + '</div>'
     + '</button>';
 
+  function renderBackup() {
+    const el = $('ov-backup'); if (!el) return;
+    const st = Backup.status();
+    const d = Backup.describe();
+    if (!st || !d) { el.innerHTML = '<div><div class="big">Checking your backup…</div></div>'; el.dataset.state = 'none'; return; }
+    el.dataset.state = d.state;
+    if (!st.total) { el.innerHTML = '<div><div class="big">Nothing saved yet</div><div class="line">' + escapeHtml(d.text) + '</div></div>'; return; }
+    const pct = st.total ? Math.round(100 * st.onCloud / st.total) : 0;
+    const link = lastStateSeen && lastStateSeen.status === 'ready'
+      ? '● Linked' + (lastStateSeen.me ? ' as ' + escapeHtml(lastStateSeen.me) : '') + (typeof syncLine === 'function' ? syncLine(lastStateSeen) : '')
+      : '● WhatsApp not linked yet';
+    let left = '<div class="big">' + (st.configured ? '<b>' + st.onCloud + '</b> of ' + st.total + ' backed up to pCloud' : st.total + ' items, none backed up yet') + '</div>'
+      + '<div class="line">' + escapeHtml(d.text) + (st.configured && st.available ? ' Backing up to ' + escapeHtml(st.root) + '.' : '') + '</div>'
+      + (st.configured ? '<div class="bar"><i style="width:' + pct + '%"></i></div>' : '')
+      + '<div class="line">' + link + '</div>';
+    let side = '';
+    if (st.configured && st.onlyHere > 0) side += '<button class="local" id="ov-local"><b>' + st.onlyHere + '</b>on this PC only — show them</button>';
+    if (st.configured) side += '<button class="btn small" id="ov-sweep">' + (st.available ? 'Back up now' : 'Check now') + '</button>';
+    else side += '<button class="btn small" id="ov-cloud-set">Choose a cloud folder</button>';
+    el.innerHTML = '<div>' + left + '</div><div class="side">' + side + '</div>';
+    const l = $('ov-local'); if (l) l.addEventListener('click', () => { clearAll(); F.backup = 'local'; const s = fEl('f-backup'); if (s) s.value = 'local'; setView('media'); render(allItems); });
+    const sw = $('ov-sweep'); if (sw) sw.addEventListener('click', async () => { sw.disabled = true; sw.textContent = 'Working…'; await Backup.sweep(); });
+    const cset = $('ov-cloud-set'); if (cset) cset.addEventListener('click', () => { openSettings(); const tab = document.querySelector('#settabs [data-t="storage"]'); if (tab) tab.click(); });
+  }
+  function renderUpkeep() {
+    const el = $('ov-upkeep'); if (!el) return;
+    const go = (t) => { openSettings(); const tab = document.querySelector('#settabs [data-t="' + t + '"]'); if (tab) tab.click(); };
+    el.innerHTML = '<button class="btn small" data-up="history">Import older</button>'
+      + '<button class="btn small" data-up="ai">Organise now</button>'
+      + '<button class="btn small" data-up="connection">Back up ChatGPT / Gemini</button>'
+      + '<button class="btn small" data-up="cleanup">Clean up</button>';
+    el.querySelectorAll('button[data-up]').forEach((b) => b.addEventListener('click', () => b.dataset.up === 'cleanup' ? setView('cleanup') : go(b.dataset.up)));
+  }
   function stat(n, label) {
     return '<div class="ov-stat"><div class="ov-n">' + n + '</div><div class="ov-l">' + escapeHtml(label) + '</div></div>';
   }
@@ -2386,15 +2693,17 @@ const Overview = (function () {
   async function render() {
     const labelled = (typeof AI !== 'undefined' && AI.labelCount) ? AI.labelCount() : 0;
 
-    const photos = allItems.filter((r) => r.kind === 'image' || r.kind === 'sticker').length;
-    const videos = allItems.filter((r) => r.kind === 'video').length;
+    const shown = allItems.filter((r) => !F.source || srcOf(r) === F.source);
+    const photos = shown.filter((r) => r.kind === 'image' || r.kind === 'sticker').length;
+    const videos = shown.filter((r) => r.kind === 'video').length;
 
     statsEl.innerHTML = stat(photos, photos === 1 ? 'photo' : 'photos')
       + stat(videos, videos === 1 ? 'video' : 'videos')
       + stat(chats.length, 'conversations')
       + stat(projects.length, 'projects')
-      + stat(albums.length, 'albums')
-      + stat(labelled, 'read by the AI');
+      + stat(albums.length, 'albums');
+    renderBackup();
+    renderUpkeep();
 
     // Projects, busiest first — a project with two chats in it is less of a
     // thing than one with thirty, and the eye should land on the thirty.
@@ -2465,7 +2774,7 @@ const Overview = (function () {
   projEl.addEventListener('click', go);
   albEl.addEventListener('click', go);
 
-  return { enter, render };
+  return { enter, render, renderBackup };
 })();
 
 
@@ -2474,6 +2783,8 @@ const Overview = (function () {
 loadItems(true).then(async () => {
   await AI.loadLabels();
   await AI.loadChatGroups();
+  renderSourceBar();
+  Backup.refresh();
   // The overview counts photos and videos out of the loaded library, so it is
   // drawn once that exists rather than showing zeroes for a moment.
   if (typeof Overview !== 'undefined') Overview.enter();
