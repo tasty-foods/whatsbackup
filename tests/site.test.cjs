@@ -7,7 +7,7 @@ const base = 'https://github.com/tasty-foods/whatsbackup/releases/';
 function run(release, opts={}) {
   const panels = Array.from({length:4},(_,i)=>({hidden:i!==0}));
   const tabs = panels.map((_,i)=>({tabIndex:i? -1:0,attrs:{'aria-controls':String(i),'aria-selected':String(i===0)},listeners:{},setAttribute(k,v){this.attrs[k]=v;},getAttribute(k){return this.attrs[k];},addEventListener(k,fn){this.listeners[k]=fn;},focus(){this.focused=true;}}));
-  const tablist = {hidden:true,querySelectorAll(){return tabs;}};
+  const tablist = {hidden:true,querySelectorAll(){return tabs;},getAttribute(){return 'vertical';}};
   const download = {href:base+'download/v1.4.1/WhatsBackUp-Setup-1.4.1.exe'};
   const version = {textContent:'1.4.1'},size={textContent:'237 MB'},notes={href:base+'tag/v1.4.1'};
   const nodes = {'[data-download]':[download],'[data-version]':[version],'[data-size]':[size],'[data-release]':[notes]};
@@ -32,6 +32,10 @@ test('tour changes one panel at a time and supports keyboard navigation',()=>{
   x.tabs[0].listeners.keydown({key:'ArrowLeft',preventDefault(){}});
   assert.equal(x.panels[3].hidden,false);
   x.tabs[3].listeners.keydown({key:'Home',preventDefault(){}});
+  assert.equal(x.panels[0].hidden,false);
+  x.tabs[0].listeners.keydown({key:'ArrowDown',preventDefault(){}});
+  assert.equal(x.panels[1].hidden,false);
+  x.tabs[1].listeners.keydown({key:'ArrowUp',preventDefault(){}});
   assert.equal(x.panels[0].hidden,false);
 });
 test('offline release lookup retains the working published installer',async()=>{

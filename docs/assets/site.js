@@ -19,6 +19,10 @@
         var next;
         if (event.key === 'ArrowRight') next = (index + 1) % tabs.length;
         if (event.key === 'ArrowLeft') next = (index + tabs.length - 1) % tabs.length;
+        if (tablist.getAttribute('aria-orientation') === 'vertical') {
+          if (event.key === 'ArrowDown') next = (index + 1) % tabs.length;
+          if (event.key === 'ArrowUp') next = (index + tabs.length - 1) % tabs.length;
+        }
         if (event.key === 'Home') next = 0;
         if (event.key === 'End') next = tabs.length - 1;
         if (next !== undefined) { event.preventDefault(); selectTab(tabs[next], true); }

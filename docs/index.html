@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>WhatsBackUp — Your chats, pictures and ideas. Yours to keep.</title>
-<meta name="description" content="Save WhatsApp messages and media, import ChatGPT and Gemini images, organise with optional AI, and check copies in your own cloud folder. Free for Windows.">
+<title>WhatsBackUp — Less chasing files. More getting on with business.</title>
+<meta name="description" content="Keep job photos, supplier documents and useful conversations from WhatsApp on your PC. Import your AI images, find your files and plan statuses. Free for Windows.">
 <link rel="canonical" href="https://whatsbackup.cc/">
 <meta name="referrer" content="strict-origin-when-cross-origin">
-<meta name="theme-color" content="#f7f9f7">
+<meta name="theme-color" content="#1b201c">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="WhatsBackUp">
 <meta property="og:title" content="WhatsBackUp — Your chats, pictures and ideas. Yours to keep.">
@@ -22,13 +22,15 @@
 <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="assets/site.css">
 <link rel="stylesheet" href="assets/redesign.css">
+<link rel="stylesheet" href="assets/cinema.css">
 <script src="assets/analytics.js" defer>
 </script>
+<script src="assets/film.js" defer></script>
 <script src="assets/site.js" defer>
 </script>
 <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebSite","name":"WhatsBackUp","url":"https://whatsbackup.cc/"},{"@type":"SoftwareApplication","name":"WhatsBackUp","applicationCategory":"UtilitiesApplication","operatingSystem":"Windows 10, Windows 11 (64-bit)","softwareVersion":"1.4.1","url":"https://whatsbackup.cc/","downloadUrl":"https://github.com/tasty-foods/whatsbackup/releases/download/v1.4.1/WhatsBackUp-Setup-1.4.1.exe","installUrl":"https://whatsbackup.cc/download.html","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"description":"A free Windows archive for WhatsApp messages and media, plus ChatGPT and Gemini images. Optional AI organisation, media copy checks, cleanup and Status Studio.","featureList":["WhatsApp media capture and searchable messages","Import available WhatsApp history","ChatGPT uploaded and generated image imports","Gemini Library generated image imports","Optional AI albums, projects and image label search","Media copy checks for file presence and matching sizes","Reversible cleanup quarantine","Optional Status Studio scheduling"],"releaseNotes":"https://github.com/tasty-foods/whatsbackup/releases/tag/v1.4.1"},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What does WhatsBackUp actually save?","acceptedAnswer":{"@type":"Answer","text":"WhatsApp photos, videos and message text, with optional documents, voice notes, audio and stickers. You can also import uploaded and generated images from ChatGPT, and generated images from Gemini’s Library. Each source is linked separately."}},{"@type":"Question","name":"Is it free? Do I need an AI subscription?","acceptedAnswer":{"@type":"Answer","text":"The desktop app is free. You do not need an AI subscription to save or browse your archive. Optional AI sorting uses your own provider API key; provider charges and limits apply. Review the estimate and set a monthly budget before sorting."}},{"@type":"Question","name":"Does it replace WhatsApp’s phone backup?","acceptedAnswer":{"@type":"Answer","text":"No. It creates a browsable archive of files and messages on your PC. It does not restore a WhatsApp account or move your chat history to a new phone. Keep your normal phone backup for that."}},{"@type":"Question","name":"Can it recover old or deleted pictures?","acceptedAnswer":{"@type":"Answer","text":"Import history can collect media that is still available in your linked chats. It cannot recover files that are no longer available from WhatsApp. Skipped and failed items appear in the import summary."}},{"@type":"Question","name":"Does my computer need to stay on?","acceptedAnswer":{"@type":"Answer","text":"Yes. Capture, imports and scheduled statuses run while the app is running and the required services are reachable. Let it start with Windows if you want it ready in the background."}},{"@type":"Question","name":"Where does my data go?","acceptedAnswer":{"@type":"Answer","text":"Files and messages are stored on your PC. You choose any cloud folder. Optional AI features send selected content directly to the provider you configure after consent. Source imports connect to their respective services. See the privacy page for the full breakdown."}}]}]}</script>
 </head>
-<body class="home"><a class="skip" href="#main">Skip to content</a>
+<body class="home cinema"><a class="skip" href="#main">Skip to content</a>
 <header class="site-head">
 <div class="wrap"><a class="brand" href="./" aria-label="WhatsBackUp home"><svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v11h14V9M9 13h6"/></svg><span class="mark">Whats<i>BackUp</i></span></a>
 <nav class="nav" aria-label="Main navigation"><a href="index.html#features">Product</a><a href="index.html#new">What’s new</a><a href="faq.html">Help</a><a class="nav-download" href="download.html">Download <span aria-hidden="true">↗</span></a>
@@ -36,293 +38,248 @@
 </div>
 </header>
 <main id="main">
-<section class="launch-hero">
-<div class="wrap"><a class="launch-note" href="index.html#new"><strong>NEW IN v1.4.1</strong> A clearer view of your archive <span aria-hidden="true">→</span></a>
-<div class="launch-grid">
-<div class="launch-copy">
-<h1>From your chats.<br><em>Yours to keep.</em>
+<section class="film-hero" aria-labelledby="film-title">
+<div class="wrap">
+<div class="film-topline"><span>For businesses that run on WhatsApp.</span><a href="#new">WhatsBackUp / v1.4.1 ↗</a>
+</div>
+<div class="film-grid">
+<div class="film-copy">
+<h1 id="film-title">Keep the<br><em>good stuff.</em>
 </h1>
-<p class="lede">Save WhatsApp messages and media, plus images from ChatGPT and Gemini, to your PC. Find them, organise them and copy them to your own cloud folder.</p>
-<div class="launch-actions"><a class="btn" href="download.html"><svg class="" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></svg> Download for Windows</a><a class="btn btn-2" href="#features">Explore the features</a>
+<p class="film-lede"><strong>The job photo. The supplier’s invoice.<br>The idea for tomorrow’s post.</strong><br>Save WhatsApp messages and media, plus your ChatGPT and Gemini images, in one archive on your PC.</p>
+<div class="film-cta"><a class="btn" href="download.html">Download for Windows <span aria-hidden="true">↗</span></a><a href="#features">Find your way in ↓</a>
 </div>
-<p class="launch-meta"><span>Free desktop app</span><span>Windows 10 &amp; 11</span>
+<p class="film-small">Free for Windows 10 &amp; 11 · Your folders. Your files.</p>
+</div>
+<div class="archive-stage" aria-label="Illustrative archive of a photo, message, document and AI idea"><span class="stage-coordinates" aria-hidden="true">COLLECTION / 001</span>
+<div class="orbit">
+<figure class="fragment fragment-photo"><img src="assets/archive-sample.png" alt="Bakery opening day: croissants and sourdough on a counter" width="1536" height="1024" fetchpriority="high">
+<figcaption>The day it all started.<small>WhatsApp · opening-day.jpg</small>
+</figcaption>
+</figure>
+<div class="fragment fragment-chat"><span class="fragment-source">WHATSAPP / SAVED MESSAGE</span>
+<p>“Send me that one.<br>I want to keep it.”</p><small>14:32 · ✓✓</small>
+</div>
+<div class="fragment fragment-file"><span>PDF / DOCUMENT</span><b>The one you need<br>on Monday.</b><small>supplier-invoice.pdf</small>
+</div>
+<div class="fragment fragment-idea"><small>CHATGPT + GEMINI</small><b>That idea<br>worth keeping.</b><small>Images, collected.</small>
+</div>
+</div>
+<div class="archive-label"><span>Ordinary files. Somewhere you control.</span><span aria-hidden="true">↙</span>
+</div>
+</div>
+</div>
+<div class="film-bottom"><a href="#features">SCROLL TO FIND YOUR START <span aria-hidden="true">↓</span></a><span>Illustrative collection · sample content</span>
+<div class="experience-controls" hidden><button type="button" data-motion-toggle aria-pressed="false">Motion: off</button><button type="button" data-sound-toggle aria-pressed="false">Sound: off</button>
+</div>
+</div>
+</div>
+</section>
+<section class="audience-section" id="features">
+<div class="wrap">
+<div class="editorial-intro"><span class="eyebrow">01 / A little less “where did it go?”</span>
+<h2>Your work is in the chat.<br><em>It shouldn’t be stuck there.</em>
+</h2>
+<p>When you’re running a business, searching yesterday’s messages is another job you don’t need. Start with what you want to keep.</p>
+</div>
+<div class="audience-layout">
+<div class="demo-tabs audience-tabs" role="tablist" aria-label="Find your archive workflow" aria-orientation="vertical" hidden><button id="tab-work" role="tab" aria-selected="true" aria-controls="panel-work" tabindex="0"><span>01</span> My working day <span aria-hidden="true">↗</span></button><button id="tab-life" role="tab" aria-selected="false" aria-controls="panel-life" tabindex="-1"><span>02</span> My personal moments <span aria-hidden="true">↗</span></button><button id="tab-ideas" role="tab" aria-selected="false" aria-controls="panel-ideas" tabindex="-1"><span>03</span> My AI creations <span aria-hidden="true">↗</span></button>
+</div>
+<div class="audience-panels">
+<div class="audience-panel" id="panel-work" role="tabpanel" aria-labelledby="tab-work" tabindex="0"><span class="audience-for">SHOPS · TRADES · STUDIOS · SMALL TEAMS</span>
+<h3>Less chasing files.<br>More getting on with it.</h3>
+<dl class="outcome-list">
+<div>
+<dt>“Where’s the supplier’s invoice?”</dt>
+<dd>Enable document capture and keep files with your saved WhatsApp conversations.</dd>
+</div>
+<div>
+<dt>“Which photo was for this job?”</dt>
+<dd>Browse by chat or use optional AI albums and projects to organise the work.</dd>
+</div>
+<div>
+<dt>“What are we posting tomorrow?”</dt>
+<dd>Use Status Studio to prepare a queue and preview your WhatsApp statuses before going live.</dd>
+</div>
+</dl><a class="text-link" href="download.html">Start with WhatsApp. Add the rest when useful. ↗</a>
+</div>
+<div class="audience-panel" id="panel-life" role="tabpanel" aria-labelledby="tab-life" tabindex="0" hidden><span class="audience-for">FAMILY CHATS · FRIENDS · EVERYDAY MEMORIES</span>
+<h3>Some things deserve<br>more than a scroll past.</h3>
+<dl class="outcome-list">
+<div>
+<dt>The photos everyone sends.</dt>
+<dd>Keep enabled media from your linked chats as ordinary files on your PC.</dd>
+</div>
+<div>
+<dt>The words that go with them.</dt>
+<dd>Browse saved messages beside their media, or export a readable conversation.</dd>
+</div>
+<div>
+<dt>A place of your own.</dt>
+<dd>Choose your folders and add media copies to your cloud folder if you want.</dd>
+</div>
+</dl><a class="text-link" href="download.html">Make a home for your everyday memories. ↗</a>
+</div>
+<div class="audience-panel" id="panel-ideas" role="tabpanel" aria-labelledby="tab-ideas" tabindex="0" hidden><span class="audience-for">DESIGNERS · MAKERS · CURIOUS MINDS</span>
+<h3>You made something good.<br>Find it again.</h3>
+<dl class="outcome-list">
+<div>
+<dt>The experiment that worked.</dt>
+<dd>Import your uploaded and generated images from ChatGPT conversations.</dd>
+</div>
+<div>
+<dt>The other place you created it.</dt>
+<dd>Bring generated images from Gemini’s Library into the same archive.</dd>
+</div>
+<div>
+<dt>The next version of the idea.</dt>
+<dd>Use source filters and optional AI labels to rediscover images worth working on.</dd>
+</div>
+</dl><a class="text-link" href="download.html">Collect your images in one place. ↗</a>
+</div>
+</div>
+</div>
+</div>
+</section>
+<section class="archive-story" id="how">
+<div class="wrap">
+<div class="editorial-intro"><span class="eyebrow">02 / From scattered to somewhere</span>
+<h2>Give the useful things<br><em>a place to land.</em>
+</h2>
+</div>
+<div class="story-layout">
+<div class="story-chapters">
+<article class="story-chapter" data-chapter="0"><button class="chapter-title" data-story-step="0" aria-controls="story-stage" aria-pressed="true"><span>01 / GATHER</span><strong>Let the archive come to you.</strong></button>
+<p>Link WhatsApp with a QR code. New messages and the media types you choose are saved while the app runs. Import older media that is still available.</p>
+<p class="chapter-note">ChatGPT and Gemini images have their own optional connections.</p>
+</article>
+<article class="story-chapter" data-chapter="1"><button class="chapter-title" data-story-step="1" aria-controls="story-stage" aria-pressed="false"><span>02 / FIND</span><strong>Pick the job back up.</strong></button>
+<p>Search saved conversations, browse by source, and open normal files. Add optional AI albums, projects and image labels when your archive needs more organisation.</p>
+<p class="chapter-note">No AI subscription is needed for basic saving and browsing.</p>
+</article>
+<article class="story-chapter" data-chapter="2"><button class="chapter-title" data-story-step="2" aria-controls="story-stage" aria-pressed="false"><span>03 / CHECK</span><strong>Know what made it across.</strong></button>
+<p>Copy media into your chosen cloud or network folder. Check which files are present with matching sizes, and see which still need attention.</p>
+<p class="chapter-note">Your cloud client handles remote upload. Message data stays local.</p>
+</article>
+</div>
+<div class="story-stage" id="story-stage" data-active="0" role="region" aria-label="Illustrative archive workflow">
+<div class="story-top"><span>YOUR WORKDAY / COLLECTED</span><span aria-hidden="true">↙</span>
+</div>
+<div class="story-files">
+<div class="story-file story-file-1"><span class="file-kind">JPG</span>
+<div><b>opening-day.jpg</b><small>WhatsApp / Bakery team</small>
+</div><span class="file-check" aria-hidden="true">✓</span>
+</div>
+<div class="story-file story-file-2"><span class="file-kind">PDF</span>
+<div><b>supplier-invoice.pdf</b><small>WhatsApp / Deliveries</small>
+</div><span class="file-check" aria-hidden="true">✓</span>
+</div>
+<div class="story-file story-file-3"><span class="file-kind">IMG</span>
+<div><b>tomorrows-post.png</b><small>ChatGPT / Campaign ideas</small>
+</div><span class="file-check" aria-hidden="true">✓</span>
+</div>
+</div>
+<div class="story-caption">
+<p data-step-caption="0"><b>Incoming. And worth keeping.</b><span>Messages, media and AI images, brought together.</span>
 </p>
+<p data-step-caption="1" hidden><b>One collection. A little more order.</b><span>Browse, search and pick up where you left off.</span>
+</p>
+<p data-step-caption="2" hidden><b>Three media copies checked.</b><span>Illustration: destination files present with matching sizes.</span>
+</p>
+</div><span class="story-sample">Sample files · illustrative workflow</span>
 </div>
-<figure class="product-demo" aria-label="Interactive illustration of WhatsBackUp features">
-<div class="demo-window" aria-hidden="true"><i class="window-dot"></i><i class="window-dot"></i><i class="window-dot"></i><span>WhatsBackUp / your archive</span>
-</div>
-<div class="demo-body">
-<div class="demo-tabs" role="tablist" aria-label="Explore product features" hidden><button id="tab-archive" role="tab" aria-selected="true" aria-controls="panel-archive" tabindex="0">Archive</button><button id="tab-sorting" role="tab" aria-selected="false" aria-controls="panel-sorting" tabindex="-1">AI sorting</button><button id="tab-backup" role="tab" aria-selected="false" aria-controls="panel-backup" tabindex="-1">Cloud copies</button><button id="tab-status" role="tab" aria-selected="false" aria-controls="panel-status" tabindex="-1">Status Studio</button>
-</div>
-<div class="demo-panel" id="panel-archive" role="tabpanel" aria-labelledby="tab-archive" tabindex="0">
-<div class="demo-heading">
-<h2>Everything, together.</h2><span class="demo-tag">3 sources · one archive</span>
-</div>
-<div class="demo-search"><svg class="" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></svg><span>Find that photo, idea or conversation…</span>
-</div>
-<div class="demo-media">
-<figure class="sample-photo"><img src="assets/archive-sample.png" alt="Croissants and sourdough on a bakery counter with green tiles; illustrative sample image" width="1536" height="1024" fetchpriority="high">
-<figcaption>Opening day<span>WhatsApp · Bakery team</span>
-</figcaption>
-</figure>
-<div class="demo-files">
-<div class="demo-file"><span class="file-symbol violet">IMG</span>
-<div><b>Menu concept</b><small>ChatGPT · generated image</small>
-</div>
-</div>
-<div class="demo-file"><span class="file-symbol blue">IMG</span>
-<div><b>Packaging idea</b><small>Gemini · Library image</small>
-</div>
-</div>
-<div class="demo-file"><span class="file-symbol">PDF</span>
-<div><b>Supplier invoice</b><small>WhatsApp · document</small>
-</div>
-</div>
-</div>
-</div>
-</div>
-<div class="demo-panel" id="panel-sorting" role="tabpanel" aria-labelledby="tab-sorting" tabindex="0" hidden>
-<div class="demo-heading">
-<h2>Find it by what’s in it.</h2><span class="demo-tag">Optional AI</span>
-</div>
-<div class="mini-ui">
-<div class="mini-ui-title"><b>Albums &amp; projects</b><span>Sample archive</span>
-</div>
-<div class="album-row"><span class="album-square" aria-hidden="true">▧</span>Bakery launch <strong>24 photos</strong>
-</div>
-<div class="album-row"><span class="album-square" aria-hidden="true">▤</span>Supplier deliveries <strong>12 photos</strong>
-</div>
-<div class="mini-chips"><span>croissant</span><span>green tiles</span><span>invoice text</span>
-</div>
-</div>
-<p class="tour-help">Search AI labels and text recognised in images. Rename an album or move a photo; your corrections stay in place.</p>
-</div>
-<div class="demo-panel" id="panel-backup" role="tabpanel" aria-labelledby="tab-backup" tabindex="0" hidden>
-<div class="demo-heading">
-<h2>Know what was copied.</h2><span class="demo-tag">Your chosen folder</span>
-</div>
-<div class="mini-ui">
-<div class="mini-ui-title"><b>Media copy check</b><span>Sample result</span>
-</div>
-<div class="backup-number">84 <small>/ 100 files verified</small>
-</div>
-<div class="progress-track" aria-hidden="true"><i></i>
-</div>
-<div class="backup-check"><span>Present · matching sizes</span><b>84%</b>
-</div>
-<p class="tour-help">16 files still need attention. Check results expire so you know when to verify again.</p>
-</div>
-<p class="tour-help">Checks files in the destination folder, not remote upload completion. Your cloud client handles the upload.</p>
-</div>
-<div class="demo-panel" id="panel-status" role="tabpanel" aria-labelledby="tab-status" tabindex="0" hidden>
-<div class="demo-heading">
-<h2>A little planning. More time.</h2><span class="demo-tag">Optional posting</span>
-</div>
-<div class="mini-ui status-sample">
-<div class="status-poster" aria-hidden="true"><small>THE MORNING BATCH</small><b>Fresh from<br>the oven.</b><img src="assets/archive-sample.png" alt="" width="1536" height="1024" loading="lazy">
-</div>
-<div><span class="demo-tag">Dry run · sample schedule</span>
-<div class="schedule-row"><b>09:30</b><span>Bakery opening</span>
-</div>
-<div class="schedule-row"><b>14:00</b><span>Afternoon specials</span>
-</div>
-<p class="tour-help">Preview first. Go live when you choose.</p>
-</div>
-</div>
-<p class="tour-help">Build a queue with templates, quiet hours and posting limits. Posting stays off until you enable it and accept the notice.</p>
-</div>
-</div>
-<figcaption class="demo-caption"><span>Illustrative product tour · sample data</span><span>Try the tabs ↑</span>
-</figcaption>
-</figure>
-</div>
-<div class="source-strip"><span>Bring the things you want to keep.</span>
-<div class="source-word"><i aria-hidden="true">W</i>WhatsApp</div>
-<div class="source-word"><i aria-hidden="true">✦</i>ChatGPT</div>
-<div class="source-word"><i aria-hidden="true">G</i>Gemini</div>
-<div class="source-word"><i aria-hidden="true">↥</i>Your cloud folder</div>
 </div>
 </div>
 </section>
-<section id="features">
+<section class="tool-index" id="tools">
 <div class="wrap">
-<div class="section-heading">
-<div><span class="section-kicker">One place to come back to</span>
-<h2>Good things get lost<br>in busy conversations.</h2>
+<div class="index-heading"><span class="eyebrow">03 / Your useful little toolkit</span>
+<h2>Start simple.<br><em>Grow into the rest.</em>
+</h2>
+<p>You don’t have to set everything up today.<br>Saving is a useful first step.</p>
 </div>
-<p>A family photo. An idea you generated. The document someone sent last week. Bring the useful things into an archive you can actually browse.</p>
-</div>
-<div class="feature-grid">
-<article class="feature-card"><svg class="feature-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11a9 9 0 0 1-13 8l-5 2 1-5A9 9 0 1 1 21 11Z"/><path d="M8 9h8M8 13h5"/></svg>
-<h3>Your WhatsApp, saved.</h3>
-<p>Keep messages and media from your linked chats as they arrive. Import available history when you want to go further back.</p>
-<ul>
-<li>Sent and received media</li>
-<li>Searchable conversations</li>
-<li>Optional documents and voice notes</li>
-</ul><span class="feature-label">Link with a QR code · captures while running</span>
-</article>
-<article class="feature-card"><svg class="feature-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z"/></svg>
-<h3>Your AI images, kept.</h3>
-<p>Collect the pictures you uploaded to ChatGPT or had it create, plus generated images from Gemini’s Library.</p>
-<ul>
-<li>Separate account connections</li>
-<li>Source badges and filters</li>
-<li>Progress and import summaries</li>
-</ul><span class="feature-label">Sign in to the sources you choose</span>
-</article>
-<article class="feature-card"><svg class="feature-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18H6a4 4 0 0 1-1-8 7 7 0 0 1 13-1 4.5 4.5 0 0 1 0 9h-1M12 20V11m-3 3 3-3 3 3"/></svg>
-<h3>Your folder, your choice.</h3>
-<p>Keep ordinary files on your PC and copy media to a folder you manage: pCloud, OneDrive, Dropbox or a network drive.</p>
-<ul>
-<li>File presence and size checks</li>
-<li>Missing copies flagged clearly</li>
-<li>Readable HTML chat exports</li>
-</ul><span class="feature-label">Your cloud client handles remote syncing</span>
-</article>
+<div class="tool-ledger">
+<details>
+<summary><span class="tool-number">01</span><strong>Save the conversation</strong><span class="tool-subtitle">The words are useful too.</span><span class="tool-plus" aria-hidden="true">+</span>
+</summary>
+<p>Search saved message text alongside media and export readable HTML transcripts. WhatsApp captures photos, videos and messages by default; documents, voice notes, audio and stickers are optional.</p>
+</details>
+<details>
+<summary><span class="tool-number">02</span><strong>Keep your AI images</strong><span class="tool-subtitle">A good idea needs somewhere to live.</span><span class="tool-plus" aria-hidden="true">+</span>
+</summary>
+<p>Import uploaded and generated ChatGPT images and generated images from Gemini’s Library. Separate sign-ins, source filters and import summaries keep the origins clear.</p>
+</details>
+<details>
+<summary><span class="tool-number">03</span><strong>Bring a little order</strong><span class="tool-subtitle">Albums and projects that you can correct.</span><span class="tool-plus" aria-hidden="true">+</span>
+</summary>
+<p>Optional AI labels images and groups content into albums and projects. Search labels and recognised text. Use your own provider key, review the data notice and estimate, and set a monthly budget. Your corrections persist.</p>
+</details>
+<details>
+<summary><span class="tool-number">04</span><strong>Check your media copies</strong><span class="tool-subtitle">A clear answer to “did it copy?”</span><span class="tool-plus" aria-hidden="true">+</span>
+</summary>
+<p>Verify file presence and matching sizes in your chosen destination folder. Missing copies are flagged and checks expire so you can run them again. These checks do not verify full contents or remote cloud upload completion.</p>
+</details>
+<details>
+<summary><span class="tool-number">05</span><strong>Clear the clutter carefully</strong><span class="tool-subtitle">A way back when you change your mind.</span><span class="tool-plus" aria-hidden="true">+</span>
+</summary>
+<p>Review possible duplicates and small images before moving files to reversible quarantine. Duplicate candidates use a partial fingerprint, so review matters. Permanent deletion is separate.</p>
+</details>
+<details>
+<summary><span class="tool-number">06</span><strong>Plan tomorrow’s status</strong><span class="tool-subtitle">One less last-minute task.</span><span class="tool-plus" aria-hidden="true">+</span>
+</summary>
+<p>Status Studio combines a posting queue, templates, watched folders, albums and optional AI writing. Start in dry run, preview the plan, then decide whether to enable live posting with quiet hours and limits.</p>
+</details>
 </div>
 </div>
 </section>
-<section class="tour-section" id="tools">
-<div class="wrap">
-<div class="tour-intro"><span class="section-kicker">Make your archive useful</span>
-<h2>Keep it. Find it.<br>Do something with it.</h2>
-<p>Start with saving. Add the tools you need, when you need them. The examples below use illustrative sample data.</p>
+<section class="status-interlude">
+<div class="wrap status-editorial">
+<div><span class="eyebrow">FOR THE DAYS THAT RUN AWAY WITH YOU</span>
+<h2>Tomorrow’s post.<br><em>Already thought about.</em>
+</h2>
+<p>Pick images from your archive, prepare a status queue and try the schedule in dry run. Status Studio helps you do the thinking before the working day starts.</p><a class="text-link" href="faq.html#ai">See how Status Studio works ↗</a>
 </div>
-<div class="capability-grid">
-<article class="capability">
-<h3>Search beyond filenames.</h3>
-<p>Optional AI groups photos into albums and conversations into projects. Find images using labels and recognised text, then correct anything it gets wrong.</p>
-<div class="mini-ui">
-<div class="mini-ui-title"><b>Albums &amp; projects</b><span>Sample archive</span>
+<div class="status-timetable" aria-label="Illustrative business status schedule">
+<div class="timetable-head"><span>THE NEXT WORKING DAY</span><span>Sample plan</span>
 </div>
-<div class="album-row"><span class="album-square" aria-hidden="true">▧</span>Bakery launch <strong>24 photos</strong>
+<div><time>09:30</time><span>Open for the day.<small>A photo from your archive.</small></span>
 </div>
-<div class="album-row"><span class="album-square" aria-hidden="true">▤</span>Supplier deliveries <strong>12 photos</strong>
+<div><time>14:00</time><span>A little reminder.<small>Your afternoon update.</small></span>
 </div>
-<div class="mini-chips"><span>croissant</span><span>green tiles</span><span>invoice text</span>
-</div>
-</div>
-<p class="inline-note">Your provider, your key and your budget. Your manual corrections stay in place.</p>
-</article>
-<article class="capability">
-<h3>Check the copy, not a promise.</h3>
-<p>See which media files exist in your chosen destination with matching sizes. Find missing copies and run a fresh check when you need one.</p>
-<div class="mini-ui">
-<div class="mini-ui-title"><b>Media copy check</b><span>Sample result</span>
-</div>
-<div class="backup-number">84 <small>/ 100 files verified</small>
-</div>
-<div class="progress-track" aria-hidden="true"><i></i>
-</div>
-<div class="backup-check"><span>Present · matching sizes</span><b>84%</b>
-</div>
-<p class="tour-help">16 files still need attention. Check results expire so you know when to verify again.</p>
-</div>
-<p class="inline-note">Media checks do not verify remote cloud uploads. The message database stays local.</p>
-</article>
-<article class="capability">
-<h3>Clear clutter with a way back.</h3>
-<p>Review possible duplicates and small images before moving unwanted files into quarantine. Restore them if you change your mind.</p>
-<div class="mini-ui">
-<div class="mini-ui-title"><b>Cleanup review</b><span>Sample selection</span>
-</div>
-<div class="cleanup-row"><b>Possible duplicates</b><span>Review first</span>
-</div>
-<div class="cleanup-row"><b>Small images</b><span>Choose what to keep</span>
-</div>
-<div class="cleanup-row"><b>Quarantined items</b><span>Restore available</span>
-</div>
-</div>
-<p class="inline-note">Suggestions are not proof of duplication. Permanent deletion is a separate action.</p>
-</article>
-<article class="capability">
-<h3>Give your statuses a plan.</h3>
-<p>Status Studio brings together a posting queue, templates, watched folders and albums, with optional AI writing.</p>
-<div class="mini-ui status-sample">
-<div class="status-poster" aria-hidden="true"><small>THE MORNING BATCH</small><b>Fresh from<br>the oven.</b><img src="assets/archive-sample.png" alt="" width="1536" height="1024" loading="lazy">
-</div>
-<div><span class="demo-tag">Dry run · sample schedule</span>
-<div class="schedule-row"><b>09:30</b><span>Bakery opening</span>
-</div>
-<div class="schedule-row"><b>14:00</b><span>Afternoon specials</span>
-</div>
-<p class="tour-help">Preview first. Go live when you choose.</p>
-</div>
-</div>
-<p class="inline-note">Off by default. Preview in dry run, then choose whether to enable posting with quiet hours and limits.</p>
-</article>
+<p>Preview first. Posting is off until you enable it.</p>
 </div>
 </div>
 </section>
-<section class="release-section" id="new">
-<div class="wrap">
-<div class="section-heading">
-<div><span class="section-kicker">The latest release · v1.4.1</span>
-<h2>Less guesswork.<br>More useful feedback.</h2>
+<section class="release-editorial" id="new">
+<div class="wrap release-layout">
+<div><span class="eyebrow">JUST A LITTLE EASIER / v1.4.1</span>
+<h2>Less wondering<br><em>what it’s doing.</em>
+</h2>
+<p>The latest release puts useful feedback in view.</p><a class="text-link" href="https://github.com/tasty-foods/whatsbackup/releases/tag/v1.4.1">Read the release notes ↗</a>
 </div>
-<p>The latest update makes the whole archive easier to follow, from the first connection to a completed import.</p>
-</div>
-<div class="release-grid">
-<article class="release-item"><span>01 / GET STARTED</span>
-<h3>A clearer next step</h3>
-<p>The overview guides you toward the next useful action. Source cards show connection state, progress and errors together.</p>
-</article>
-<article class="release-item"><span>02 / STAY INFORMED</span>
-<h3>Imports you can follow</h3>
-<p>ChatGPT reads chats before downloading media, handles temporary limits with retries, and keeps a summary of the latest import.</p>
-</article>
-<article class="release-item"><span>03 / STAY IN CONTROL</span>
-<h3>Honest save feedback</h3>
-<p>Failed settings saves stay visible. Setup remains open until the settings are saved, so an error does not look like success.</p>
-</article>
-<article class="release-item"><span>04 / MOVE MORE EASILY</span>
-<h3>Better everyday navigation</h3>
-<p>Source filters, keyboard-friendly switches and focused dialogs make browsing and changing settings easier.</p>
-</article>
-</div><a class="release-link" href="https://github.com/tasty-foods/whatsbackup/releases/tag/v1.4.1">Read the v1.4.1 release notes <span aria-hidden="true">↗</span></a>
+<ul class="release-list">
+<li><b>A clearer next step.</b><span>The overview points to the next useful action. Source cards show connection state, progress and errors.</span>
+</li>
+<li><b>Imports with a visible result.</b><span>ChatGPT reads chats before downloading, retries temporary failures, and keeps the latest import summary.</span>
+</li>
+<li><b>A failed save looks like a failed save.</b><span>Settings errors stay visible. Setup remains open until saving succeeds.</span>
+</li>
+<li><b>Easier to move around.</b><span>Source filters, keyboard-friendly switches and focused dialogs improve everyday use.</span>
+</li>
+</ul>
 </div>
 </section>
-<section id="start">
-<div class="wrap">
-<div class="section-heading">
-<div><span class="section-kicker">A simple start</span>
-<h2>Your first archive,<br>in three steps.</h2>
-</div>
-<p>No server to manage. No WhatsBackUp account to create. Just your Windows PC and the sources you want to keep.</p>
-</div>
-<div class="steps-grid">
-<article><span class="step-number">01</span>
-<h3>Install and choose a folder.</h3>
-<p>Download the Windows app and choose where your media should live. Add a cloud folder if you want one.</p>
-</article>
-<article><span class="step-number">02</span>
-<h3>Connect your sources.</h3>
-<p>Link WhatsApp by QR code. Connect ChatGPT or Gemini separately if you want to import your AI images.</p>
-</article>
-<article><span class="step-number">03</span>
-<h3>Import, then explore.</h3>
-<p>Bring in available history, browse your files and check your copies. Add sorting or scheduling when useful.</p>
-</article>
-</div>
-</div>
-</section>
-<section class="trust-section" aria-label="Your choices">
-<div class="wrap">
-<div class="trust-box">
-<div>
-<h3>Files you control</h3>
-<p>Normal media files, a local message database and HTML exports. Your archive lives on your PC.</p>
-</div>
-<div>
-<h3>AI is optional</h3>
-<p>Saving and browsing work without AI. You choose the provider and accept the data notice before enabling it.</p>
-</div>
-<div>
-<h3>Clear about its limits</h3>
-<p>Runs while your PC and app are on. This is an unofficial tool and a browsable archive, not a phone restore backup.</p>
-</div>
-</div>
+<section class="quiet-start" id="start">
+<div class="wrap"><span class="eyebrow">ONE USEFUL THING TO DO TODAY</span>
+<h2>Start with one folder.<br><em>And one less thing to chase.</em>
+</h2>
+<div class="start-line">
+<p><b>01</b>Install on your Windows PC.</p>
+<p><b>02</b>Choose a folder and link a source.</p>
+<p><b>03</b>Import, browse and keep going.</p>
+</div><a class="btn" href="download.html">Download WhatsBackUp — free <span aria-hidden="true">↗</span></a>
+<p class="start-reassurance">No WhatsBackUp account. No server to manage. Optional AI costs depend on your provider.</p>
+<p class="start-limit">An unofficial desktop archive. Runs while the app is open; keep your phone backup for restoring WhatsApp.</p>
 </div>
 </section>
 <section class="faq-section" id="faq">
@@ -356,16 +313,6 @@
 <summary>Where does my data go?</summary>
 <p>Files and messages are stored on your PC. You choose any cloud folder. Optional AI features send selected content directly to the provider you configure after consent. Source imports connect to their respective services. See the privacy page for the full breakdown.</p>
 </details>
-</div>
-</div>
-</section>
-<section class="final-cta">
-<div class="wrap">
-<div class="cta-box">
-<div>
-<h2>Give your good ideas a home.</h2>
-<p>WhatsApp, ChatGPT and Gemini. One archive on your PC.</p>
-</div><a class="btn" href="download.html"><svg class="" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></svg> Get WhatsBackUp free</a>
 </div>
 </div>
 </section>
