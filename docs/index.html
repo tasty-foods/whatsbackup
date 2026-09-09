@@ -3,696 +3,411 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>WhatsBackUp — Keep everything WhatsApp holds, sorted by project</title>
-<meta name="description" content="Free Windows app that saves every WhatsApp photo, video and message to your own PC and cloud folder — then sorts the conversations into projects and the photographs into albums, searchable by what is in them. Open source.">
+<title>WhatsBackUp — Your chats, pictures and ideas. Yours to keep.</title>
+<meta name="description" content="Save WhatsApp messages and media, import ChatGPT and Gemini images, organise with optional AI, and check copies in your own cloud folder. Free for Windows.">
 <link rel="canonical" href="https://whatsbackup.cc/">
 <meta name="referrer" content="strict-origin-when-cross-origin">
-<meta name="theme-color" content="#f4f1e8" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#13110d" media="(prefers-color-scheme: dark)">
-
+<meta name="theme-color" content="#f7f9f7">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="WhatsBackUp">
-<meta property="og:title" content="WhatsBackUp — everything WhatsApp holds, sorted by project">
-<meta property="og:description" content="Saves every WhatsApp photo, video and message to your own PC, then gathers the conversations into projects and the photographs into albums — so picking a job back up is one screen, not three chats. Free and open source.">
+<meta property="og:title" content="WhatsBackUp — Your chats, pictures and ideas. Yours to keep.">
+<meta property="og:description" content="Save WhatsApp messages and media, import ChatGPT and Gemini images, organise with optional AI, and check copies in your own cloud folder. Free for Windows.">
 <meta property="og:url" content="https://whatsbackup.cc/">
 <meta property="og:image" content="https://whatsbackup.cc/assets/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="WhatsBackUp — automatically save every WhatsApp photo, video and message to your PC.">
-<meta property="og:locale" content="en_GB">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="WhatsBackUp — everything WhatsApp holds, sorted by project">
-<meta name="twitter:description" content="Saves every WhatsApp photo, video and message to your own PC, then sorts the conversations into projects and the photographs into albums.">
 <meta name="twitter:image" content="https://whatsbackup.cc/assets/og.png">
-
 <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="assets/icon.svg">
 <link rel="stylesheet" href="assets/site.css">
-<script src="assets/analytics.js" defer></script>
-
-<script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@graph": [
-    {
-      "@type": "WebSite",
-      "@id": "https://whatsbackup.cc/#website",
-      "url": "https://whatsbackup.cc/",
-      "name": "WhatsBackUp",
-      "description": "Free Windows app that saves every WhatsApp photo, video and message to your PC, then sorts conversations into projects and photographs into albums.",
-      "inLanguage": "en"
-    },
-    {
-      "@type": "SoftwareApplication",
-      "@id": "https://whatsbackup.cc/#app",
-      "name": "WhatsBackUp",
-      "applicationCategory": "UtilitiesApplication",
-      "applicationSubCategory": "Backup and archiving software",
-      "operatingSystem": "Windows 10, Windows 11",
-      "softwareVersion": "1.4.1",
-      "url": "https://whatsbackup.cc/",
-      "downloadUrl": "https://github.com/tasty-foods/whatsbackup/releases/latest",
-      "installUrl": "https://whatsbackup.cc/download.html",
-      "fileSize": "237MB",
-      "license": "https://github.com/tasty-foods/whatsbackup/blob/master/LICENSE",
-      "isAccessibleForFree": true,
-      "description": "WhatsBackUp is a free, open-source Windows desktop application that automatically saves every photo, video and message you send or receive on WhatsApp to a folder on your own PC, and optionally to a cloud folder such as pCloud, OneDrive or Dropbox. It can also sort photos into albums and conversations into projects using an AI provider of your choice with your own API key.",
-      "featureList": [
-        "Automatically saves every photo and video sent or received on WhatsApp",
-        "Stores message text in a searchable local database",
-        "Imports media already sitting in your chat history",
-        "Mirrors videos straight into a cloud folder such as pCloud, OneDrive or Dropbox",
-        "Optional AI sorting into named albums and projects using your own API key",
-        "Searches photos by what is visible in them, including text read from the image",
-        "Runs quietly in the Windows system tray and starts with Windows",
-        "Works entirely offline apart from optional AI sorting"
-      ],
-      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD", "availability": "https://schema.org/InStock" },
-      "softwareRequirements": "Windows 10 or Windows 11, 64-bit. No Node.js, Chrome or developer tools required.",
-      "permissions": "Reads your WhatsApp messages via a linked-device session to save them locally.",
-      "releaseNotes": "https://github.com/tasty-foods/whatsbackup/releases",
-      "author": { "@type": "Organization", "name": "Tasty Foods", "url": "https://github.com/tasty-foods" },
-      "disambiguatingDescription": "WhatsBackUp is an independent, unofficial tool. It is not made, endorsed or supported by WhatsApp LLC or Meta Platforms, Inc."
-    },
-    {
-      "@type": "FAQPage",
-      "@id": "https://whatsbackup.cc/#faq",
-      "mainEntity": [
-        { "@type": "Question", "name": "What is WhatsBackUp?", "acceptedAnswer": { "@type": "Answer", "text": "WhatsBackUp is a free, open-source Windows desktop app that automatically saves every photo, video and message from your WhatsApp to a folder on your own PC. It links to your phone the same way WhatsApp Web does, then quietly archives everything that arrives from that point on, and can import media already in your chat history." } },
-        { "@type": "Question", "name": "Does WhatsBackUp cost anything?", "acceptedAnswer": { "@type": "Answer", "text": "No. WhatsBackUp is free and open source, with no account, no subscription and no upload limits. The only thing that can cost money is the optional AI sorting feature, which uses an AI provider of your choice with your own API key — typically about $1. Free tiers can be lined up as spares, so it can cost nothing." } },
-        { "@type": "Question", "name": "Where does WhatsBackUp store my photos?", "acceptedAnswer": { "@type": "Answer", "text": "In ordinary folders on your PC that you choose during setup. Photos and videos are saved as normal files you can open, copy or back up like any others. If you point it at a cloud folder such as pCloud, OneDrive, Dropbox or a network drive, videos are written straight there so your cloud client syncs them off the PC automatically." } },
-        { "@type": "Question", "name": "Does WhatsBackUp send my messages anywhere?", "acceptedAnswer": { "@type": "Answer", "text": "No. There is no account, no server and no telemetry — everything stays on your PC and in your own cloud folder. One optional use is the optional AI sorting feature, which is switched off until you enable it. When you turn it on, photos and sampled message text are sent to the AI provider you choose using your own API key, and the app shows you the exact data before the first call. Free tiers can be lined up as spares, so it can cost nothing." } },
-        { "@type": "Question", "name": "Is WhatsBackUp made by WhatsApp?", "acceptedAnswer": { "@type": "Answer", "text": "No. WhatsBackUp is an independent, unofficial tool with no connection to WhatsApp LLC or Meta Platforms, Inc. It connects the same way WhatsApp Web does, using an open-source library that WhatsApp does not endorse. WhatsApp's terms of service do not permit unofficial clients, so there is a real if small chance an account could be limited or banned for using one." } },
-        { "@type": "Question", "name": "Can WhatsBackUp recover photos I have already lost?", "acceptedAnswer": { "@type": "Answer", "text": "Sometimes. Use the Import history feature to pull in media still present in your chats. WhatsApp removes older files from its servers after a while, and anything already gone cannot be recovered by any tool. Media still on your phone or still downloadable in the chat can usually be imported." } }
-      ]
-    }
-  ]
-}
+<link rel="stylesheet" href="assets/redesign.css">
+<script src="assets/analytics.js" defer>
 </script>
+<script src="assets/site.js" defer>
+</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebSite","name":"WhatsBackUp","url":"https://whatsbackup.cc/"},{"@type":"SoftwareApplication","name":"WhatsBackUp","applicationCategory":"UtilitiesApplication","operatingSystem":"Windows 10, Windows 11 (64-bit)","softwareVersion":"1.4.1","url":"https://whatsbackup.cc/","downloadUrl":"https://github.com/tasty-foods/whatsbackup/releases/download/v1.4.1/WhatsBackUp-Setup-1.4.1.exe","installUrl":"https://whatsbackup.cc/download.html","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"description":"A free Windows archive for WhatsApp messages and media, plus ChatGPT and Gemini images. Optional AI organisation, media copy checks, cleanup and Status Studio.","featureList":["WhatsApp media capture and searchable messages","Import available WhatsApp history","ChatGPT uploaded and generated image imports","Gemini Library generated image imports","Optional AI albums, projects and image label search","Media copy checks for file presence and matching sizes","Reversible cleanup quarantine","Optional Status Studio scheduling"],"releaseNotes":"https://github.com/tasty-foods/whatsbackup/releases/tag/v1.4.1"},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What does WhatsBackUp actually save?","acceptedAnswer":{"@type":"Answer","text":"WhatsApp photos, videos and message text, with optional documents, voice notes, audio and stickers. You can also import uploaded and generated images from ChatGPT, and generated images from Gemini’s Library. Each source is linked separately."}},{"@type":"Question","name":"Is it free? Do I need an AI subscription?","acceptedAnswer":{"@type":"Answer","text":"The desktop app is free. You do not need an AI subscription to save or browse your archive. Optional AI sorting uses your own provider API key; provider charges and limits apply. Review the estimate and set a monthly budget before sorting."}},{"@type":"Question","name":"Does it replace WhatsApp’s phone backup?","acceptedAnswer":{"@type":"Answer","text":"No. It creates a browsable archive of files and messages on your PC. It does not restore a WhatsApp account or move your chat history to a new phone. Keep your normal phone backup for that."}},{"@type":"Question","name":"Can it recover old or deleted pictures?","acceptedAnswer":{"@type":"Answer","text":"Import history can collect media that is still available in your linked chats. It cannot recover files that are no longer available from WhatsApp. Skipped and failed items appear in the import summary."}},{"@type":"Question","name":"Does my computer need to stay on?","acceptedAnswer":{"@type":"Answer","text":"Yes. Capture, imports and scheduled statuses run while the app is running and the required services are reachable. Let it start with Windows if you want it ready in the background."}},{"@type":"Question","name":"Where does my data go?","acceptedAnswer":{"@type":"Answer","text":"Files and messages are stored on your PC. You choose any cloud folder. Optional AI features send selected content directly to the provider you configure after consent. Source imports connect to their respective services. See the privacy page for the full breakdown."}}]}]}</script>
 </head>
-
-<body>
-<a class="skip" href="#main">Skip to content</a>
-
+<body class="home"><a class="skip" href="#main">Skip to content</a>
 <header class="site-head">
-  <div class="wrap">
-    <a class="brand" href="./">
-      <span class="mark">Whats<i>BackUp</i></span>
-      <span class="ref">v1.4.1</span>
-    </a>
-    <nav class="nav" aria-label="Main">
-      <a href="#problem" class="hide-sm">Why</a>
-      <a href="#how" class="hide-sm">How</a>
-      <a href="#status-studio" class="hide-sm">Status</a>
-      <a href="compare.html">Compare</a>
-      <a href="faq.html">Questions</a>
-      <a href="contact.html">Contact</a>
-      <a href="download.html">Download</a>
-    </nav>
-  </div>
+<div class="wrap"><a class="brand" href="./" aria-label="WhatsBackUp home"><svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v11h14V9M9 13h6"/></svg><span class="mark">Whats<i>BackUp</i></span></a>
+<nav class="nav" aria-label="Main navigation"><a href="index.html#features">Product</a><a href="index.html#new">What’s new</a><a href="faq.html">Help</a><a class="nav-download" href="download.html">Download <span aria-hidden="true">↗</span></a>
+</nav>
+</div>
 </header>
-
 <main id="main">
-
-<!-- ═══ HERO ═══ -->
-<section class="hero">
-  <div class="wrap">
-    <div class="hero-grid">
-      <div>
-        <p class="label">Windows 10 &amp; 11 · Free &amp; open source</p>
-        <h1>Keep your WhatsApp.</h1>
-        <p class="lede">
-          Save photos, videos and messages from WhatsApp to your Windows PC.
-          Find them in one searchable archive, keep a second media copy in your
-          cloud folder, and optionally use AI to organise albums and projects.
-          Capture runs while the app is open; import history to bring in older chats.
-        </p>
-        <div class="actions">
-          <a class="btn" href="download.html">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" aria-hidden="true"><path d="M12 3v13m0 0l-5-5m5 5l5-5M4 20h16"/></svg>
-            Download
-          </a>
-          <a class="btn btn-2" href="#how">How it works</a>
-        </div>
-        <p class="fine">Free Windows app · Optional AI sorting with your own API key · No administrator password</p>
-      </div>
-
-      <figure class="sheet" role="img" aria-label="A contact sheet of twelve photographs from a WhatsApp chat. Ten are intact; two are empty frames marked 'no longer available', showing media WhatsApp has already deleted from its servers.">
-        <div class="sheet-bar"><span>Contact sheet</span><span>Chat · Aug 2024</span></div>
-        <div class="frames">
-          <div class="frame" style="background:#5c6b52"><span class="n">041</span></div>
-          <div class="frame" style="background:#7d6a54"><span class="n">042</span></div>
-          <div class="frame" style="background:#455566"><span class="n">043</span></div>
-          <div class="frame" style="background:#8a6f5e"><span class="n">044</span></div>
-          <div class="frame gone"><span class="x">no longer<br>available</span><span class="n">045</span></div>
-          <div class="frame" style="background:#6b5f7a"><span class="n">046</span></div>
-          <div class="frame" style="background:#4f6660"><span class="n">047</span></div>
-          <div class="frame" style="background:#7a5a4c"><span class="n">048</span></div>
-          <div class="frame" style="background:#5b6577"><span class="n">049</span></div>
-          <div class="frame gone"><span class="x">no longer<br>available</span><span class="n">050</span></div>
-          <div class="frame" style="background:#6f7358"><span class="n">051</span></div>
-          <div class="frame" style="background:#84695a"><span class="n">052</span></div>
-        </div>
-        <figcaption>Two frames in this sheet are gone for good.<br><b>Nothing recovers them.</b> Something should have kept them.</figcaption>
-      </figure>
-    </div>
-  </div>
+<section class="launch-hero">
+<div class="wrap"><a class="launch-note" href="index.html#new"><strong>NEW IN v1.4.1</strong> A clearer view of your archive <span aria-hidden="true">→</span></a>
+<div class="launch-grid">
+<div class="launch-copy">
+<h1>From your chats.<br><em>Yours to keep.</em>
+</h1>
+<p class="lede">Save WhatsApp messages and media, plus images from ChatGPT and Gemini, to your PC. Find them, organise them and copy them to your own cloud folder.</p>
+<div class="launch-actions"><a class="btn" href="download.html"><svg class="" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></svg> Download for Windows</a><a class="btn btn-2" href="#features">Explore the features</a>
+</div>
+<p class="launch-meta"><span>Free desktop app</span><span>Windows 10 &amp; 11</span>
+</p>
+</div>
+<figure class="product-demo" aria-label="Interactive illustration of WhatsBackUp features">
+<div class="demo-window" aria-hidden="true"><i class="window-dot"></i><i class="window-dot"></i><i class="window-dot"></i><span>WhatsBackUp / your archive</span>
+</div>
+<div class="demo-body">
+<div class="demo-tabs" role="tablist" aria-label="Explore product features" hidden><button id="tab-archive" role="tab" aria-selected="true" aria-controls="panel-archive" tabindex="0">Archive</button><button id="tab-sorting" role="tab" aria-selected="false" aria-controls="panel-sorting" tabindex="-1">AI sorting</button><button id="tab-backup" role="tab" aria-selected="false" aria-controls="panel-backup" tabindex="-1">Cloud copies</button><button id="tab-status" role="tab" aria-selected="false" aria-controls="panel-status" tabindex="-1">Status Studio</button>
+</div>
+<div class="demo-panel" id="panel-archive" role="tabpanel" aria-labelledby="tab-archive" tabindex="0">
+<div class="demo-heading">
+<h2>Everything, together.</h2><span class="demo-tag">3 sources · one archive</span>
+</div>
+<div class="demo-search"><svg class="" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></svg><span>Find that photo, idea or conversation…</span>
+</div>
+<div class="demo-media">
+<figure class="sample-photo"><img src="assets/archive-sample.png" alt="Croissants and sourdough on a bakery counter with green tiles; illustrative sample image" width="1536" height="1024" fetchpriority="high">
+<figcaption>Opening day<span>WhatsApp · Bakery team</span>
+</figcaption>
+</figure>
+<div class="demo-files">
+<div class="demo-file"><span class="file-symbol violet">IMG</span>
+<div><b>Menu concept</b><small>ChatGPT · generated image</small>
+</div>
+</div>
+<div class="demo-file"><span class="file-symbol blue">IMG</span>
+<div><b>Packaging idea</b><small>Gemini · Library image</small>
+</div>
+</div>
+<div class="demo-file"><span class="file-symbol">PDF</span>
+<div><b>Supplier invoice</b><small>WhatsApp · document</small>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="demo-panel" id="panel-sorting" role="tabpanel" aria-labelledby="tab-sorting" tabindex="0" hidden>
+<div class="demo-heading">
+<h2>Find it by what’s in it.</h2><span class="demo-tag">Optional AI</span>
+</div>
+<div class="mini-ui">
+<div class="mini-ui-title"><b>Albums &amp; projects</b><span>Sample archive</span>
+</div>
+<div class="album-row"><span class="album-square" aria-hidden="true">▧</span>Bakery launch <strong>24 photos</strong>
+</div>
+<div class="album-row"><span class="album-square" aria-hidden="true">▤</span>Supplier deliveries <strong>12 photos</strong>
+</div>
+<div class="mini-chips"><span>croissant</span><span>green tiles</span><span>invoice text</span>
+</div>
+</div>
+<p class="tour-help">Search AI labels and text recognised in images. Rename an album or move a photo; your corrections stay in place.</p>
+</div>
+<div class="demo-panel" id="panel-backup" role="tabpanel" aria-labelledby="tab-backup" tabindex="0" hidden>
+<div class="demo-heading">
+<h2>Know what was copied.</h2><span class="demo-tag">Your chosen folder</span>
+</div>
+<div class="mini-ui">
+<div class="mini-ui-title"><b>Media copy check</b><span>Sample result</span>
+</div>
+<div class="backup-number">84 <small>/ 100 files verified</small>
+</div>
+<div class="progress-track" aria-hidden="true"><i></i>
+</div>
+<div class="backup-check"><span>Present · matching sizes</span><b>84%</b>
+</div>
+<p class="tour-help">16 files still need attention. Check results expire so you know when to verify again.</p>
+</div>
+<p class="tour-help">Checks files in the destination folder, not remote upload completion. Your cloud client handles the upload.</p>
+</div>
+<div class="demo-panel" id="panel-status" role="tabpanel" aria-labelledby="tab-status" tabindex="0" hidden>
+<div class="demo-heading">
+<h2>A little planning. More time.</h2><span class="demo-tag">Optional posting</span>
+</div>
+<div class="mini-ui status-sample">
+<div class="status-poster" aria-hidden="true"><small>THE MORNING BATCH</small><b>Fresh from<br>the oven.</b><img src="assets/archive-sample.png" alt="" width="1536" height="1024" loading="lazy">
+</div>
+<div><span class="demo-tag">Dry run · sample schedule</span>
+<div class="schedule-row"><b>09:30</b><span>Bakery opening</span>
+</div>
+<div class="schedule-row"><b>14:00</b><span>Afternoon specials</span>
+</div>
+<p class="tour-help">Preview first. Go live when you choose.</p>
+</div>
+</div>
+<p class="tour-help">Build a queue with templates, quiet hours and posting limits. Posting stays off until you enable it and accept the notice.</p>
+</div>
+</div>
+<figcaption class="demo-caption"><span>Illustrative product tour · sample data</span><span>Try the tabs ↑</span>
+</figcaption>
+</figure>
+</div>
+<div class="source-strip"><span>Bring the things you want to keep.</span>
+<div class="source-word"><i aria-hidden="true">W</i>WhatsApp</div>
+<div class="source-word"><i aria-hidden="true">✦</i>ChatGPT</div>
+<div class="source-word"><i aria-hidden="true">G</i>Gemini</div>
+<div class="source-word"><i aria-hidden="true">↥</i>Your cloud folder</div>
+</div>
+</div>
 </section>
-
-<!-- ═══ PROBLEM ═══ -->
-<section class="tint" id="problem">
-  <div class="wrap">
-    <div class="head">
-      <p class="marker">§ 01 <span>The losses</span></p>
-      <div>
-        <h2>Six ways your photographs leave without telling you</h2>
-        <p>None of them look like a disaster at the time. That is precisely why nobody acts until they go looking for something and it isn't there.</p>
-      </div>
-    </div>
-
-    <ol class="register">
-      <li>
-        <span class="n">01</span>
-        <div>
-          <h3>WhatsApp deletes media from its servers</h3>
-          <p>Open a chat from two years ago and the photo is a grey box: <em>no longer available</em>. It isn't on your phone either, because you never opened it in time.</p>
-        </div>
-      </li>
-      <li>
-        <span class="n">02</span>
-        <div>
-          <h3>A new phone loses what the backup missed</h3>
-          <p>Restores skip media, run out of cloud space, or quietly fail halfway. People find this out on day one of the new phone, which is the worst possible day.</p>
-        </div>
-      </li>
-      <li>
-        <span class="n">03</span>
-        <div>
-          <h3>"Free up space" doesn't ask which ones mattered</h3>
-          <p>One tap clears eight gigabytes of photographs. It does not distinguish between a meme and the only picture you have of your grandmother's kitchen.</p>
-        </div>
-      </li>
-      <li>
-        <span class="n">04</span>
-        <div>
-          <h3>Exporting a chat is not an archive</h3>
-          <p>WhatsApp's own export caps the media it includes, must be repeated conversation by conversation, and hands you a zip file that gets buried in Downloads.</p>
-        </div>
-      </li>
-      <li>
-        <span class="n">05</span>
-        <div>
-          <h3>The proof you need is buried in a chat</h3>
-          <p>The delivery photo, the damaged part, the signed page, the meter reading. Scrolling two years back on a phone to find one picture is not an archive, it's an ordeal.</p>
-        </div>
-      </li>
-      <li>
-        <span class="n">06</span>
-        <div>
-          <h3>Nothing is searchable</h3>
-          <p>Thousands of files called <code>IMG-20240817-WA0043.jpg</code>, in one undifferentiated pile, ordered only by the date they happened to arrive.</p>
-        </div>
-      </li>
-    </ol>
-  </div>
-</section>
-
-<!-- ═══ HOW ═══ -->
-<section id="how">
-  <div class="wrap">
-    <div class="head">
-      <p class="marker">§ 02 <span>Setting up</span></p>
-      <div>
-        <h2>Three steps, then you can forget about it</h2>
-        <p>It links to your phone exactly the way WhatsApp Web does — one QR code, once. After that it simply runs.</p>
-      </div>
-    </div>
-
-    <ol class="steps">
-      <li>
-        <span class="n">01</span>
-        <h3>Install it</h3>
-        <p>One installer, nothing to set up first. No Node, no Chrome, no developer tools, and no administrator password — it installs for your user alone.</p>
-      </li>
-      <li>
-        <span class="n">02</span>
-        <h3>Scan the code</h3>
-        <p>On your phone: WhatsApp → Settings → Linked devices → Link a device. The flow you already know from WhatsApp Web.</p>
-      </li>
-      <li>
-        <span class="n">03</span>
-        <h3>Walk away</h3>
-        <p>Every photo and video you send or receive lands in your folder as it arrives. One click also pulls in what is already sitting in your chats.</p>
-      </li>
-    </ol>
-  </div>
-</section>
-
-<!-- ═══ SORTING ═══ -->
-<section class="tint" id="sorting">
-  <div class="wrap">
-    <div class="head">
-      <p class="marker">§ 03 <span>Making sense of it</span></p>
-      <div>
-        <h2>A record you can actually work from</h2>
-        <p>Any backup left alone is a list in date order, which is barely better than the phone it came from. Switch sorting on and the archive reads itself: conversations gather under the job they belong to, photographs fall into albums it names, and the whole thing becomes searchable by what is in it rather than what it was called.</p>
-      </div>
-    </div>
-
-    <div class="ba" role="img" aria-label="Before and after. Before: a list of undifferentiated filenames such as IMG-20240817-WA0043.jpg. After: the same photographs grouped into named albums — Deliveries, Machine repairs, Paperwork, Products.">
-      <div>
-        <h3>Before</h3>
-        <ul>
-          <li class="it">IMG-20240817-WA0043.jpg</li>
-          <li class="it">IMG-20240817-WA0044.jpg</li>
-          <li class="it">IMG-20240818-WA0001.jpg</li>
-          <li class="it">VID-20240818-WA0002.mp4</li>
-          <li class="it">IMG-20240819-WA0007.jpg</li>
-          <li class="it">IMG-20240819-WA0008.jpg</li>
-          <li class="it">IMG-20240820-WA0011.jpg</li>
-          <li class="it">IMG-20240821-WA0003.jpg</li>
-          <li class="it">… 420 more</li>
-        </ul>
-      </div>
-      <div>
-        <h3>After</h3>
-        <ul>
-          <li class="grp">Deliveries · 131</li>
-          <li class="it">pallet on the loading bay</li>
-          <li class="it">signed delivery note, 18 Aug</li>
-          <li class="grp">Machine repairs · 45</li>
-          <li class="it">cracked bearing housing</li>
-          <li class="it">part number plate, close up</li>
-          <li class="grp">Paperwork · 64</li>
-          <li class="it">invoice 2024-0871</li>
-          <li class="grp">Products · 75</li>
-        </ul>
-      </div>
-    </div>
-
-    <div class="ba" style="margin-top:clamp(22px,3vw,34px)" role="img" aria-label="Before and after for conversations. Before: a flat list of chat names and bare phone numbers in date order. After: the same conversations gathered under the project each one belongs to — a refit, a van, suppliers.">
-      <div>
-        <h3>Before</h3>
-        <ul>
-          <li class="it">Site — Rue Haute</li>
-          <li class="it">+32 478 55 12 09</li>
-          <li class="it">Bram (plumber)</li>
-          <li class="it">Kitchen group</li>
-          <li class="it">+32 495 71 40 33</li>
-          <li class="it">Tiles — showroom</li>
-          <li class="it">… 203 more</li>
-        </ul>
-      </div>
-      <div>
-        <h3>After</h3>
-        <ul>
-          <li class="grp">Rue Haute refit · 5 conversations</li>
-          <li class="it">Site — Rue Haute</li>
-          <li class="it">Bram (plumber)</li>
-          <li class="it">Tiles — showroom</li>
-          <li class="grp">The van · 2 conversations</li>
-          <li class="it">+32 478 55 12 09</li>
-          <li class="grp">Suppliers · 11 conversations</li>
-          <li class="it">+32 495 71 40 33</li>
-        </ul>
-      </div>
-    </div>
-
-    <dl class="defs" style="margin-top:clamp(30px,4vw,46px)">
-      <div>
-        <dt>One place per job</dt>
-        <dd>A project holds the conversations that belong to it, and the album beside it holds what was photographed — the damage, the meter reading, the signed note. What took three chats and a scroll takes one screen.</dd>
-      </div>
-      <div>
-        <dt>Search stops being about filenames</dt>
-        <dd>Ask for <em>the invoice with 0871 on it</em> and it finds the photograph, because it read the number off the paper.</dd>
-      </div>
-      <div>
-        <dt>Corrections stick</dt>
-        <dd>Rename an album, move a photograph, take one out entirely — the next sort is told what you did and works around it, rather than undoing it.</dd>
-      </div>
-      <div>
-        <dt>Your key, your choice of provider</dt>
-        <dd>Anthropic, OpenAI, Gemini, NVIDIA, OpenRouter, Groq. Free tiers run out, so you can line up spares: when one service reaches its daily limit the sorting steps to the next, and photographs are routed past any that cannot see them.</dd>
-      </div>
-      <div>
-        <dt>Priced before a penny is spent</dt>
-        <dd>Around 50 cents to sort six hundred photographs and two hundred conversations on Gemini's cheapest model — and nothing at all on its free tier. The run is priced before it starts, against a monthly limit you set. <a href="privacy.html">Exactly what it sends →</a></dd>
-      </div>
-    </dl>
-  </div>
-</section>
-
-<!-- ═══ STATUS STUDIO ═══ -->
-<section id="status-studio">
-  <div class="wrap">
-    <div class="head">
-      <p class="marker">§ 04 <span>Speaking back</span></p>
-      <div>
-        <h2>Everything else here reads. This one talks.</h2>
-        <p>Your archive is already full of what you sell — the product shots, the new lines, the boxes going out. Status Studio is the one place the app is allowed to put that in front of customers: posting to your WhatsApp status on a schedule, from material you chose, in a card it designs itself. To nobody in particular. Never anywhere else.</p>
-      </div>
-    </div>
-
-    <!-- A day, as it actually goes out -->
-    <figure class="reel" aria-label="A day of scheduled statuses">
-      <figcaption class="reel-head">
-        <span class="reel-slate">SCENE 04 &middot; A TUESDAY</span>
-        <span class="reel-stock">1080 &times; 1920 &middot; RENDERED ON YOUR PC</span>
-      </figcaption>
-
-      <div class="strip">
-        <div class="reel-frame">
-          <div class="reel-card is-photo" aria-hidden="true">
-            <span class="reel-kind">PHOTO</span>
-          </div>
-          <div class="reel-foot"><b>09:00</b><span>from the queue</span></div>
-        </div>
-
-        <div class="reel-frame">
-          <div class="reel-card is-paper">
-            <p class="reel-line">New this week — pralines in 250&nbsp;g and 500&nbsp;g boxes. Trade prices on request.</p>
-            <p class="reel-sig">Tasty Food</p>
-          </div>
-          <div class="reel-foot"><b>11:30</b><span>AI wrote it</span></div>
-        </div>
-
-        <div class="reel-frame">
-          <div class="reel-card is-photo is-alt" aria-hidden="true">
-            <span class="reel-kind">ALBUM</span>
-          </div>
-          <div class="reel-foot"><b>14:00</b><span>Products album</span></div>
-        </div>
-
-        <div class="reel-frame">
-          <div class="reel-card is-gradient">
-            <p class="reel-line">Orders in before six today go out on Thursday&rsquo;s run.</p>
-            <p class="reel-sig">Tasty Food</p>
-          </div>
-          <div class="reel-foot"><b>17:00</b><span>AI wrote it</span></div>
-        </div>
-
-        <div class="reel-frame">
-          <div class="reel-card is-bold">
-            <p class="reel-line">Falafel mix is back in — 5&nbsp;kg and 10&nbsp;kg sacks.</p>
-            <p class="reel-sig">Tasty Food</p>
-          </div>
-          <div class="reel-foot"><b>20:30</b><span>drop folder</span></div>
-        </div>
-      </div>
-
-      <p class="reel-note">Four templates ship: the brand green, the darkroom, newsprint, and poster red. Text becomes an image at the size WhatsApp wants, so it arrives looking deliberate rather than typed.</p>
-    </figure>
-
-    <dl class="defs">
-      <div>
-        <dt>It reads the archive before it writes</dt>
-        <dd>The AI writer takes your standing instructions &mdash; <em>a short warm greeting for my customers, in Dutch, mention the weekday</em> &mdash; and, if you switch it on, a two-day digest of recent messages for context. That second part is its own toggle, off by default, because it sends recent message text to your chosen AI provider.</dd>
-      </div>
-      <div>
-        <dt>An album becomes a storefront</dt>
-        <dd>The sorting already put your pictures into albums it named itself. Point a slot at one and it rotates: a <em>Product Line</em> album posts a different item each day, so customers see the whole range without you picking one every morning.</dd>
-      </div>
-      <div>
-        <dt>A folder you can just save into</dt>
-        <dd>Drop a picture in the folder and it is scheduled. No app to open, no queue to manage &mdash; saving the file is the whole action.</dd>
-      </div>
-      <div>
-        <dt>Late is a decision, not an accident</dt>
-        <dd>A slot due while the PC slept posts on wake if it is still timely, and is skipped with a reason in the history if it isn't. You set how late is too late.</dd>
-      </div>
-    </dl>
-
-    <!-- The brakes, stated as plainly as the feature -->
-    <div class="callsheet">
-      <p class="callsheet-title">Before it can say a word</p>
-      <ul>
-        <li><b>Its own consent notice</b><span>In plain words, separate from everything else you agreed to.</span></li>
-        <li><b>Dry run by default</b><span>Everything runs except the send. The history reads &ldquo;would have posted&rdquo; until you deliberately go live.</span></li>
-        <li><b>A daily cap and a minimum gap</b><span>Three a day, two hours apart, until you say otherwise.</span></li>
-        <li><b>Quiet hours</b><span>Nothing goes out between the times you set, including catch-ups.</span></li>
-        <li><b>A history of what went</b><span>The exact card that was posted, kept, so you can see what your customers saw.</span></li>
-      </ul>
-      <p class="callsheet-foot">Automating a WhatsApp account carries some risk to it. We say so <a href="./faq.html#automation">in the questions</a>, and we default everything to off.</p>
-    </div>
-  </div>
-</section>
-
-<!-- ═══ SOURCES ═══ -->
-<section class="tint" id="sources">
-  <div class="wrap">
-    <div class="head">
-      <p class="marker">§ 05 <span>More than one door</span></p>
-      <div>
-        <h2>What went through ChatGPT and Gemini, kept with the rest</h2>
-        <p>Your work does not only pass through WhatsApp. The photograph you asked ChatGPT about, the six variations Gemini drew before the one you used &#8212; those live in tabs that are one cleared history from gone. Both can be linked the way WhatsApp is, and everything they hold lands in the same archive, the same albums, the same search.</p>
-      </div>
-    </div>
-
-    <dl class="defs">
-      <div>
-        <dt>Linked once, read on a schedule</dt>
-        <dd>Neither company publishes a way to fetch your own history, so this does what a person would: it signs in once, in a window that opens, and reads the page from a browser profile of its own. Nothing is typed for you and the password is never seen. Every few hours it looks again.</dd>
-      </div>
-      <div>
-        <dt>A conversation becomes a chat</dt>
-        <dd>A ChatGPT conversation&#8217;s title is the chat it lands under, so its pictures fall into the same projects and albums as everything from WhatsApp, and the prompt that produced a picture rides along as its caption.</dd>
-      </div>
-      <div>
-        <dt>Choose what to see</dt>
-        <dd>A switch at the top of the gallery and the Overview &#8212; All &#183; WhatsApp &#183; ChatGPT &#183; Gemini &#8212; with counts. Each source keeps its own badge on the tile, and each account has its own card in Settings with Import now and a way to forget it.</dd>
-      </div>
-      <div>
-        <dt>Backed up like everything else</dt>
-        <dd>Every picture from either account is copied to your cloud folder on the next sweep, and shows the same mark as any WhatsApp photo until it is.</dd>
-      </div>
-    </dl>
-  </div>
-</section>
-
-<!-- ═══ FEATURES ═══ -->
 <section id="features">
-  <div class="wrap">
-    <div class="head">
-      <p class="marker">§ 06 <span>What it does</span></p>
-      <div>
-        <h2>Built to be left running</h2>
-        <p>The whole point is that you stop thinking about it. That takes rather more than a download button.</p>
-      </div>
-    </div>
-
-    <dl class="defs">
-      <div>
-        <dt>Everything, as it arrives</dt>
-        <dd>Photos and videos you send and receive, in one-to-one chats and groups, saved the moment they land — with message text kept in a searchable local database.</dd>
-      </div>
-      <div>
-        <dt>Straight into your cloud folder</dt>
-        <dd>Point it at pCloud, OneDrive, Dropbox or a network drive and videos are written there directly, so your existing client syncs them off the PC without a second copy.</dd>
-      </div>
-      <div>
-        <dt>Catches up on history</dt>
-        <dd><em>Import history</em> walks your existing chats and downloads the media WhatsApp still holds — frequently years of photographs you had assumed were gone.</dd>
-      </div>
-      <div>
-        <dt>Says so when it breaks</dt>
-        <dd>WhatsApp changes its website without warning. Three failed downloads in a row and the tray icon turns amber and the app tells you — rather than failing silently for a month.</dd>
-      </div>
-      <div>
-        <dt>Posts your status for you</dt>
-        <dd>Scheduled statuses from a queue, a drop folder, a sorted album or an AI writer — behind its own consent, dry-run first, capped and logged. <a href="#status-studio">How it works ↑</a></dd>
-      </div>
-      <div>
-        <dt>Plays without opening anything</dt>
-        <dd>Videos show a frame in the grid and play silently as your pointer crosses them. <em>Quick play</em> runs them one after another, full screen, the way a feed does — sound on when you want it.</dd>
-      </div>
-      <div>
-        <dt>Finds the one you need</dt>
-        <dd>Filter by chat, date, sent or received. With sorting on, search by what is actually pictured, including text read off a label or an invoice.</dd>
-      </div>
-      <div>
-        <dt>Yours, and only yours</dt>
-        <dd>No account, no server of ours, no telemetry. Ordinary files in ordinary folders that keep working if this project disappears tomorrow.</dd>
-      </div>
-    </dl>
-  </div>
+<div class="wrap">
+<div class="section-heading">
+<div><span class="section-kicker">One place to come back to</span>
+<h2>Good things get lost<br>in busy conversations.</h2>
+</div>
+<p>A family photo. An idea you generated. The document someone sent last week. Bring the useful things into an archive you can actually browse.</p>
+</div>
+<div class="feature-grid">
+<article class="feature-card"><svg class="feature-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11a9 9 0 0 1-13 8l-5 2 1-5A9 9 0 1 1 21 11Z"/><path d="M8 9h8M8 13h5"/></svg>
+<h3>Your WhatsApp, saved.</h3>
+<p>Keep messages and media from your linked chats as they arrive. Import available history when you want to go further back.</p>
+<ul>
+<li>Sent and received media</li>
+<li>Searchable conversations</li>
+<li>Optional documents and voice notes</li>
+</ul><span class="feature-label">Link with a QR code · captures while running</span>
+</article>
+<article class="feature-card"><svg class="feature-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z"/></svg>
+<h3>Your AI images, kept.</h3>
+<p>Collect the pictures you uploaded to ChatGPT or had it create, plus generated images from Gemini’s Library.</p>
+<ul>
+<li>Separate account connections</li>
+<li>Source badges and filters</li>
+<li>Progress and import summaries</li>
+</ul><span class="feature-label">Sign in to the sources you choose</span>
+</article>
+<article class="feature-card"><svg class="feature-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18H6a4 4 0 0 1-1-8 7 7 0 0 1 13-1 4.5 4.5 0 0 1 0 9h-1M12 20V11m-3 3 3-3 3 3"/></svg>
+<h3>Your folder, your choice.</h3>
+<p>Keep ordinary files on your PC and copy media to a folder you manage: pCloud, OneDrive, Dropbox or a network drive.</p>
+<ul>
+<li>File presence and size checks</li>
+<li>Missing copies flagged clearly</li>
+<li>Readable HTML chat exports</li>
+</ul><span class="feature-label">Your cloud client handles remote syncing</span>
+</article>
+</div>
+</div>
 </section>
-
-<!-- ═══ SPEC ═══ -->
-<section class="tint" id="spec">
-  <div class="wrap">
-    <div class="head">
-      <p class="marker">§ 07 <span>Specification</span></p>
-      <div><h2>The short version</h2></div>
-    </div>
-
-    <dl class="spec">
-      <div><dt>What it is</dt><dd>A Windows desktop app that archives WhatsApp media and message text to your own PC</dd></div>
-      <div><dt>Price</dt><dd>Free, and open source. No account, no subscription, no limits</dd></div>
-      <div><dt>Runs on</dt><dd>Windows 10 and Windows 11, 64-bit</dd></div>
-      <div><dt>Needs first</dt><dd>Nothing. No Node.js, no Chrome, no developer tools, no administrator password</dd></div>
-      <div><dt>Download</dt><dd>237 MB — it carries its own browser engine</dd></div>
-      <div><dt>Saves</dt><dd>Photos, videos and message text. Optionally documents, voice notes, audio and stickers</dd></div>
-      <div><dt>Stored as</dt><dd>Ordinary JPG and MP4 files in ordinary folders, plus a standard SQLite database</dd></div>
-      <div><dt>Cloud folders</dt><dd>pCloud, OneDrive, Dropbox, Google Drive desktop, or any mapped network drive</dd></div>
-      <div><dt>External services</dt><dd>Linked accounts, your cloud client and GitHub updates. AI sorting and status posting are optional and require your consent.</dd></div>
-      <div><dt>Sorting cost</dt><dd>About $1.50 for a few hundred photographs, depending on the provider and its available free tier</dd></div>
-      <div><dt>Official WhatsApp app</dt><dd><span class="no-">No</span> — independent and unofficial, not affiliated with WhatsApp LLC or Meta</dd></div>
-      <div><dt>Source</dt><dd><a href="https://github.com/tasty-foods/whatsbackup">github.com/tasty-foods/whatsbackup</a></dd></div>
-    </dl>
-  </div>
+<section class="tour-section" id="tools">
+<div class="wrap">
+<div class="tour-intro"><span class="section-kicker">Make your archive useful</span>
+<h2>Keep it. Find it.<br>Do something with it.</h2>
+<p>Start with saving. Add the tools you need, when you need them. The examples below use illustrative sample data.</p>
+</div>
+<div class="capability-grid">
+<article class="capability">
+<h3>Search beyond filenames.</h3>
+<p>Optional AI groups photos into albums and conversations into projects. Find images using labels and recognised text, then correct anything it gets wrong.</p>
+<div class="mini-ui">
+<div class="mini-ui-title"><b>Albums &amp; projects</b><span>Sample archive</span>
+</div>
+<div class="album-row"><span class="album-square" aria-hidden="true">▧</span>Bakery launch <strong>24 photos</strong>
+</div>
+<div class="album-row"><span class="album-square" aria-hidden="true">▤</span>Supplier deliveries <strong>12 photos</strong>
+</div>
+<div class="mini-chips"><span>croissant</span><span>green tiles</span><span>invoice text</span>
+</div>
+</div>
+<p class="inline-note">Your provider, your key and your budget. Your manual corrections stay in place.</p>
+</article>
+<article class="capability">
+<h3>Check the copy, not a promise.</h3>
+<p>See which media files exist in your chosen destination with matching sizes. Find missing copies and run a fresh check when you need one.</p>
+<div class="mini-ui">
+<div class="mini-ui-title"><b>Media copy check</b><span>Sample result</span>
+</div>
+<div class="backup-number">84 <small>/ 100 files verified</small>
+</div>
+<div class="progress-track" aria-hidden="true"><i></i>
+</div>
+<div class="backup-check"><span>Present · matching sizes</span><b>84%</b>
+</div>
+<p class="tour-help">16 files still need attention. Check results expire so you know when to verify again.</p>
+</div>
+<p class="inline-note">Media checks do not verify remote cloud uploads. The message database stays local.</p>
+</article>
+<article class="capability">
+<h3>Clear clutter with a way back.</h3>
+<p>Review possible duplicates and small images before moving unwanted files into quarantine. Restore them if you change your mind.</p>
+<div class="mini-ui">
+<div class="mini-ui-title"><b>Cleanup review</b><span>Sample selection</span>
+</div>
+<div class="cleanup-row"><b>Possible duplicates</b><span>Review first</span>
+</div>
+<div class="cleanup-row"><b>Small images</b><span>Choose what to keep</span>
+</div>
+<div class="cleanup-row"><b>Quarantined items</b><span>Restore available</span>
+</div>
+</div>
+<p class="inline-note">Suggestions are not proof of duplication. Permanent deletion is a separate action.</p>
+</article>
+<article class="capability">
+<h3>Give your statuses a plan.</h3>
+<p>Status Studio brings together a posting queue, templates, watched folders and albums, with optional AI writing.</p>
+<div class="mini-ui status-sample">
+<div class="status-poster" aria-hidden="true"><small>THE MORNING BATCH</small><b>Fresh from<br>the oven.</b><img src="assets/archive-sample.png" alt="" width="1536" height="1024" loading="lazy">
+</div>
+<div><span class="demo-tag">Dry run · sample schedule</span>
+<div class="schedule-row"><b>09:30</b><span>Bakery opening</span>
+</div>
+<div class="schedule-row"><b>14:00</b><span>Afternoon specials</span>
+</div>
+<p class="tour-help">Preview first. Go live when you choose.</p>
+</div>
+</div>
+<p class="inline-note">Off by default. Preview in dry run, then choose whether to enable posting with quiet hours and limits.</p>
+</article>
+</div>
+</div>
 </section>
-
-<!-- ═══ THE HONEST PART ═══ -->
-<section id="honest">
-  <div class="wrap">
-    <div class="head">
-      <p class="marker">§ 08 <span>Disclosure</span></p>
-      <div>
-        <h2>Three things that don't flatter us</h2>
-        <p>You are about to let a stranger's software read your messages. You should hear the awkward parts from us, not discover them later.</p>
-      </div>
-    </div>
-
-    <div class="stamp" data-stamp="Read before installing">
-      <ol>
-        <li><div><strong>This is not an official WhatsApp app.</strong> It connects the way WhatsApp Web does, through an open-source library WhatsApp does not endorse. Their terms do not permit unofficial clients, and there is a real if small chance an account gets limited or banned for using one. If that risk is unacceptable to you, don't install it.</div></li>
-        <li><div><strong>It archives other people's media too.</strong> Everything sent to you is kept, and none of the senders agreed to that. Keep the copies to yourself, and delete what you shouldn't be holding.</div></li>
-        <li><div><strong>It only captures while it is running.</strong> Anything arriving with the app closed is missed at the time — though <em>Import history</em> can usually collect it afterwards.</div></li>
-      </ol>
-    </div>
-  </div>
+<section class="release-section" id="new">
+<div class="wrap">
+<div class="section-heading">
+<div><span class="section-kicker">The latest release · v1.4.1</span>
+<h2>Less guesswork.<br>More useful feedback.</h2>
+</div>
+<p>The latest update makes the whole archive easier to follow, from the first connection to a completed import.</p>
+</div>
+<div class="release-grid">
+<article class="release-item"><span>01 / GET STARTED</span>
+<h3>A clearer next step</h3>
+<p>The overview guides you toward the next useful action. Source cards show connection state, progress and errors together.</p>
+</article>
+<article class="release-item"><span>02 / STAY INFORMED</span>
+<h3>Imports you can follow</h3>
+<p>ChatGPT reads chats before downloading media, handles temporary limits with retries, and keeps a summary of the latest import.</p>
+</article>
+<article class="release-item"><span>03 / STAY IN CONTROL</span>
+<h3>Honest save feedback</h3>
+<p>Failed settings saves stay visible. Setup remains open until the settings are saved, so an error does not look like success.</p>
+</article>
+<article class="release-item"><span>04 / MOVE MORE EASILY</span>
+<h3>Better everyday navigation</h3>
+<p>Source filters, keyboard-friendly switches and focused dialogs make browsing and changing settings easier.</p>
+</article>
+</div><a class="release-link" href="https://github.com/tasty-foods/whatsbackup/releases/tag/v1.4.1">Read the v1.4.1 release notes <span aria-hidden="true">↗</span></a>
+</div>
 </section>
-
-<!-- ═══ DOWNLOAD ═══ -->
-<section class="tint" id="download">
-  <div class="wrap">
-    <div class="head">
-      <p class="marker">§ 09 <span>Obtain</span></p>
-      <div>
-        <h2>Take a copy</h2>
-        <p>Free, open source, and about five minutes from here to <em>every photograph I am sent is now kept</em>.</p>
-      </div>
-    </div>
-
-    <div style="display:flex;flex-wrap:wrap;gap:clamp(26px,5vw,64px);align-items:flex-start">
-      <a class="btn" id="dl-btn" href="https://github.com/tasty-foods/whatsbackup/releases/latest" rel="noopener">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" aria-hidden="true"><path d="M12 3v13m0 0l-5-5m5 5l5-5M4 20h16"/></svg>
-        Download for Windows
-      </a>
-      <p class="manifest">
-        <span>File</span><b>WhatsBackUp-Setup-1.4.1.exe</b><br>
-        <span>Size</span><b>237 MB</b><br>
-        <span>Requires</span><b>Windows 10 / 11, 64-bit</b><br>
-        <span>Installs</span><b>per user — no admin password</b><br>
-        <span>Licence</span><b>open source, free</b>
-      </p>
-    </div>
-    <p style="margin-top:26px"><a href="download.html">The full installation guide, including the Windows SmartScreen warning →</a></p>
-  </div>
+<section id="start">
+<div class="wrap">
+<div class="section-heading">
+<div><span class="section-kicker">A simple start</span>
+<h2>Your first archive,<br>in three steps.</h2>
+</div>
+<p>No server to manage. No WhatsBackUp account to create. Just your Windows PC and the sources you want to keep.</p>
+</div>
+<div class="steps-grid">
+<article><span class="step-number">01</span>
+<h3>Install and choose a folder.</h3>
+<p>Download the Windows app and choose where your media should live. Add a cloud folder if you want one.</p>
+</article>
+<article><span class="step-number">02</span>
+<h3>Connect your sources.</h3>
+<p>Link WhatsApp by QR code. Connect ChatGPT or Gemini separately if you want to import your AI images.</p>
+</article>
+<article><span class="step-number">03</span>
+<h3>Import, then explore.</h3>
+<p>Bring in available history, browse your files and check your copies. Add sorting or scheduling when useful.</p>
+</article>
+</div>
+</div>
 </section>
-
-<!-- ═══ QUESTIONS ═══ -->
-<section id="faq">
-  <div class="wrap">
-    <div class="head">
-      <p class="marker">§ 10 <span>Questions</span></p>
-      <div><h2>What people ask first</h2></div>
-    </div>
-
-    <div class="qa">
-      <div>
-        <span class="n">Q1</span>
-        <div>
-          <h3>Does it cost anything?</h3>
-          <p><strong>No.</strong> Free and open source — no account, no subscription, no limits. The only thing that can ever cost money is the optional sorting, which uses your own key with the provider you choose: roughly $1.50 for a few hundred photographs, with costs depending on the provider and available free tier.</p>
-        </div>
-      </div>
-      <div>
-        <span class="n">Q2</span>
-        <div>
-          <h3>Does it upload my messages anywhere?</h3>
-          <p><strong>No.</strong> No account, no server of ours, no telemetry. Files go to your folders and your own cloud folder. One optional use is AI sorting, which is off until you switch it on, shows you the literal data before the first call, and uses the provider you choose. Optional Status Studio can also send a recent-message digest when chat-aware writing is enabled.</p>
-        </div>
-      </div>
-      <div>
-        <span class="n">Q3</span>
-        <div>
-          <h3>Will this get my WhatsApp account banned?</h3>
-          <p><strong>It is a real if small risk, and we won't pretend otherwise.</strong> It uses an unofficial client library, which WhatsApp's terms don't permit. Capture reads from a linked device; optional Status Studio posts from your account only after you enable it — but the risk isn't zero. If your account is critical to your livelihood, weigh that first.</p>
-        </div>
-      </div>
-      <div>
-        <span class="n">Q4</span>
-        <div>
-          <h3>Can it get back photographs I've already lost?</h3>
-          <p><strong>Sometimes.</strong> <em>Import history</em> pulls in whatever is still in your chats, often years of it. But once a file is gone from both WhatsApp's servers and your phone, no tool recovers it — this one included. Which is the entire argument for running it before you need it.</p>
-        </div>
-      </div>
-      <div>
-        <span class="n">Q5</span>
-        <div>
-          <h3>Why is Windows warning me about the installer?</h3>
-          <p><strong>Because it isn't signed with a paid certificate</strong> — several hundred euros a year that a free tool doesn't have. SmartScreen shows that warning for anything it doesn't recognise; it says nothing about whether the software is safe. Click <em>More info</em>, then <em>Run anyway</em>. Or read the source and build it yourself.</p>
-        </div>
-      </div>
-    </div>
-
-    <p style="margin-top:30px"><a href="faq.html">All twenty-one questions →</a></p>
-  </div>
+<section class="trust-section" aria-label="Your choices">
+<div class="wrap">
+<div class="trust-box">
+<div>
+<h3>Files you control</h3>
+<p>Normal media files, a local message database and HTML exports. Your archive lives on your PC.</p>
+</div>
+<div>
+<h3>AI is optional</h3>
+<p>Saving and browsing work without AI. You choose the provider and accept the data notice before enabling it.</p>
+</div>
+<div>
+<h3>Clear about its limits</h3>
+<p>Runs while your PC and app are on. This is an unofficial tool and a browsable archive, not a phone restore backup.</p>
+</div>
+</div>
+</div>
 </section>
-
+<section class="faq-section" id="faq">
+<div class="wrap faq-layout">
+<div><span class="section-kicker">Before you begin</span>
+<h2>A few good questions.</h2>
+<p>Know what you’re installing and where your files go.</p><a href="faq.html">Visit the help centre →</a>
+</div>
+<div class="faq-list">
+<details>
+<summary>What does WhatsBackUp actually save?</summary>
+<p>WhatsApp photos, videos and message text, with optional documents, voice notes, audio and stickers. You can also import uploaded and generated images from ChatGPT, and generated images from Gemini’s Library. Each source is linked separately.</p>
+</details>
+<details>
+<summary>Is it free? Do I need an AI subscription?</summary>
+<p>The desktop app is free. You do not need an AI subscription to save or browse your archive. Optional AI sorting uses your own provider API key; provider charges and limits apply. Review the estimate and set a monthly budget before sorting.</p>
+</details>
+<details>
+<summary>Does it replace WhatsApp’s phone backup?</summary>
+<p>No. It creates a browsable archive of files and messages on your PC. It does not restore a WhatsApp account or move your chat history to a new phone. Keep your normal phone backup for that.</p>
+</details>
+<details>
+<summary>Can it recover old or deleted pictures?</summary>
+<p>Import history can collect media that is still available in your linked chats. It cannot recover files that are no longer available from WhatsApp. Skipped and failed items appear in the import summary.</p>
+</details>
+<details>
+<summary>Does my computer need to stay on?</summary>
+<p>Yes. Capture, imports and scheduled statuses run while the app is running and the required services are reachable. Let it start with Windows if you want it ready in the background.</p>
+</details>
+<details>
+<summary>Where does my data go?</summary>
+<p>Files and messages are stored on your PC. You choose any cloud folder. Optional AI features send selected content directly to the provider you configure after consent. Source imports connect to their respective services. See the privacy page for the full breakdown.</p>
+</details>
+</div>
+</div>
+</section>
+<section class="final-cta">
+<div class="wrap">
+<div class="cta-box">
+<div>
+<h2>Give your good ideas a home.</h2>
+<p>WhatsApp, ChatGPT and Gemini. One archive on your PC.</p>
+</div><a class="btn" href="download.html"><svg class="" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></svg> Get WhatsBackUp free</a>
+</div>
+</div>
+</section>
 </main>
-
 <footer class="site-foot">
-  <div class="wrap">
-    <div class="foot-cols">
-      <div>
-        <p class="mark" style="font-family:var(--serif);font-size:1.28rem;margin-bottom:.5em">Whats<i style="font-style:normal;color:var(--accent)">BackUp</i></p>
-        <p style="color:var(--ink-2);max-width:30ch;font-size:.95rem">Keeps your WhatsApp photographs, videos and messages on your own disk, where they stay yours.</p>
-      </div>
-      <div>
-        <h2>The app</h2>
-        <ul>
-          <li><a href="download.html">Download</a></li>
-          <li><a href="index.html#features">What it does</a></li>
-          <li><a href="index.html#sorting">Sorting</a></li>
-          <li><a href="compare.html">How it compares</a></li>
-        </ul>
-      </div>
-      <div>
-        <h2>Reading</h2>
-        <ul>
-          <li><a href="faq.html">Questions</a></li>
-          <li><a href="privacy.html">Privacy</a></li>
-          <li><a href="https://github.com/tasty-foods/whatsbackup">Source code</a></li>
-          <li><a href="https://github.com/tasty-foods/whatsbackup/releases">Releases</a></li>
-        </ul>
-      </div>
-    </div>
-
-    <div class="colophon">
-      <p><strong>WhatsBackUp is an independent, unofficial tool.</strong> It is not made, endorsed, sponsored or supported by WhatsApp&nbsp;LLC or Meta&nbsp;Platforms,&nbsp;Inc. "WhatsApp" is a trademark of its respective owner, used here only to describe what this software works with. You are responsible for how you use it, including the privacy of other people whose media it keeps. Provided as is, without warranty.</p>
-      <p class="set">Set in Georgia · No trackers, no cookies, no fonts fetched from anywhere · © 2026 Tasty Foods</p>
-    </div>
-  </div>
+<div class="wrap">
+<div class="foot-cols">
+<div><a class="brand" href="./"><span class="mark">WhatsBackUp</span></a>
+<p style="margin-top:16px">Your chats, pictures and ideas.<br>Kept somewhere you control.</p>
+</div>
+<div>
+<h2>Explore</h2>
+<ul>
+<li><a href="index.html#features">Features</a>
+</li>
+<li><a href="index.html#new">What’s new</a>
+</li>
+<li><a href="download.html">Download for Windows</a>
+</li>
+<li><a href="compare.html">Compare backup options</a>
+</li>
+</ul>
+</div>
+<div>
+<h2>Good to know</h2>
+<ul>
+<li><a href="faq.html">Help &amp; questions</a>
+</li>
+<li><a href="privacy.html">Privacy &amp; data</a>
+</li>
+<li><a href="contact.html">Contact</a>
+</li>
+<li><a href="https://github.com/tasty-foods/whatsbackup">Source on GitHub ↗</a>
+</li>
+</ul>
+</div>
+</div>
+<div class="colophon">
+<p>Independent, unofficial software. Not affiliated with or endorsed by WhatsApp, Meta, OpenAI or Google. Product names belong to their respective owners.</p>
+<p class="set">© 2026 Tasty Foods · Free for Windows 10 &amp; 11</p>
+</div>
+</div>
 </footer>
-
-<script>
-// Progressive enhancement only: point the button at the newest installer when
-// GitHub answers. Without JavaScript the releases page link is already correct.
-(function () {
-  var btn = document.getElementById('dl-btn');
-  if (!btn || !window.fetch) return;
-  fetch('https://api.github.com/repos/tasty-foods/whatsbackup/releases/latest', { headers: { accept: 'application/vnd.github+json' } })
-    .then(function (r) { return r.ok ? r.json() : null; })
-    .then(function (rel) {
-      if (!rel || !rel.assets) return;
-      var exe = rel.assets.filter(function (a) { return /\.exe$/i.test(a.name); })[0];
-      if (exe) btn.href = exe.browser_download_url;
-    })
-    .catch(function () {});
-})();
-</script>
 </body>
 </html>

@@ -3,218 +3,174 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>WhatsApp backup compared: Drive, iCloud or a PC archive</title>
-<meta name="description" content="Google Drive backup, iCloud, Export chat or a desktop archive: what each way of backing up WhatsApp actually protects you against, and where each fails.">
+<title>Compare WhatsBackUp — Archive or phone backup?</title>
+<meta name="description" content="Understand the difference between a WhatsBackUp desktop archive, WhatsApp phone backup and a manual chat export.">
 <link rel="canonical" href="https://whatsbackup.cc/compare.html">
 <meta name="referrer" content="strict-origin-when-cross-origin">
-<meta name="theme-color" content="#f4f1e8" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#13110d" media="(prefers-color-scheme: dark)">
-<meta property="og:type" content="article">
+<meta name="theme-color" content="#f7f9f7">
+<meta property="og:type" content="website">
 <meta property="og:site_name" content="WhatsBackUp">
-<meta property="og:title" content="WhatsApp backup compared — Drive, iCloud, export, or a desktop archive">
-<meta property="og:description" content="What each way of backing up WhatsApp actually protects you against, and where each one lets you down.">
+<meta property="og:title" content="Compare WhatsBackUp — Archive or phone backup?">
+<meta property="og:description" content="Understand the difference between a WhatsBackUp desktop archive, WhatsApp phone backup and a manual chat export.">
 <meta property="og:url" content="https://whatsbackup.cc/compare.html">
 <meta property="og:image" content="https://whatsbackup.cc/assets/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="WhatsBackUp — automatically save every WhatsApp photo, video and message to your PC.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://whatsbackup.cc/assets/og.png">
 <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="assets/site.css">
-<script src="assets/analytics.js" defer></script>
-<script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "Article",
-  "headline": "WhatsApp backup compared: Google Drive, iCloud, chat export or a desktop archive",
-  "description": "An honest comparison of the ways to back up WhatsApp photos and messages, and what each one actually protects against.",
-  "datePublished": "2026-08-17",
-  "dateModified": "2026-08-17",
-  "inLanguage": "en",
-  "author": { "@type": "Organization", "name": "Tasty Foods" },
-  "publisher": { "@type": "Organization", "name": "Tasty Foods" },
-  "mainEntityOfPage": "https://whatsbackup.cc/compare.html"
-}
+<link rel="stylesheet" href="assets/redesign.css">
+<script src="assets/analytics.js" defer>
+</script>
+<script src="assets/site.js" defer>
 </script>
 </head>
-<body>
-<a class="skip" href="#main">Skip to content</a>
-
+<body><a class="skip" href="#main">Skip to content</a>
 <header class="site-head">
-  <div class="wrap">
-    <a class="brand" href="./"><span class="mark">Whats<i>BackUp</i></span><span class="ref">v1.4.1</span></a>
-    <nav class="nav" aria-label="Main">
-      <a href="index.html#problem" class="hide-sm">Why</a>
-      <a href="index.html#how" class="hide-sm">How</a>
-      <a href="compare.html" aria-current="page">Compare</a>
-      <a href="faq.html">Questions</a>
-      <a href="contact.html">Contact</a>
-      <a href="download.html">Download</a>
-    </nav>
-  </div>
+<div class="wrap"><a class="brand" href="./" aria-label="WhatsBackUp home"><svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v11h14V9M9 13h6"/></svg><span class="mark">Whats<i>BackUp</i></span></a>
+<nav class="nav" aria-label="Main navigation"><a href="index.html#features">Product</a><a href="index.html#new">What’s new</a><a href="faq.html">Help</a><a class="nav-download" href="download.html">Download <span aria-hidden="true">↗</span></a>
+</nav>
+</div>
 </header>
-
 <main id="main">
-
 <section class="hero">
-  <div class="wrap">
-    <p class="label">An honest comparison</p>
-    <h1 style="max-width:15ch">You already have a backup.</h1>
-    <p class="lede" style="margin-top:.7em">It probably doesn't protect you from the thing you are actually worried about. Here is what each option covers — including where this one loses.</p>
-  </div>
+<div class="wrap"><span class="section-kicker">CHOOSE THE RIGHT TOOL</span>
+<h1>An archive you can use.<br>A backup you can restore.</h1>
+<p class="lede">They solve different problems. Keep your phone backup for restoring WhatsApp; use WhatsBackUp for a browsable archive on your PC.</p>
+</div>
 </section>
-
-<section class="tint">
-  <div class="wrap">
-    <div class="head">
-      <p class="marker">§ 01 <span>Side by side</span></p>
-      <div><h2>What each one actually does</h2></div>
-    </div>
-
-    <div class="ledger">
-      <table>
-        <caption>The common ways of backing up WhatsApp, compared — August 2026</caption>
-        <thead>
-          <tr>
-            <th scope="col"><span class="vh">Capability</span></th>
-            <th scope="col">Drive / iCloud backup</th>
-            <th scope="col">Export chat</th>
-            <th scope="col">Save to gallery</th>
-            <th scope="col">WhatsBackUp</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <th scope="row">Runs by itself</th>
-            <td class="is-yes"><span class="mk y">Yes</span> daily</td>
-            <td class="is-no"><span class="mk">No</span> manual, each time</td>
-            <td class="is-yes"><span class="mk y">Yes</span></td>
-            <td class="is-yes"><span class="mk y">Yes</span> as media arrives</td>
-          </tr>
-          <tr>
-            <th scope="row">Covers every chat at once</th>
-            <td class="is-yes"><span class="mk y">Yes</span></td>
-            <td class="is-no"><span class="mk">No</span> one at a time</td>
-            <td class="is-yes"><span class="mk y">Yes</span></td>
-            <td class="is-yes"><span class="mk y">Yes</span></td>
-          </tr>
-          <tr>
-            <th scope="row">Includes all the media</th>
-            <td class="is-no">Optional, often skipped for space</td>
-            <td class="is-no"><span class="mk">Capped</span> at a few thousand files</td>
-            <td class="is-no">Only what the phone downloaded</td>
-            <td class="is-yes"><span class="mk y">Yes</span> full resolution</td>
-          </tr>
-          <tr>
-            <th scope="row">Readable without WhatsApp</th>
-            <td class="is-no"><span class="mk">No</span> restore-only</td>
-            <td class="is-yes">A zip of text and files</td>
-            <td class="is-yes"><span class="mk y">Yes</span> ordinary photos</td>
-            <td class="is-yes"><span class="mk y">Yes</span> files + a searchable database</td>
-          </tr>
-          <tr>
-            <th scope="row">Survives losing the phone</th>
-            <td class="is-yes"><span class="mk y">Yes</span> if the restore works</td>
-            <td class="is-no">Only if you kept the zip</td>
-            <td class="is-no">Only if the gallery syncs</td>
-            <td class="is-yes"><span class="mk y">Yes</span> it is on your PC</td>
-          </tr>
-          <tr>
-            <th scope="row">Survives Android ⇄ iPhone</th>
-            <td class="is-no">Historically painful</td>
-            <td class="is-yes"><span class="mk y">Yes</span></td>
-            <td class="is-yes"><span class="mk y">Yes</span></td>
-            <td class="is-yes"><span class="mk y">Yes</span> nothing is tied to the phone</td>
-          </tr>
-          <tr>
-            <th scope="row">Keeps media WhatsApp later deletes</th>
-            <td class="is-no"><span class="mk">No</span></td>
-            <td class="is-no">Only what you exported that day</td>
-            <td class="is-no">Only what downloaded in time</td>
-            <td class="is-yes"><span class="mk y">Yes</span> once kept, it is yours</td>
-          </tr>
-          <tr>
-            <th scope="row">Search by what is in a photo</th>
-            <td class="is-no"><span class="mk">No</span></td>
-            <td class="is-no"><span class="mk">No</span></td>
-            <td class="is-no">Your gallery app might</td>
-            <td class="is-yes"><span class="mk y">Yes</span> with sorting on</td>
-          </tr>
-          <tr>
-            <th scope="row">Cost</th>
-            <td class="is-yes">Free until the cloud fills</td>
-            <td class="is-yes">Free</td>
-            <td class="is-no">Free, but eats phone storage</td>
-            <td class="is-yes"><span class="mk y">Free</span></td>
-          </tr>
-          <tr>
-            <th scope="row">Officially supported by WhatsApp</th>
-            <td class="is-yes"><span class="mk y">Yes</span></td>
-            <td class="is-yes"><span class="mk y">Yes</span></td>
-            <td class="is-yes"><span class="mk y">Yes</span></td>
-            <td class="is-no"><span class="mk">No</span> unofficial, small ban risk</td>
-          </tr>
-          <tr>
-            <th scope="row">Needs a PC left running</th>
-            <td class="is-yes"><span class="mk y">No</span></td>
-            <td class="is-yes"><span class="mk y">No</span></td>
-            <td class="is-yes"><span class="mk y">No</span></td>
-            <td class="is-no"><span class="mk">Yes</span> it captures only while open</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
+<section id="comparison" class="">
+<div class="wrap">
+<div class="head">
+<p class="marker">SIDE BY SIDE</p>
+<div>
+<h2>What each option is for.</h2>
+</div>
+</div>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Backup comparison; scroll horizontally on smaller screens">
+<table>
+<thead>
+<tr>
+<th scope="col">You want to…</th>
+<th scope="col">WhatsApp phone backup</th>
+<th scope="col">Manual chat export</th>
+<th scope="col">WhatsBackUp</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<th scope="row">Restore WhatsApp to a phone</th>
+<td>Designed for this</td>
+<td>Not a restore backup</td>
+<td>Not a restore backup</td>
+</tr>
+<tr>
+<th scope="row">Browse normal media files on a PC</th>
+<td>Not its primary purpose</td>
+<td>Files from an exported chat</td>
+<td>Yes, in your chosen folders</td>
+</tr>
+<tr>
+<th scope="row">Keep capturing new media</th>
+<td>Through phone backup settings</td>
+<td>Repeat export manually</td>
+<td>While the desktop app is running</td>
+</tr>
+<tr>
+<th scope="row">Search an archive of conversations</th>
+<td>In the WhatsApp app</td>
+<td>Browse individual exports</td>
+<td>Search saved messages in the app</td>
+</tr>
+<tr>
+<th scope="row">Import ChatGPT and Gemini images</th>
+<td>No</td>
+<td>No</td>
+<td>Yes, with separately linked sources</td>
+</tr>
+<tr>
+<th scope="row">Optional AI organisation</th>
+<td>Not provided by this backup</td>
+<td>Not provided by this export</td>
+<td>Albums, projects and label search</td>
+</tr>
+<tr>
+<th scope="row">Choose a desktop cloud folder</th>
+<td>Depends on phone backup options</td>
+<td>Copy the export yourself</td>
+<td>Media copies plus presence and size checks</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p class="inline-note">A desktop archive can only keep content it receives or can still import. It cannot recreate unavailable media or restore a WhatsApp account.</p>
+</div>
 </section>
-
-<section>
-  <div class="wrap">
-    <div class="head">
-      <p class="marker">§ 02 <span>In words</span></p>
-      <div><h2>The honest summary</h2></div>
-    </div>
-
-    <div class="prose">
-      <h3>Drive and iCloud backup are a restore mechanism, not an archive</h3>
-      <p>They exist so a new phone can be made to look like the old one. That is genuinely useful and everyone should have it switched on. But the backup is a sealed blob: you cannot open it, browse it, or pull one photograph out of it. It only mirrors the current state, so a photo deleted last month is gone from the backup too. And "include videos" is the first setting people turn off when the free tier fills.</p>
-
-      <h3>Export chat is a snapshot you take once and never open again</h3>
-      <p>It is the right tool for handing one conversation to a solicitor. It is the wrong tool for an archive: it caps the media it includes, must be repeated per conversation by hand, and produces a zip that gets buried in Downloads.</p>
-
-      <h3>Save to gallery only keeps what your phone chose to download</h3>
-      <p>Auto-download is off on mobile data for most people, so the video someone sent while you were out is a placeholder that eventually expires. And it fills the phone, which leads directly to the "free up space" prompt that deletes the lot.</p>
-
-      <h3>WhatsBackUp covers a different failure — and has its own</h3>
-      <p>It protects against the quiet losses: media WhatsApp deletes from its servers, a restore that skips your videos, one careless tap, a phone that dies before the next backup ran. What you get is ordinary files on your own disk that keep working whether or not WhatsApp, your phone, or this project still exists.</p>
-      <p><strong>Where it loses, plainly:</strong></p>
-      <ul>
-        <li>It is <strong>unofficial</strong>. WhatsApp's terms don't permit third-party clients and there is a small but real chance of an account being limited. The other three carry no such risk.</li>
-        <li>It <strong>only captures while running</strong>. Close it for a fortnight and that fortnight isn't archived at the time — though <em>Import history</em> can usually collect it afterwards.</li>
-        <li>It <strong>needs a Windows PC</strong>. No Mac, Linux or mobile version.</li>
-        <li>It <strong>does not restore into WhatsApp</strong>. It is an archive you read, not a backup you put back.</li>
-      </ul>
-
-      <h3>So which should you use?</h3>
-      <p><strong>Both.</strong> Keep Drive or iCloud backup switched on — that is your "new phone works" insurance and nothing here replaces it. Add WhatsBackUp if the photographs themselves matter: the delivery proof, the damaged part, the signed page, the pictures of the children that only ever existed inside a chat.</p>
-      <p>They fail in different ways. That is exactly why having both is worth five minutes.</p>
-    </div>
-
-    <p style="margin-top:clamp(32px,4.5vw,48px)">
-      <a class="btn" href="download.html">Download for Windows</a>
-      <a class="btn btn-2" href="faq.html" style="margin-left:12px">Read the questions</a>
-    </p>
-  </div>
+<section id="choose" class="tint">
+<div class="wrap">
+<div class="head">
+<p class="marker">THE PRACTICAL CHOICE</p>
+<div>
+<h2>Use the tools that fit.</h2>
+</div>
+</div>
+<div class="feature-grid">
+<article class="feature-card">
+<h3>Moving to a new phone?</h3>
+<p>Use WhatsApp’s supported backup or transfer process. WhatsBackUp does not replace that workflow.</p>
+</article>
+<article class="feature-card">
+<h3>Keeping one conversation?</h3>
+<p>A manual chat export may be enough if you need a one-off copy and do not need ongoing collection.</p>
+</article>
+<article class="feature-card">
+<h3>Building an archive?</h3>
+<p>WhatsBackUp keeps a growing collection on your PC, alongside your imported AI images and optional organisation tools.</p><a href="download.html">Get WhatsBackUp →</a>
+</article>
+</div>
+</div>
 </section>
-
 </main>
-
 <footer class="site-foot">
-  <div class="wrap">
-    <div class="colophon" style="border-top:0;padding-top:0">
-      <p><strong>WhatsBackUp is an independent, unofficial tool.</strong> It is not made, endorsed, sponsored or supported by WhatsApp&nbsp;LLC or Meta&nbsp;Platforms,&nbsp;Inc. "WhatsApp", "Google Drive" and "iCloud" are trademarks of their respective owners, used here only to describe and compare what this software does.</p>
-      <p class="set">© 2026 Tasty Foods · <a href="./">Home</a> · <a href="download.html">Download</a> · <a href="privacy.html">Privacy</a> · <a href="https://github.com/tasty-foods/whatsbackup">GitHub</a></p>
-    </div>
-  </div>
+<div class="wrap">
+<div class="foot-cols">
+<div><a class="brand" href="./"><span class="mark">WhatsBackUp</span></a>
+<p style="margin-top:16px">Your chats, pictures and ideas.<br>Kept somewhere you control.</p>
+</div>
+<div>
+<h2>Explore</h2>
+<ul>
+<li><a href="index.html#features">Features</a>
+</li>
+<li><a href="index.html#new">What’s new</a>
+</li>
+<li><a href="download.html">Download for Windows</a>
+</li>
+<li><a href="compare.html">Compare backup options</a>
+</li>
+</ul>
+</div>
+<div>
+<h2>Good to know</h2>
+<ul>
+<li><a href="faq.html">Help &amp; questions</a>
+</li>
+<li><a href="privacy.html">Privacy &amp; data</a>
+</li>
+<li><a href="contact.html">Contact</a>
+</li>
+<li><a href="https://github.com/tasty-foods/whatsbackup">Source on GitHub ↗</a>
+</li>
+</ul>
+</div>
+</div>
+<div class="colophon">
+<p>Independent, unofficial software. Not affiliated with or endorsed by WhatsApp, Meta, OpenAI or Google. Product names belong to their respective owners.</p>
+<p class="set">© 2026 Tasty Foods · Free for Windows 10 &amp; 11</p>
+</div>
+</div>
 </footer>
 </body>
 </html>

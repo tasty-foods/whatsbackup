@@ -3,198 +3,185 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Privacy — what WhatsBackUp stores and what it sends</title>
-<meta name="description" content="No account, no server, no telemetry — your WhatsApp media stays on your PC. AI sorting is optional, and exactly what it sends.">
+<title>WhatsBackUp Privacy — Your data, source by source</title>
+<meta name="description" content="Understand what stays on your PC and what connects to WhatsApp, ChatGPT, Gemini, your cloud storage or your chosen AI provider.">
 <link rel="canonical" href="https://whatsbackup.cc/privacy.html">
 <meta name="referrer" content="strict-origin-when-cross-origin">
-<meta name="theme-color" content="#f4f1e8" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#13110d" media="(prefers-color-scheme: dark)">
-<meta property="og:type" content="article">
+<meta name="theme-color" content="#f7f9f7">
+<meta property="og:type" content="website">
 <meta property="og:site_name" content="WhatsBackUp">
-<meta property="og:title" content="WhatsBackUp privacy — what stays on your PC and what does not">
-<meta property="og:description" content="No account, no server, no telemetry. One optional use is optional AI sorting, off by default, using your own API key.">
+<meta property="og:title" content="WhatsBackUp Privacy — Your data, source by source">
+<meta property="og:description" content="Understand what stays on your PC and what connects to WhatsApp, ChatGPT, Gemini, your cloud storage or your chosen AI provider.">
 <meta property="og:url" content="https://whatsbackup.cc/privacy.html">
 <meta property="og:image" content="https://whatsbackup.cc/assets/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="WhatsBackUp — automatically save every WhatsApp photo, video and message to your PC.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://whatsbackup.cc/assets/og.png">
 <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="assets/site.css">
-<script src="assets/analytics.js" defer></script>
-<script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "WebPage",
-  "name": "WhatsBackUp privacy",
-  "description": "What WhatsBackUp stores, where it stores it, and the single feature that can send data off your PC.",
-  "url": "https://whatsbackup.cc/privacy.html",
-  "datePublished": "2026-08-17",
-  "dateModified": "2026-08-17",
-  "inLanguage": "en"
-}
+<link rel="stylesheet" href="assets/redesign.css">
+<script src="assets/analytics.js" defer>
+</script>
+<script src="assets/site.js" defer>
 </script>
 </head>
-<body>
-<a class="skip" href="#main">Skip to content</a>
-
+<body><a class="skip" href="#main">Skip to content</a>
 <header class="site-head">
-  <div class="wrap">
-    <a class="brand" href="./"><span class="mark">Whats<i>BackUp</i></span><span class="ref">v1.4.1</span></a>
-    <nav class="nav" aria-label="Main">
-      <a href="index.html#problem" class="hide-sm">Why</a>
-      <a href="index.html#how" class="hide-sm">How</a>
-      <a href="compare.html">Compare</a>
-      <a href="faq.html">Questions</a>
-      <a href="contact.html">Contact</a>
-      <a href="download.html">Download</a>
-    </nav>
-  </div>
+<div class="wrap"><a class="brand" href="./" aria-label="WhatsBackUp home"><svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v11h14V9M9 13h6"/></svg><span class="mark">Whats<i>BackUp</i></span></a>
+<nav class="nav" aria-label="Main navigation"><a href="index.html#features">Product</a><a href="index.html#new">What’s new</a><a href="faq.html">Help</a><a class="nav-download" href="download.html">Download <span aria-hidden="true">↗</span></a>
+</nav>
+</div>
 </header>
-
 <main id="main">
-
 <section class="hero">
-  <div class="wrap">
-    <p class="label">Last revised 17 August 2026</p>
-    <h1 style="max-width:14ch">Where your data goes.</h1>
-    <p class="lede" style="margin-top:.7em">Onto your own disk, and nowhere else — unless you switch on one specific feature, in which case the app shows you exactly what it would send before it sends it.</p>
-  </div>
+<div class="wrap"><span class="section-kicker">PRIVACY & DATA</span>
+<h1>Know where your data goes.</h1>
+<p class="lede">A local archive, with connections you choose. Here is what each feature reads, stores or sends.</p>
+</div>
 </section>
-
-<section class="tint">
-  <div class="wrap">
-    <div class="head">
-      <p class="marker">§ 01 <span>The shape of it</span></p>
-      <div><h2>There is no service behind this</h2></div>
-    </div>
-
-    <dl class="defs">
-      <div>
-        <dt>Nothing to sign up for</dt>
-        <dd>No account. No server we operate. No analytics, no crash reporting, no usage statistics, no licence check, no phoning home. The app talks to WhatsApp Web and to nothing else of ours — because there is nothing of ours to talk to.</dd>
-      </div>
-      <div>
-        <dt>Your files are just files</dt>
-        <dd>Photographs and videos land in folders you choose, as ordinary JPGs and MP4s. Message text goes into a standard SQLite database on the same disk. Nothing is sealed into a format only we can read, and nothing stops working if this project does.</dd>
-      </div>
-    </dl>
-
-    <div class="prose" style="margin-top:clamp(34px,5vw,54px)">
-      <h3>What it keeps on your PC</h3>
-      <ul>
-        <li><strong>Photographs and videos</strong> from your chats, in the folders you picked during setup.</li>
-        <li><strong>Message text</strong>, sender, timestamp and chat name, in a local SQLite database.</li>
-        <li><strong>The WhatsApp link itself</strong> — a browser profile that <em>is</em> your linked-device session. Treat it like a password: anyone with that folder and the app could read your messages.</li>
-        <li><strong>Your settings</strong>, and a rotating log capped at a size you set.</li>
-        <li><strong>If sorting is on</strong>: the labels and album names it produced, in the same database.</li>
-      </ul>
-      <p>All of it under <code>%LOCALAPPDATA%\WhatsBackUp\</code> unless you chose elsewhere for your media. Uninstalling leaves every bit of it in place.</p>
-    </div>
-  </div>
-</section>
-
 <section>
-  <div class="wrap">
-    <div class="head">
-      <p class="marker">§ 02 <span>The exception</span></p>
-      <div>
-        <h2>Optional AI sorting</h2>
-        <p>AI sorting sends selected archive content to your chosen provider only after you enable it and accept the notice. Cloud copies, linked-source imports, update checks and optional status posting use their respective services as described below.</p>
-      </div>
-    </div>
-
-    <div class="prose">
-      <p>When you enable it, WhatsBackUp sends your photographs and a sample of your message text to the AI provider <em>you</em> choose, using <em>your</em> own API key. There is no intermediary: the request goes from your PC to that provider directly.</p>
-      <p>Before the very first call the app prints the literal payload it would send — one photograph and one chat, exactly as they would appear in the request — and you have to accept it. You can look again whenever you like from <strong>⚙︎ Settings → Albums &amp; projects → Show me exactly what leaves my PC</strong>.</p>
-
-      <h3>What is actually sent</h3>
-      <ul>
-        <li><strong>For a photograph:</strong> the image itself, the name of the chat it came from, whether you sent or received it, and its caption if it had one.</li>
-        <li><strong>For a conversation:</strong> the chat name and a sample of the text — the 30 most recent messages plus 30 spread across its history, trimmed to 200 characters each. Not the whole conversation.</li>
-        <li><strong>Never sent:</strong> your API key to anyone but the provider you configured, your media to us, or anything at all while the feature is off.</li>
-      </ul>
-
-      <h3>Or keep it entirely on your machine</h3>
-      <p>Several services have a free tier, and you can line up spares: when one reaches its daily limit the sorting steps to the next, so it can cost nothing without ever stopping. There is also a <strong>Demo mode</strong> that invents plausible labels locally, so you can see what sorting looks like with no provider at all.</p>
-
-      <h3>Your API key</h3>
-      <p>Encrypted with Windows' own data protection (DPAPI) and stored as ciphertext. It is never written to the settings file in readable form, never appears in the log, and is deliberately stripped from the diagnostic report you might copy and email when asking for help. It is decrypted in memory only to make a request to the provider you chose — and only ever sent to the address you saved.</p>
-    </div>
-  </div>
+<div class="wrap">
+<div class="data-table">
+<div class="data-table-head"><span>Feature</span><span>Where the data goes</span>
+</div>
+<div class="data-table-row">
+<h2>WhatsApp connection</h2>
+<p>Reads enabled media and message data through your linked-device session. Saves the archive on your PC. Requires access to WhatsApp’s services.</p>
+</div>
+<div class="data-table-row">
+<h2>ChatGPT and Gemini imports</h2>
+<p>Opens a separate browser profile for each source. You sign in directly, then the app reads available images from that source. Imported images join your archive.</p>
+</div>
+<div class="data-table-row">
+<h2>Cloud or network copies</h2>
+<p>Writes media to the destination folder you choose. Your cloud client or network storage controls onward upload and storage. Copy checks do not confirm remote upload completion.</p>
+</div>
+<div class="data-table-row">
+<h2>Optional AI sorting</h2>
+<p>Sends selected images and sampled conversation text to the provider endpoint you configure using your API key. It stays off until you enable it and accept the data notice.</p>
+</div>
+<div class="data-table-row">
+<h2>Optional Status Studio</h2>
+<p>Posts statuses to your WhatsApp account only after you enable live posting. AI writing uses your selected provider. Chat-aware writing can include recent message context when you enable that option.</p>
+</div>
+<div class="data-table-row">
+<h2>App updates</h2>
+<p>Contacts GitHub for release information and update downloads. This does not upload your archive.</p>
+</div>
+</div>
+</div>
 </section>
-
-<section class="tint">
-  <div class="wrap">
-    <div class="head">
-      <p class="marker">§ 03 <span>Other people</span></p>
-      <div><h2>The part most backup tools skip</h2></div>
-    </div>
-
-    <div class="prose">
-      <p><strong>WhatsBackUp archives media from everyone you chat with, and none of them agreed to that.</strong> Their photographs, their voice notes if you enable them, their words.</p>
-      <p>Keeping a personal copy of messages sent to you is lawful in most places, but that changes when you republish them, or when you hold other people's personal data in a business context — the GDPR and its equivalents apply to you, not to us. Keep the copies to yourself, delete what you shouldn't be keeping, and use the per-chat exclusions in settings for conversations that should never be archived at all.</p>
-
-      <h3>Removing everything</h3>
-      <ul>
-        <li><strong>Labels and albums:</strong> ⚙︎ Settings → Albums &amp; projects → <em>Delete all AI labels and albums</em>.</li>
-        <li><strong>The WhatsApp link:</strong> ⚙︎ Settings → Connection → <em>Unlink</em>, then remove the device from your phone's Linked devices list.</li>
-        <li><strong>Everything else:</strong> uninstall, then delete <code>%LOCALAPPDATA%\WhatsBackUp\</code> and your media folder. Nothing is left anywhere else, because there is nowhere else.</li>
-      </ul>
-
-      <h3>Status Studio</h3>
-      <p>When you enable automated statuses, the app <strong>posts to your WhatsApp status from your account</strong>, on your schedule, visible to whoever your WhatsApp status privacy allows. What it posts comes only from sources you configured: your queue, your drop folder, your albums, or text the AI wrote from your instructions.</p>
-      <p>AI-written statuses go through the same provider, key and monthly budget as sorting. The optional <em>chat-aware</em> mode — off by default, its own toggle — includes a two-day digest of recent message lines in the prompt so the writing can be topical. Leave it off and the writer sees only your instructions and the date.</p>
-
-      <h3>This website</h3>
-      <p>Everything above is about the app. The site you are reading is static files with no server of its own, and it asks your browser for nothing from anywhere else — with two exceptions, both listed here.</p>
-      <ul>
-        <li><strong>The download button</strong> asks GitHub which release is newest, so it can point at the current installer. Skip it and the button still works; it just points at the releases page.</li>
-        <li><strong>Visit counting</strong>, if it is switched on, is Cloudflare Web Analytics: a page count and a referrer, no cookies, no fingerprint, nothing that identifies you, and nothing that follows you to another site. It exists so we know whether anyone is reading this, which is the whole of the ambition.</li>
-      </ul>
-      <p>There is no advertising, no tag manager, and no third party that gets to watch you here.</p>
-
-      <h3>If this page ever changes</h3>
-      <p>If the app ever starts sending something it does not send today, this page changes and so does the notice inside the app — before the feature ships, not after. The wording here is kept deliberately in step with the consent screen you actually see.</p>
-    </div>
-
-    <div class="stamp" data-stamp="Unavoidable caveat" style="margin-top:clamp(34px,5vw,52px)">
-      <ol>
-        <li><div><strong>This is not an official WhatsApp app.</strong> It connects the way WhatsApp Web does, through an open-source library WhatsApp does not endorse. Their terms do not permit unofficial clients, and there is a real if small chance an account gets limited or banned for using one.</div></li>
-        <li><div><strong>No warranty.</strong> This is free software provided as is. You are responsible for how you use it, including other people's privacy and the law where you live.</div></li>
-      </ol>
-    </div>
-  </div>
+<section id="local" class="tint">
+<div class="wrap">
+<div class="head">
+<p class="marker">ON YOUR PC</p>
+<div>
+<h2>Your files and your sign-ins.</h2>
+</div>
+</div>
+<div class="prose">
+<p>Media is saved in the folders you choose. Message text, settings, logs and source browser profiles are kept in the app’s local data directory, normally <code>%LOCALAPPDATA%\WhatsBackUp\</code>.</p>
+<p>Your message database is SQLite. You can export readable HTML transcripts. Images and videos remain normal files.</p>
+<h3>Treat browser profiles like passwords</h3>
+<p>WhatsApp, ChatGPT and Gemini profiles contain active sign-in sessions. Someone with access to these profiles may gain access to the connected accounts. Keep the app’s data folder private.</p>
+<h3>Provider keys</h3>
+<p>The Windows app uses Windows data protection to protect API keys on disk. Keys are used with the endpoint you configure. The diagnostic report is designed to omit secrets; review any report before sharing it.</p>
+</div>
+</div>
 </section>
-
-<section>
-  <div class="wrap">
-    <div class="head">
-      <div><h2>Two more accounts you can link</h2></div>
-    </div>
-    <div class="prose">
-      <p>ChatGPT and Gemini can be linked as sources, so the pictures you uploaded to them or had them make are kept in the archive too. Neither OpenAI nor Google publishes a way to fetch your own history, so the app does what a person would: it opens a window, you sign in, and from then on it reads the page on a schedule.</p>
-      <ul>
-        <li><strong>The sign-in is yours.</strong> Nothing is typed for you. The password is entered by you, into the company&#8217;s own page, and the app never sees it.</li>
-        <li><strong>The session stays on your PC.</strong> Each account gets a browser profile of its own in the app&#8217;s data folder, separate from WhatsApp&#8217;s. That is the whole of what is stored: the cookie that keeps you signed in.</li>
-        <li><strong>Only their own sites are spoken to.</strong> Reading your ChatGPT history means requests to chatgpt.com; reading your Gemini library means requests to gemini.google.com. Nothing about either account goes anywhere else &#8212; not to us, not to the sorting service, not to pCloud, except the pictures themselves, which are yours.</li>
-        <li><strong>Forgetting is deleting.</strong> <em>Forget this account</em> removes the profile. What was already saved stays; the link is gone.</li>
-        <li><strong>They are read, never written.</strong> The app does not post, send, or change anything in either account.</li>
-      </ul>
-      <p>The pictures that come in are treated like every other photograph: sorted by the same AI under the same consent, copied to the same cloud folder, shown with a badge that says where they came from.</p>
-    </div>
-  </div>
+<section id="ai-data" class="">
+<div class="wrap">
+<div class="head">
+<p class="marker">YOUR CHOICE</p>
+<div>
+<h2>Before you enable AI.</h2>
+</div>
+</div>
+<div class="prose">
+<p>Saving and browsing do not require AI. If you enable sorting, requests go from your PC to the provider you select. Images may be sent with their source chat name, caption and direction; conversation sorting sends sampled message text and chat context.</p>
+<p>The app provides a data preview and requires consent before the first use. Review this in <strong>Settings → Albums &amp; projects</strong>, alongside the provider, model and budget. Free tiers and fallback providers have their own limits and data policies.</p>
+<p>Images imported from ChatGPT or Gemini can be processed by the same optional sorting feature. Demo mode creates illustrative labels locally; it does not perform real image analysis.</p>
+</div>
+</div>
 </section>
-
+<section id="remove" class="tint">
+<div class="wrap">
+<div class="head">
+<p class="marker">MANAGE YOUR DATA</p>
+<div>
+<h2>Disconnecting and removing copies.</h2>
+</div>
+</div>
+<div class="prose">
+<ul>
+<li><strong>Disconnect WhatsApp:</strong> unlink in the app and remove the device in your phone’s Linked devices list.</li>
+<li><strong>Disconnect an image source:</strong> use Forget this account to remove that source’s local browser profile. Saved images remain.</li>
+<li><strong>Remove AI organisation:</strong> use the labels and albums deletion action in Settings.</li>
+<li><strong>Remove the local archive:</strong> close the app, uninstall it, and remove the app data directory and any media folders you selected.</li>
+<li><strong>Remove other copies:</strong> also review cloud storage, network folders, exported transcripts, quarantine and your storage provider’s trash or version history.</li>
+</ul>
+<p>Archiving does not grant permission to share someone else’s messages or media. Use exclusions and keep only what you need.</p>
+</div>
+</div>
+</section>
+<section id="website" class="">
+<div class="wrap">
+<div class="head">
+<p class="marker">THIS WEBSITE</p>
+<div>
+<h2>A small static site.</h2>
+</div>
+</div>
+<div class="prose">
+<p>This website is hosted on GitHub Pages. It uses local fonts and assets, with no embedded advertising or third-party media players.</p>
+<p>The download page asks GitHub’s release API for the latest installer. If that request fails or JavaScript is disabled, the published download link still works. Following a download sends you to GitHub.</p>
+<p>Site analytics are currently disabled. The site includes no active analytics token. Hosting and download providers may process normal request data under their own policies.</p>
+<p>The product tour uses sample data and an illustrative generated bakery photograph. It does not display private customer archives.</p>
+<p><a href="contact.html">Contact the project</a> if something here is unclear.</p>
+</div>
+</div>
+</section>
 </main>
-
 <footer class="site-foot">
-  <div class="wrap">
-    <div class="colophon" style="border-top:0;padding-top:0">
-      <p><strong>WhatsBackUp is an independent, unofficial tool.</strong> It is not made, endorsed, sponsored or supported by WhatsApp&nbsp;LLC or Meta&nbsp;Platforms,&nbsp;Inc. "WhatsApp" is a trademark of its respective owner, used here only to describe what this software works with.</p>
-      <p class="set">© 2026 Tasty Foods · <a href="./">Home</a> · <a href="download.html">Download</a> · <a href="faq.html">Questions</a> · <a href="contact.html">Contact</a> · <a href="https://github.com/tasty-foods/whatsbackup">GitHub</a></p>
-    </div>
-  </div>
+<div class="wrap">
+<div class="foot-cols">
+<div><a class="brand" href="./"><span class="mark">WhatsBackUp</span></a>
+<p style="margin-top:16px">Your chats, pictures and ideas.<br>Kept somewhere you control.</p>
+</div>
+<div>
+<h2>Explore</h2>
+<ul>
+<li><a href="index.html#features">Features</a>
+</li>
+<li><a href="index.html#new">What’s new</a>
+</li>
+<li><a href="download.html">Download for Windows</a>
+</li>
+<li><a href="compare.html">Compare backup options</a>
+</li>
+</ul>
+</div>
+<div>
+<h2>Good to know</h2>
+<ul>
+<li><a href="faq.html">Help &amp; questions</a>
+</li>
+<li><a href="privacy.html">Privacy &amp; data</a>
+</li>
+<li><a href="contact.html">Contact</a>
+</li>
+<li><a href="https://github.com/tasty-foods/whatsbackup">Source on GitHub ↗</a>
+</li>
+</ul>
+</div>
+</div>
+<div class="colophon">
+<p>Independent, unofficial software. Not affiliated with or endorsed by WhatsApp, Meta, OpenAI or Google. Product names belong to their respective owners.</p>
+<p class="set">© 2026 Tasty Foods · Free for Windows 10 &amp; 11</p>
+</div>
+</div>
 </footer>
 </body>
 </html>

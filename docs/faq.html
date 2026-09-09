@@ -3,236 +3,225 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>WhatsBackUp FAQ — backing up WhatsApp photos to a PC</title>
-<meta name="description" content="Straight answers about backing up WhatsApp photos to a PC: what it saves, where, what it costs, whether anything is uploaded, and the account-ban risk.">
+<title>WhatsBackUp Help — Setup, imports, AI and cloud copies</title>
+<meta name="description" content="Answers about WhatsApp, ChatGPT and Gemini imports, optional AI sorting, media copy checks, Status Studio, privacy and troubleshooting.">
 <link rel="canonical" href="https://whatsbackup.cc/faq.html">
 <meta name="referrer" content="strict-origin-when-cross-origin">
-<meta name="theme-color" content="#f4f1e8" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#13110d" media="(prefers-color-scheme: dark)">
-<meta property="og:type" content="article">
+<meta name="theme-color" content="#f7f9f7">
+<meta property="og:type" content="website">
 <meta property="og:site_name" content="WhatsBackUp">
-<meta property="og:title" content="WhatsBackUp FAQ — backing up WhatsApp photos to a PC">
-<meta property="og:description" content="Straight answers about saving WhatsApp photos, videos and messages to a Windows PC automatically.">
+<meta property="og:title" content="WhatsBackUp Help — Setup, imports, AI and cloud copies">
+<meta property="og:description" content="Answers about WhatsApp, ChatGPT and Gemini imports, optional AI sorting, media copy checks, Status Studio, privacy and troubleshooting.">
 <meta property="og:url" content="https://whatsbackup.cc/faq.html">
 <meta property="og:image" content="https://whatsbackup.cc/assets/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="WhatsBackUp — automatically save every WhatsApp photo, video and message to your PC.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://whatsbackup.cc/assets/og.png">
 <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="assets/site.css">
-<script src="assets/analytics.js" defer></script>
-
-<script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "FAQPage",
-  "@id": "https://whatsbackup.cc/faq.html",
-  "mainEntity": [
-    { "@type": "Question", "name": "How do I automatically save WhatsApp photos to my PC?", "acceptedAnswer": { "@type": "Answer", "text": "Install WhatsBackUp on Windows and link it to your phone by scanning a QR code, the same way you link WhatsApp Web. From that moment every photo and video you send or receive is written to a folder on your PC automatically, with no further action. One click also imports media already sitting in your existing chats." } },
-    { "@type": "Question", "name": "What is WhatsBackUp?", "acceptedAnswer": { "@type": "Answer", "text": "WhatsBackUp is a free, open-source Windows desktop application that automatically archives every photo, video and message from WhatsApp to a folder on your own PC, and optionally into a cloud folder such as pCloud, OneDrive or Dropbox. It can also sort photos into named albums and conversations into projects using an AI provider of your choice." } },
-    { "@type": "Question", "name": "Does WhatsBackUp cost anything?", "acceptedAnswer": { "@type": "Answer", "text": "No. WhatsBackUp is free and open source, with no account, no subscription and no limits. Only the optional AI sorting can cost money, because it uses your own API key with a provider you choose — around $1. Free tiers can be lined up as spares, so it can cost nothing." } },
-    { "@type": "Question", "name": "Does WhatsBackUp upload my messages to a server?", "acceptedAnswer": { "@type": "Answer", "text": "No. There is no account, no server operated by the developer and no telemetry. Media is written to folders on your PC and to your own cloud folder if you configure one. One optional use is optional AI sorting, which is switched off by default; when enabled it sends photos and sampled message text to the AI provider you choose using your own API key, and shows you the exact data before the first call." } },
-    { "@type": "Question", "name": "Where does WhatsBackUp save my photos and videos?", "acceptedAnswer": { "@type": "Answer", "text": "In ordinary folders you pick during setup. Photos and videos are saved as normal JPG and MP4 files you can open, copy, move or back up like any other file. Message text goes into a local SQLite database. If you set a cloud folder, videos are written straight into it so your cloud client syncs them off the PC." } },
-    { "@type": "Question", "name": "Can WhatsBackUp back up WhatsApp to pCloud, OneDrive or Dropbox?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Point WhatsBackUp at any folder your cloud client syncs — pCloud Drive, OneDrive, Dropbox, Google Drive for desktop, or a mapped network drive — and videos are written directly there as they arrive, so the cloud client uploads them without a second copy on your disk." } },
-    { "@type": "Question", "name": "Will using WhatsBackUp get my WhatsApp account banned?", "acceptedAnswer": { "@type": "Answer", "text": "There is a real if small risk. WhatsBackUp uses an unofficial client library, and WhatsApp's terms of service do not permit unofficial clients. It behaves like a normal linked device and does not send messages, spam or automate anything, but the risk is not zero. If your WhatsApp account is critical to your livelihood, consider that before installing." } },
-    { "@type": "Question", "name": "Can WhatsBackUp recover WhatsApp photos I already lost?", "acceptedAnswer": { "@type": "Answer", "text": "Sometimes. The Import history feature downloads media still present in your chats, which is often years' worth. However WhatsApp removes older media from its servers, and once a photo is gone from both WhatsApp's servers and your phone no tool can recover it. Running a backup before you need it is the only reliable answer." } },
-    { "@type": "Question", "name": "Does my phone need to stay connected for WhatsBackUp to work?", "acceptedAnswer": { "@type": "Answer", "text": "It works the same way WhatsApp Web does. WhatsBackUp appears in your phone's Linked devices list and receives messages while the app is running on your PC. Modern WhatsApp linked devices keep working for a while even when the phone is offline, but the phone must stay linked to the account." } },
-    { "@type": "Question", "name": "Why does Windows show a warning when installing WhatsBackUp?", "acceptedAnswer": { "@type": "Answer", "text": "Because the installer is not signed with a paid code-signing certificate. Windows SmartScreen shows 'Windows protected your PC' for any application it does not yet recognise; the warning is about the certificate, not about whether the software is safe. Click More info, then Run anyway. The complete source code is public if you would rather build it yourself." } },
-    { "@type": "Question", "name": "Does WhatsBackUp work on Mac, Linux, Android or iPhone?", "acceptedAnswer": { "@type": "Answer", "text": "No. WhatsBackUp is a Windows 10 and Windows 11 application. It is not available for macOS, Linux, Android or iOS. Your phone can be either Android or iPhone, because the link is made through WhatsApp's standard linked-device feature." } },
-    { "@type": "Question", "name": "How is this different from WhatsApp's own chat export?", "acceptedAnswer": { "@type": "Answer", "text": "WhatsApp's Export chat is manual, has to be repeated for every conversation, caps the number of media files it includes, and produces a zip file. WhatsBackUp runs continuously in the background, covers every chat at once, saves full-resolution media as ordinary files, keeps message text searchable, and can group photos into albums automatically." } },
-    { "@type": "Question", "name": "Can I read the WhatsApp messages WhatsBackUp saved?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. The app has a conversations view where you can browse and search saved message text alongside the media from each chat. The text is stored in a standard SQLite database file, so it remains readable with ordinary tools even without the app." } },
-    { "@type": "Question", "name": "Does WhatsBackUp read or send my messages for me?", "acceptedAnswer": { "@type": "Answer", "text": "It reads incoming and outgoing messages in order to archive them, and it never sends anything. WhatsBackUp cannot post messages, reply, or take any action in your WhatsApp account; it only records what passes through the linked-device session." } },
-    { "@type": "Question", "name": "What does the AI sorting in WhatsBackUp actually do?", "acceptedAnswer": { "@type": "Answer", "text": "It reads your saved photos and conversations and groups them: photos are placed into albums it names itself, such as Deliveries or Paperwork, and chats are grouped by the project or subject they concern. It also makes photos searchable by what is visible in them, including text read from an image. It is optional, off by default, and uses your own API key." } },
-    { "@type": "Question", "name": "Is WhatsBackUp open source?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. The complete source code is published on GitHub at github.com/tasty-foods/whatsbackup, and you can build the installer yourself with npm install and npm run dist." } }
-  ]
-}
+<link rel="stylesheet" href="assets/redesign.css">
+<script src="assets/analytics.js" defer>
+</script>
+<script src="assets/site.js" defer>
 </script>
 </head>
-<body>
-<a class="skip" href="#main">Skip to content</a>
-
+<body><a class="skip" href="#main">Skip to content</a>
 <header class="site-head">
-  <div class="wrap">
-    <a class="brand" href="./"><span class="mark">Whats<i>BackUp</i></span><span class="ref">v1.4.1</span></a>
-    <nav class="nav" aria-label="Main">
-      <a href="index.html#problem" class="hide-sm">Why</a>
-      <a href="index.html#how" class="hide-sm">How</a>
-      <a href="compare.html">Compare</a>
-      <a href="faq.html" aria-current="page">Questions</a>
-      <a href="contact.html">Contact</a>
-      <a href="download.html">Download</a>
-    </nav>
-  </div>
+<div class="wrap"><a class="brand" href="./" aria-label="WhatsBackUp home"><svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v11h14V9M9 13h6"/></svg><span class="mark">Whats<i>BackUp</i></span></a>
+<nav class="nav" aria-label="Main navigation"><a href="index.html#features">Product</a><a href="index.html#new">What’s new</a><a href="faq.html" aria-current="page">Help</a><a class="nav-download" href="download.html">Download <span aria-hidden="true">↗</span></a>
+</nav>
+</div>
 </header>
-
 <main id="main">
-
 <section class="hero">
-  <div class="wrap">
-    <p class="label">Twenty-one answers</p>
-    <h1 style="max-width:13ch">Questions, answered.</h1>
-    <p class="lede" style="margin-top:.7em">Everything people ask before letting a program read their messages — including the parts that don't flatter us.</p>
-  </div>
+<div class="wrap"><span class="section-kicker">HELP CENTRE</span>
+<h1>A little clarity goes a long way.</h1>
+<p class="lede">Find an answer before you install, or get an existing archive working the way you want.</p>
+</div>
 </section>
-
-<section class="tint" id="basics">
-  <div class="wrap">
-    <div class="head">
-      <p class="marker">§ 01 <span>The basics</span></p>
-      <div><h2>What it is and what it does</h2></div>
-    </div>
-    <div class="qa">
-      <div><span class="n">Q1</span><div>
-        <h3>How do I automatically save WhatsApp photos to my PC?</h3>
-        <p><strong>Install WhatsBackUp on Windows and scan one QR code with your phone.</strong> From that moment every photo and video you send or receive is written to a folder on your PC automatically, with nothing further to do. A single click also imports the media already sitting in your existing chats.</p>
-        <p>The link uses WhatsApp's ordinary <em>Linked devices</em> feature — the same one WhatsApp Web uses.</p>
-      </div></div>
-      <div><span class="n">Q2</span><div>
-        <h3>What exactly is WhatsBackUp?</h3>
-        <p><strong>A free, open-source Windows desktop app that archives your WhatsApp media and message text to your own PC.</strong> It sits in the system tray, saves photos and videos as ordinary files, keeps message text in a searchable local database, and can mirror videos into a cloud folder you already sync.</p>
-        <p>It can also sort the archive — albums for photographs, projects for conversations — though that part is optional and off until you switch it on.</p>
-      </div></div>
-      <div><span class="n">Q3</span><div>
-        <h3>What does it save?</h3>
-        <p><strong>Photos, videos and message text by default</strong>, from one-to-one chats and groups, both sent and received. In settings you can also switch on documents, voice notes, audio and stickers — or narrow it down: received only, images only, particular chats excluded.</p>
-      </div></div>
-      <div><span class="n">Q4</span><div>
-        <h3>Does it cost anything?</h3>
-        <p><strong>No.</strong> Free and open source. No account, no subscription, no storage limits, no upsell.</p>
-        <p>The only thing that can ever cost money is the optional AI sorting, and only because it uses <em>your</em> API key with a provider <em>you</em> choose. Sorting a few hundred photographs costs roughly $1.50 once, the figure is quoted before anything is spent, and there is a monthly limit you set. On a free tier — Gemini’s, for one — it costs nothing at all, and spares keep it going when one runs out.</p>
-      </div></div>
-      <div><span class="n">Q5</span><div>
-        <h3>Which Windows versions does it work on?</h3>
-        <p><strong>Windows 10 and Windows 11, 64-bit.</strong> There is no macOS, Linux, Android or iPhone version. Your phone can be either Android or iPhone — that side works through WhatsApp's standard linked-device feature.</p>
-      </div></div>
-    </div>
-  </div>
+<div class="wrap topic-nav"><a href="#basics">The basics</a><a href="#sources">Sources &amp; imports</a><a href="#ai">Tools &amp; AI</a><a href="#privacy">Privacy &amp; support</a>
+</div>
+<section id="basics" class="">
+<div class="wrap">
+<div class="head">
+<p class="marker">THE BASICS</p>
+<div>
+<h2>What it does.</h2>
+</div>
+</div>
+<div class="faq-list">
+<details>
+<summary>What does WhatsBackUp actually save?</summary>
+<p>WhatsApp photos, videos and message text, with optional documents, voice notes, audio and stickers. You can also import uploaded and generated images from ChatGPT, and generated images from Gemini’s Library. Each source is linked separately.</p>
+</details>
+<details>
+<summary>Is it free? Do I need an AI subscription?</summary>
+<p>The desktop app is free. You do not need an AI subscription to save or browse your archive. Optional AI sorting uses your own provider API key; provider charges and limits apply. Review the estimate and set a monthly budget before sorting.</p>
+</details>
+<details>
+<summary>Does it replace WhatsApp’s phone backup?</summary>
+<p>No. It creates a browsable archive of files and messages on your PC. It does not restore a WhatsApp account or move your chat history to a new phone. Keep your normal phone backup for that.</p>
+</details>
+<details>
+<summary>Can it recover old or deleted pictures?</summary>
+<p>Import history can collect media that is still available in your linked chats. It cannot recover files that are no longer available from WhatsApp. Skipped and failed items appear in the import summary.</p>
+</details>
+<details>
+<summary>Does my computer need to stay on?</summary>
+<p>Yes. Capture, imports and scheduled statuses run while the app is running and the required services are reachable. Let it start with Windows if you want it ready in the background.</p>
+</details>
+</div>
+</div>
 </section>
-
-<section id="privacy">
-  <div class="wrap">
-    <div class="head">
-      <p class="marker">§ 02 <span>Privacy &amp; safety</span></p>
-      <div><h2>Where your data goes, and the risks</h2></div>
-    </div>
-    <div class="qa">
-      <div><span class="n">Q6</span><div>
-        <h3>Does it upload my messages anywhere?</h3>
-        <p><strong>No.</strong> There is no account, no server of ours, and no telemetry of any kind. Media goes into folders on your PC, and into your own cloud folder if you set one up.</p>
-        <p>One optional use is <strong>AI sorting</strong>, off until you deliberately enable it. When on, it sends photographs and a sample of message text to the provider you pick, using your own API key. Before the first call the app shows you the literal data it would send and asks you to accept it. Review the provider and budget before starting a run.</p>
-      </div></div>
-      <div><span class="n">Q7</span><div>
-        <h3>Where is my API key stored?</h3>
-        <p><strong>Encrypted with Windows' own data protection, on your PC alone.</strong> It never appears in the settings file in readable form, never in the logs, and never in the diagnostic report you might send when asking for help.</p>
-      </div></div>
-      <div><span class="n">Q8</span><div>
-        <h3>Does automated status posting raise the ban risk?</h3>
-        <p><strong>Somewhat, yes.</strong> Passive capture only reads; Status Studio posts, and automated posting looks more bot-like to WhatsApp than reading ever did. The app keeps the pattern human — a daily cap, a minimum gap between posts, quiet hours, and a few minutes of jitter so nothing lands at 9:00:00 exactly — but the risk is not zero and we will not pretend it is. It ships switched off, behind its own consent notice, in dry-run until you deliberately go live.</p>
-      </div>
-      <div>
-        <h3>Will this get my WhatsApp account banned?</h3>
-        <p><strong>There is a real if small risk, and pretending otherwise would be dishonest.</strong> WhatsBackUp uses an unofficial client library. WhatsApp's terms don't permit unofficial clients, and accounts have been limited for using them.</p>
-        <p>In its favour: capture reads from a linked device. Optional Status Studio posts from your account only after you enable it. But the risk is not zero. If your WhatsApp account is essential to your livelihood, weigh that before installing.</p>
-      </div></div>
-      <div><span class="n">Q9</span><div>
-        <h3>Is it legal to archive messages other people sent me?</h3>
-        <p><strong>That depends where you live and what you do with them.</strong> Keeping a personal copy of messages sent to you is generally fine in most places; republishing them, or holding other people's personal data in a business context, can fall under privacy law such as the GDPR.</p>
-        <p>What we can tell you plainly: the app archives media from <em>everyone</em> you chat with, and none of them agreed to it. Keep the copies to yourself, and delete what you shouldn't be keeping.</p>
-      </div></div>
-      <div><span class="n">Q10</span><div>
-        <h3>Why should I trust an unsigned program that reads my messages?</h3>
-        <p><strong>You don't have to.</strong> That is the honest answer, and it is why the entire source is public. You can read exactly what it does, and build the installer yourself with <code>npm install</code> and <code>npm run dist</code> rather than trusting the binary we built.</p>
-        <p>If reading thousands of lines of someone else's code isn't realistic for you, that is a perfectly fair reason to decide against this — or any tool like it.</p>
-      </div></div>
-    </div>
-  </div>
+<section id="sources" class="tint">
+<div class="wrap">
+<div class="head">
+<p class="marker">YOUR SOURCES</p>
+<div>
+<h2>Connect, import and keep going.</h2>
+</div>
+</div>
+<div class="faq-list">
+<details>
+<summary>How do I connect WhatsApp?</summary>
+<p>Scan the QR code using WhatsApp’s Linked devices menu on your phone. The app saves enabled media types and message text while it is running. You can exclude chats or change which media types are captured in Settings.</p>
+</details>
+<details>
+<summary>What is imported from ChatGPT and Gemini?</summary>
+<p>ChatGPT imports uploaded and generated images from your conversations. Gemini imports generated images from its Library. These are image sources, not a full export of every feature or every item in those services.</p>
+</details>
+<details>
+<summary>How do those accounts stay signed in?</summary>
+<p>Each source uses its own browser profile inside the app’s data folder. You sign in on the service’s own page. Keep these profiles private: they hold active sessions. Forgetting a source removes its saved browser profile; already archived files remain.</p>
+</details>
+<details>
+<summary>Why does an import pause or skip files?</summary>
+<p>Files may be unavailable, the source may require sign-in again, or the service may limit requests. The app reports progress and the import result. ChatGPT imports include retries and backoff for temporary failures. A retry cannot recover media the source no longer provides.</p>
+</details>
+<details>
+<summary>Can I use source filters?</summary>
+<p>Yes. Source filters help separate WhatsApp, ChatGPT and Gemini items while keeping them in the same archive. The overview also shows source-specific state and actions.</p>
+</details>
+<details>
+<summary>What happens if a service changes its website?</summary>
+<p>A change can interrupt linking or importing. Check the source status, update the app and report a persistent error. No tool using these unofficial connections can guarantee uninterrupted access.</p>
+</details>
+</div>
+</div>
 </section>
-
-<section class="tint" id="using">
-  <div class="wrap">
-    <div class="head">
-      <p class="marker">§ 03 <span>Living with it</span></p>
-      <div><h2>Day to day</h2></div>
-    </div>
-    <div class="qa">
-      <div><span class="n">Q11</span><div>
-        <h3>Can it get back photographs I have already lost?</h3>
-        <p><strong>Sometimes.</strong> <em>Import history</em> downloads media still present in your chats, frequently years of photographs people assumed were gone.</p>
-        <p>But WhatsApp removes older media from its servers, and once a file is gone from both WhatsApp and your phone, nothing brings it back — this app included. Anything unavailable is reported as skipped rather than quietly missed. Which is exactly why it is worth running <em>before</em> you need it.</p>
-      </div></div>
-      <div><span class="n">Q12</span><div>
-        <h3>Does my PC have to stay on?</h3>
-        <p><strong>It only captures while it is running.</strong> WhatsApp delivers to connected devices, so anything arriving with the app closed is missed in the moment — though <em>Import history</em> can usually collect it afterwards.</p>
-        <p>Let it start with Windows and sit in the tray, and this stops being something you think about.</p>
-      </div></div>
-      <div><span class="n">Q13</span><div>
-        <h3>Does my phone need to stay connected?</h3>
-        <p><strong>It works the same way WhatsApp Web does.</strong> WhatsBackUp appears in your phone's Linked devices list and receives messages while the app runs on your PC. Modern linked devices keep working for a while even when the phone is offline, but the phone must stay linked to the account.</p>
-      </div></div>
-      <div><span class="n">Q14</span><div>
-        <h3>Can I back up WhatsApp to pCloud, OneDrive or Dropbox?</h3>
-        <p><strong>Yes.</strong> Point it at any folder your cloud client already syncs — pCloud Drive, OneDrive, Dropbox, Google Drive for desktop, or a mapped network drive — and videos are written straight there as they arrive, so the cloud client uploads them without a second copy on your disk. If the drive goes offline, files are kept locally until it returns.</p>
-      </div></div>
-      <div><span class="n">Q15</span><div>
-        <h3>How does this compare to WhatsApp's own chat export?</h3>
-        <p><strong>Export chat is a one-off snapshot; this is a standing archive.</strong> WhatsApp's export must be repeated for every conversation by hand, caps how much media it includes, and hands you a zip nobody opens again. WhatsBackUp covers every chat at once, runs continuously, saves full-resolution media as ordinary files, and keeps everything searchable.</p>
-        <p>There is a <a href="compare.html">side-by-side comparison</a> if you want the detail.</p>
-      </div></div>
-      <div><span class="n">Q16</span><div>
-        <h3>Can I read the messages it saved?</h3>
-        <p><strong>Yes.</strong> The app has a conversations view for browsing and searching saved message text alongside the media from each chat. The text lives in a standard SQLite database, so it stays readable with ordinary tools even without the app.</p>
-      </div></div>
-      <div><span class="n">Q17</span><div>
-        <h3>What happens when WhatsApp changes something and it breaks?</h3>
-        <p><strong>The app notices and tells you.</strong> WhatsApp updates its website without warning, and that can stop capture dead — it has happened before and it will happen again. WhatsBackUp counts consecutive download failures; three in a row and the tray icon turns amber, a notification fires, and a banner appears in the app.</p>
-        <p>That matters more than it sounds. The worst failure is the silent one, where you discover months later that nothing was saved. Keep automatic updates on so the fix reaches you.</p>
-      </div></div>
-      <div><span class="n">Q18</span><div>
-        <h3>What happens to my files if I uninstall it?</h3>
-        <p><strong>They stay exactly where they are.</strong> Every photograph, video and message is an ordinary file in an ordinary folder, and the message database is standard SQLite. Nothing is locked in a proprietary format, and nothing depends on this app continuing to exist.</p>
-      </div></div>
-    </div>
-  </div>
+<section id="ai" class="">
+<div class="wrap">
+<div class="head">
+<p class="marker">OPTIONAL TOOLS</p>
+<div>
+<h2>Organisation, copies and posting.</h2>
+</div>
+</div>
+<div class="faq-list">
+<details>
+<summary>What does AI sorting do?</summary>
+<p>It labels images, groups them into albums and organises conversations into projects. Search can use the labels and text recognised in images. You can rename albums and correct placement; later sorting respects those edits.</p>
+</details>
+<details>
+<summary>What does AI cost?</summary>
+<p>The app is free; your provider may charge for API use. Rates, model capabilities and free-tier limits vary. The app offers an estimate, a monthly budget and provider connection checks. Configure suitable fallback providers if you want retries across providers.</p>
+</details>
+<details>
+<summary>Can I try the organisation view without sending content to a provider?</summary>
+<p>Demo mode creates sample labels locally without a provider key. It demonstrates the organisation workflow; it is not real AI analysis of your pictures.</p>
+</details>
+<details>
+<summary>What does “verified” mean for a cloud copy?</summary>
+<p>It means the file was present in the configured destination with a matching size when checked. It is not a full-content hash check or confirmation that a cloud service finished uploading it. Checks expire; run a fresh one after changes. Message data stays in the local database.</p>
+</details>
+<details>
+<summary>How do cleanup suggestions work?</summary>
+<p>The app flags possible duplicates using file size and a partial fingerprint, and can suggest small images. Review before acting: similar candidates may be different files. Move unwanted items to quarantine for a reversible cleanup. Permanent deletion is separate.</p>
+</details>
+<details>
+<summary>What can Status Studio do?</summary>
+<p>Schedule WhatsApp statuses from a queue, watched folder or albums, with templates and optional AI-written text. Quiet hours and posting limits help control the schedule. It starts off and in dry run; you must accept the notice and enable live posting yourself.</p>
+</details>
+<details>
+<summary>Can I read or export my messages?</summary>
+<p>Yes. Browse saved conversations in the app, search message text and export readable HTML transcripts. The message data is stored in a local SQLite database.</p>
+</details>
+</div>
+</div>
 </section>
-
-<section id="ai">
-  <div class="wrap">
-    <div class="head">
-      <p class="marker">§ 04 <span>Sorting</span></p>
-      <div><h2>The optional part</h2></div>
-    </div>
-    <div class="qa">
-      <div><span class="n">Q19</span><div>
-        <h3>What does the AI sorting actually do?</h3>
-        <p><strong>It turns a date-ordered pile into something you can navigate.</strong> Photographs are grouped into albums it names itself in the language of your own content — <em>Deliveries</em>, <em>Machine repairs</em>, <em>Paperwork</em> — and conversations gather under the project they concern. Photographs also become searchable by what is visible in them, including text read off an invoice, a label or a screenshot.</p>
-      </div></div>
-      <div><span class="n">Q20</span><div>
-        <h3>Which providers can I use, and what does it cost?</h3>
-        <p><strong>Anthropic, OpenAI, Google Gemini, NVIDIA, OpenRouter, Groq, or any OpenAI-compatible endpoint.</strong> Several have free tiers, and free tiers run out — so you can line up spares. When one service reaches its daily limit the sorting steps to the next, and a service that cannot see images still takes the conversations while photographs are routed past it. Gemini&#8217;s free tier alone sorts a few hundred photographs a day.</p>
-        <p>Around <strong>$1.50</strong> for a few hundred photographs and a couple of hundred conversations. The estimate is shown before anything is spent, results are cached so a second run only pays for what is new, and a monthly limit stops it either way.</p>
-        <p>Whatever you pick, <em>Test connection</em> asks it three separate questions first: whether the key and model name are real, whether it follows a strict format, and whether it can actually see images. A model that cannot see images still sorts your conversations rather than failing hundreds of times over.</p>
-      </div></div>
-      <div><span class="n">Q21</span><div>
-        <h3>What if it files something wrongly — and can I try it free?</h3>
-        <p><strong>Fix it once and it stays fixed.</strong> Rename an album, move a photograph, or take one out entirely, and the next sort is told about your correction and works around it instead of undoing it. That was the hardest part to build and it is what makes the feature worth having.</p>
-        <p>And yes: pick <strong>Demo mode</strong> in the provider list to label and group your library locally with no key, no internet and no cost, just to see what sorted looks like. <em>Delete all AI labels and albums</em> clears it afterwards.</p>
-      </div></div>
-    </div>
-
-    <p style="margin-top:clamp(30px,4vw,44px)"><a class="btn" href="download.html">Download for Windows</a></p>
-  </div>
+<section id="privacy" class="tint">
+<div class="wrap">
+<div class="head">
+<p class="marker">PRIVACY & SUPPORT</p>
+<div>
+<h2>Make an informed choice.</h2>
+</div>
+</div>
+<div class="faq-list">
+<details>
+<summary>Is this an official WhatsApp, OpenAI or Google app?</summary>
+<p>No. WhatsBackUp is independent and unofficial. Linked services can restrict unofficial access or change their interfaces. Review the relevant account terms and the app’s notices before connecting.</p>
+</details>
+<details>
+<summary>Does it upload my content to WhatsBackUp?</summary>
+<p>There is no WhatsBackUp account or archive-hosting service. Linked sources, your chosen cloud software and any enabled AI provider use their own services. Optional Status Studio posts to your WhatsApp account. See the privacy page for each data flow.</p>
+</details>
+<details>
+<summary>Where is my API key stored?</summary>
+<p>The Windows app protects provider keys with Windows data protection. They are sent to the provider endpoint you configure when requests are made. Review any custom endpoint before saving it.</p>
+</details>
+<details>
+<summary>What if I archive other people’s information?</summary>
+<p>Use chat exclusions and media settings to limit what you keep. Respect other people’s privacy and any obligations that apply to your use. Be careful when exporting or sharing an archive.</p>
+</details>
+<details>
+<summary>Where can I get help?</summary>
+<p>Use <a href="contact.html">Contact</a> for a question or <a href="https://github.com/tasty-foods/whatsbackup/issues">GitHub issues</a> for a reproducible bug. Include your app version and the source affected; review diagnostics before sharing.</p>
+</details>
+</div>
+</div>
 </section>
-
 </main>
-
 <footer class="site-foot">
-  <div class="wrap">
-    <div class="colophon" style="border-top:0;padding-top:0">
-      <p><strong>WhatsBackUp is an independent, unofficial tool.</strong> It is not made, endorsed, sponsored or supported by WhatsApp&nbsp;LLC or Meta&nbsp;Platforms,&nbsp;Inc. "WhatsApp" is a trademark of its respective owner, used here only to describe what this software works with.</p>
-      <p class="set">© 2026 Tasty Foods · <a href="./">Home</a> · <a href="download.html">Download</a> · <a href="privacy.html">Privacy</a> · <a href="https://github.com/tasty-foods/whatsbackup">GitHub</a></p>
-    </div>
-  </div>
+<div class="wrap">
+<div class="foot-cols">
+<div><a class="brand" href="./"><span class="mark">WhatsBackUp</span></a>
+<p style="margin-top:16px">Your chats, pictures and ideas.<br>Kept somewhere you control.</p>
+</div>
+<div>
+<h2>Explore</h2>
+<ul>
+<li><a href="index.html#features">Features</a>
+</li>
+<li><a href="index.html#new">What’s new</a>
+</li>
+<li><a href="download.html">Download for Windows</a>
+</li>
+<li><a href="compare.html">Compare backup options</a>
+</li>
+</ul>
+</div>
+<div>
+<h2>Good to know</h2>
+<ul>
+<li><a href="faq.html">Help &amp; questions</a>
+</li>
+<li><a href="privacy.html">Privacy &amp; data</a>
+</li>
+<li><a href="contact.html">Contact</a>
+</li>
+<li><a href="https://github.com/tasty-foods/whatsbackup">Source on GitHub ↗</a>
+</li>
+</ul>
+</div>
+</div>
+<div class="colophon">
+<p>Independent, unofficial software. Not affiliated with or endorsed by WhatsApp, Meta, OpenAI or Google. Product names belong to their respective owners.</p>
+<p class="set">© 2026 Tasty Foods · Free for Windows 10 &amp; 11</p>
+</div>
+</div>
 </footer>
 </body>
 </html>
