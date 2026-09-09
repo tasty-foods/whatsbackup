@@ -622,6 +622,13 @@ const S = {
 function readField(key, type) {
   const el = $('set-' + key);
   if (!el) return undefined;
+  // A <select> filled from the network is empty until that answer arrives.
+  // Saving in the meantime read '' off it and stored that — and an empty
+  // aiProvider is not a harmless blank: the runner falls back to a different
+  // preset than the one the model name belongs to, so every request goes to
+  // the wrong endpoint and the whole library fails to sort, silently. An
+  // unpopulated control has no opinion, so it says nothing rather than ''.
+  if (el.tagName === 'SELECT' && el.options.length === 0) return undefined;
   if (type === 'bool') return el.checked;
   if (type === 'int') { const n = parseInt(el.value, 10); return Number.isFinite(n) ? n : undefined; }
   if (type === 'lines') return el.value.split('\n').map((x) => x.trim()).filter(Boolean);

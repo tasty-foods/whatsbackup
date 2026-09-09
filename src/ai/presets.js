@@ -62,8 +62,12 @@ const PRESETS = {
     baseUrl: 'https://openrouter.ai/api/v1',
     keyRequired: true,
     keyHint: 'openrouter.ai/keys — one key, many models',
-    models: [],
-    defaultModel: '',
+    // Checked against the live catalogue on 2026-09-09: of 431 models, these
+    // are free and take images. Names go stale — an id that no longer exists
+    // is a 404 the chain reads as "wrong model" and benches the provider for
+    // six hours, so the menu is worth more than a single hard-coded default.
+    models: ['google/gemma-4-31b-it:free', 'google/gemma-4-26b-a4b-it:free', 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free'],
+    defaultModel: 'google/gemma-4-31b-it:free',
     vision: true,
     jsonSchema: true,
   },
@@ -72,10 +76,14 @@ const PRESETS = {
     api: 'openai',
     baseUrl: 'https://api.groq.com/openai/v1',
     keyRequired: true,
-    keyHint: 'console.groq.com',
-    models: [],
-    defaultModel: '',
-    vision: true,
+    keyHint: 'console.groq.com — 1,000 requests a day, text only',
+    // Groq's catalogue carried vision models once and does not now: on
+    // 2026-09-09 nothing in it reads images. Left as a text provider, which is
+    // what it is good at — the chain routes photographs past a blind provider
+    // on its own, so this still earns its place on the conversations.
+    models: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'openai/gpt-oss-120b'],
+    defaultModel: 'llama-3.3-70b-versatile',
+    vision: false,
     jsonSchema: true,
   },
   ollama: {
