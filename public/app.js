@@ -450,7 +450,14 @@ function makeSourceCard(prefix, api, label) {
     const busy = !!s.busy;
     let line;
     if (s.status === "connecting") line = span("warn-text", "● A window is open — sign in there");
-    else if (s.status === "scanning") line = span("warn-text", "● Backing up…");
+    else if (s.status === "scanning") {
+      const pr = s.progress || {};
+      const bits = [];
+      if (pr.of) bits.push(pr.conversations + " of " + pr.of + " chats read");
+      if (pr.images) bits.push(pr.images + " photos found");
+      if (pr.saved) bits.push(pr.saved + " saved");
+      line = span("warn-text", "● Backing up…" + (bits.length ? " " + bits.join(" · ") : ""));
+    }
     else if (s.linked) line = span("ok-text", "● Connected");
     else if (s.status === "error") line = span("bad-text", "● " + escapeHtml(s.lastError || "Something went wrong"));
     else line = span("muted", "● Not connected");

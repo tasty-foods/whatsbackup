@@ -37,6 +37,7 @@ const state = {
   lastError: null,
   lastRun: null,
   nextScanAt: null,
+  progress: null,
 };
 let timer = null;
 let browser = null;
@@ -238,6 +239,7 @@ async function scan({ reason = 'manual' } = {}) {
 
     const items = await listLibrary(page);
     run.images = items.length;
+    state.progress = { images: run.images, saved: 0 };
 
     fs.mkdirSync(cfg.IMAGES_DIR, { recursive: true });
     for (const it of items) {
@@ -268,6 +270,7 @@ async function scan({ reason = 'manual' } = {}) {
       };
       if (store.addRecord(rec)) {
         run.saved++;
+        if (state.progress) state.progress.saved = run.saved;
         try { require('../ai').noteNewMedia(rec); } catch (_) {}
       }
     }
@@ -284,7 +287,7 @@ async function scan({ reason = 'manual' } = {}) {
     return { ok: false, error: e.message };
   } finally {
     await closeBrowser();
-    state.busy = false;
+    state.busy = false; state.progress = null;
     schedule();
   }
 }

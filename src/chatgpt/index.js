@@ -35,6 +35,7 @@ const state = {
   lastError: null,
   lastRun: null,            // { conversations, images, saved, skipped, failed, at, reason }
   nextScanAt: null,
+  progress: null,          // while scanning: { conversations, of, images, saved }
 };
 let timer = null;
 let browser = null;
@@ -171,77 +172,88 @@ async function checkLink() {
 // Everything that touches the backend runs in the page, so the cookie and the
 // signed URLs are used where they are valid. What comes back to Node is a
 // list of image parts with their conversation, and, one at a time, bytes.
-async function listImages(page, token) {
-  return page.evaluate(async (tok) => {
+// Every request made inside the page carries its own deadline. A request
+// that hangs — and one did, for half an hour, with nothing to show — is then
+// one failed chat or one failed picture, not a scan that never ends.
+const REQ_TIMEOUT_MS = 45 * 1000;
+
+async function listConversations(page, token) {
+  return page.evaluate(async (tok, reqMs) => {
     const h = { Authorization: 'Bearer ' + tok };
-    const out = { conversations: 0, parts: [] };
-    const seenFiles = new Set();
+    const get = async (url) => {
+      const ac = new AbortController(); const t = setTimeout(() => ac.abort(), reqMs);
+      try { const r = await fetch(url, { headers: h, credentials: 'include', signal: ac.signal }); if (!r.ok) throw new Error('http ' + r.status); return await r.json(); }
+      finally { clearTimeout(t); }
+    };
+    const out = [];
     let offset = 0, total = Infinity;
-    while (offset < total) {
-      const r = await fetch('/backend-api/conversations?offset=' + offset + '&limit=50&order=updated', { headers: h, credentials: 'include' });
-      if (!r.ok) throw new Error('conversations ' + r.status);
-      const j = await r.json();
+    while (offset < total && out.length < 5000) {
+      const j = await get('/backend-api/conversations?offset=' + offset + '&limit=50&order=updated');
       total = j.total || 0;
       const items = j.items || [];
       if (!items.length) break;
-      for (const it of items) {
-        out.conversations++;
-        let d;
-        try {
-          const rr = await fetch('/backend-api/conversation/' + it.id, { headers: h, credentials: 'include' });
-          if (!rr.ok) continue;
-          d = await rr.json();
-        } catch (e) { continue; }
-        const nodes = Object.values(d.mapping || {});
-        // The prompt that produced a picture is the last user text before it.
-        const byTime = nodes.filter((n) => n && n.message).sort((a, b) => (a.message.create_time || 0) - (b.message.create_time || 0));
-        let lastUserText = '';
-        for (const n of byTime) {
-          const m = n.message;
-          const parts = m.content && m.content.parts;
-          if (!Array.isArray(parts)) continue;
-          const texts = parts.filter((p) => typeof p === 'string' && p.trim());
-          const role = (m.author && m.author.role) || '';
-          if (role === 'user' && texts.length) lastUserText = texts.join(' ').slice(0, 300);
-          for (const p of parts) {
-            if (!(p && typeof p === 'object' && p.asset_pointer)) continue;
-            const fid = String(p.asset_pointer).split('://')[1];
-            if (!fid || seenFiles.has(fid)) continue;
-            seenFiles.add(fid);
-            out.parts.push({
-              fileId: fid,
-              conversationId: it.id,
-              title: it.title || '',
-              role,
-              createTime: m.create_time || it.create_time || 0,
-              width: p.width || 0, height: p.height || 0, size: p.size_bytes || 0,
-              mime: p.mime_type || '',
-              generated: !!(m.metadata && m.metadata.dalle) || role === 'tool',
-              prompt: role === 'user' ? '' : lastUserText,
-            });
-          }
-        }
-      }
+      for (const it of items) out.push({ id: it.id, title: it.title || '', createTime: it.create_time || 0 });
       offset += items.length;
     }
     return out;
-  }, token);
+  }, token, REQ_TIMEOUT_MS);
+}
+
+// One conversation per call, so a stall costs one chat and the rest go on.
+async function readConversation(page, token, conv) {
+  return page.evaluate(async (tok, c, reqMs) => {
+    const h = { Authorization: 'Bearer ' + tok };
+    const ac = new AbortController(); const t = setTimeout(() => ac.abort(), reqMs);
+    let d;
+    try { const r = await fetch('/backend-api/conversation/' + c.id, { headers: h, credentials: 'include', signal: ac.signal }); if (!r.ok) throw new Error('http ' + r.status); d = await r.json(); }
+    finally { clearTimeout(t); }
+    const parts = [];
+    const nodes = Object.values(d.mapping || {});
+    // The prompt that produced a picture is the last user text before it.
+    const byTime = nodes.filter((n) => n && n.message).sort((a, b) => (a.message.create_time || 0) - (b.message.create_time || 0));
+    let lastUserText = '';
+    for (const n of byTime) {
+      const m = n.message;
+      const ps = m.content && m.content.parts;
+      if (!Array.isArray(ps)) continue;
+      const texts = ps.filter((x) => typeof x === 'string' && x.trim());
+      const role = (m.author && m.author.role) || '';
+      if (role === 'user' && texts.length) lastUserText = texts.join(' ').slice(0, 300);
+      for (const x of ps) {
+        if (!(x && typeof x === 'object' && x.asset_pointer)) continue;
+        const fid = String(x.asset_pointer).split('://')[1];
+        if (!fid) continue;
+        parts.push({
+          fileId: fid, conversationId: c.id, title: c.title, role,
+          createTime: m.create_time || c.createTime || 0,
+          width: x.width || 0, height: x.height || 0, size: x.size_bytes || 0, mime: x.mime_type || '',
+          generated: !!(m.metadata && m.metadata.dalle) || role === 'tool',
+          prompt: role === 'user' ? '' : lastUserText,
+        });
+      }
+    }
+    return parts;
+  }, token, conv, REQ_TIMEOUT_MS);
 }
 
 async function fetchImage(page, token, fileId) {
-  return page.evaluate(async (tok, fid) => {
+  return page.evaluate(async (tok, fid, reqMs) => {
     const h = { Authorization: 'Bearer ' + tok };
-    const r = await fetch('/backend-api/files/' + fid + '/download', { headers: h, credentials: 'include' });
+    const withDeadline = async (url, opts) => {
+      const ac = new AbortController(); const t = setTimeout(() => ac.abort(), reqMs);
+      try { return await fetch(url, { ...opts, signal: ac.signal }); } finally { clearTimeout(t); }
+    };
+    const r = await withDeadline('/backend-api/files/' + fid + '/download', { headers: h, credentials: 'include' });
     if (!r.ok) return { error: 'download ' + r.status };
     const j = await r.json();
     if (!j.download_url) return { error: 'no url' };
-    const f = await fetch(j.download_url, { credentials: 'include' });
+    const f = await withDeadline(j.download_url, { credentials: 'include' });
     if (!f.ok) return { error: 'bytes ' + f.status };
     const buf = await f.arrayBuffer();
     let s = ''; const u8 = new Uint8Array(buf);
     for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
     return { b64: btoa(s), name: j.file_name || '', mime: j.mime_type || '', created: j.creation_time || null };
-  }, token, fileId);
+  }, token, fileId, REQ_TIMEOUT_MS * 2);
 }
 
 const safe = (s) => String(s || '').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60) || 'untitled';
@@ -263,7 +275,7 @@ const extFor = (mime, name) => {
 async function scan({ reason = 'manual' } = {}) {
   if (state.busy) return { ok: false, error: 'already busy' };
   if (!hasProfile()) { state.status = 'unlinked'; return { ok: false, error: 'not connected' }; }
-  state.busy = true; state.status = 'scanning'; state.lastError = null;
+  state.busy = true; state.status = 'scanning'; state.lastError = null; state.progress = { conversations: 0, of: 0, images: 0, saved: 0 };
   const run = { conversations: 0, images: 0, saved: 0, skipped: 0, failed: 0, at: Date.now(), reason };
   try {
     const b = await launch();
@@ -272,12 +284,20 @@ async function scan({ reason = 'manual' } = {}) {
     if (!token) { markLinked(false); state.linked = false; throw new Error('signed out — connect again'); }
     state.linked = true;
 
-    const listed = await listImages(page, token);
-    run.conversations = listed.conversations;
-    run.images = listed.parts.length;
+    const convs = await listConversations(page, token);
+    state.progress = { conversations: 0, of: convs.length, images: 0, saved: 0 };
+    const parts = []; const seenFiles = new Set();
+    for (const c of convs) {
+      let got = [];
+      try { got = await readConversation(page, token, c); } catch (e) { run.failed++; }
+      for (const x of got) { if (!seenFiles.has(x.fileId)) { seenFiles.add(x.fileId); parts.push(x); } }
+      run.conversations++;
+      state.progress.conversations = run.conversations; state.progress.images = parts.length;
+    }
+    run.images = parts.length;
 
     fs.mkdirSync(cfg.IMAGES_DIR, { recursive: true });
-    for (const part of listed.parts) {
+    for (const part of parts) {
       const id = 'chatgpt_' + part.fileId;
       if (store.has(id)) { run.skipped++; continue; }
       let got;
@@ -309,6 +329,7 @@ async function scan({ reason = 'manual' } = {}) {
       };
       if (store.addRecord(rec)) {
         run.saved++;
+        if (state.progress) state.progress.saved = run.saved;
         try { require('../ai').noteNewMedia(rec); } catch (_) {}
       }
     }
@@ -325,7 +346,7 @@ async function scan({ reason = 'manual' } = {}) {
     return { ok: false, error: e.message };
   } finally {
     await closeBrowser();
-    state.busy = false;
+    state.busy = false; state.progress = null;
     schedule();
   }
 }
