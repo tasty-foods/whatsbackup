@@ -60,7 +60,7 @@ mattering.
 - User corrections persist: renaming an album, moving a photo or removing one from
   an album survives later automatic re-sorting and informs it.
 - Providers: Anthropic, OpenAI, Google Gemini, OpenRouter, Groq, any OpenAI-compatible
-  endpoint, or a local model via Ollama or LM Studio. The user supplies their own API key.
+  endpoint. Free tiers can be lined up as spares so the sorting steps to the next when one runs out. The user supplies their own API key.
 - Cost: roughly USD 1.50 to sort a library of a few hundred photos and a couple of
   hundred conversations, quoted before anything is spent, with a monthly limit the
   user sets. Zero with a local model.
