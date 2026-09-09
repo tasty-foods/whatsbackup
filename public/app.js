@@ -347,6 +347,16 @@ async function loadState() {
     // Which version this is doesn't depend on whether WhatsApp is linked.
     if (typeof showVersion === 'function') showVersion(s.version);
     const status = s.status;
+    // An item can arrive carrying an older date than the newest one here — a
+    // Gemini picture dated by its file, say — and the incremental poll asks
+    // only for newer. When the engine's totals disagree with what is shown,
+    // fetch everything once rather than wait for a reload.
+    const haveNow = allItems.filter((r) => r.kind === 'image' || r.kind === 'video').length;
+    const wantNow = (s.counts && (s.counts.images || 0) + (s.counts.videos || 0)) || 0;
+    if (wantNow && wantNow !== haveNow && !reloadingAll && typeof loadItems === 'function') {
+      reloadingAll = true;
+      loadItems(true).then(() => { renderSourceBar(); if (typeof Overview !== 'undefined' && currentView === 'overview') Overview.render(); }).finally(() => { reloadingAll = false; });
+    }
     if (status === 'ready') {
       els.link.classList.add('hidden');
       const synced = typeof syncLine === 'function' ? syncLine(s) : '';
@@ -566,7 +576,7 @@ const Cleanup = (function () {
       groupsEl.appendChild(sec);
     }
     bQuar.disabled = picked.size === 0;
-    bQuar.textContent = picked.size ? "Move " + picked.size + " to quarantine (" + mb(pickedBytes()) + ")" : "Move selected to quarantine";
+    bQuar.textContent = picked.size ? "Set aside " + picked.size + " (" + mb(pickedBytes()) + ")" : "Set aside selected";
   }
   function pickedBytes() {
     let n = 0; if (!data) return 0;
@@ -2681,6 +2691,7 @@ const Chain = (function () {
    it. This keeps that answer, marks the tiles, fills the card on the Overview,
    the pill in the header and the banner when the folder goes away. */
 let lastStateSeen = null;
+let reloadingAll = false;
 const Backup = (function () {
   let st = null;                 // last /api/backup/status
   let only = new Set();
