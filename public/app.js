@@ -477,7 +477,43 @@ function makeSourceCard(prefix, api, label) {
 }
 const ChatGptSource = makeSourceCard("cgpt", "/api/chatgpt", "ChatGPT");
 const GeminiSource = makeSourceCard("gem", "/api/gemini", "Gemini");
-const SourceCards = [ChatGptSource, GeminiSource];
+// The pCloud card: the same shape as the account cards, fed by the backup
+// module rather than a login.
+const CloudCard = (function () {
+  const el = (id) => document.getElementById(id);
+  const status = el("cloud-status"), counts = el("cloud-counts");
+  const bSweep = el("cloud-sweep"), bOpen = el("cloud-open"), bChange = el("cloud-change");
+  if (!status) return { refresh() {}, start() {}, stop() {} };
+  let timer = null;
+  const span = (cls, text) => "<span class=" + String.fromCharCode(34) + cls + String.fromCharCode(34) + ">" + text + "</span>";
+  function refresh() {
+    const st = typeof Backup !== "undefined" ? Backup.status() : null;
+    const d = typeof Backup !== "undefined" ? Backup.describe() : null;
+    if (!st || !d) { status.innerHTML = span("muted", "\u25cf Checking\u2026"); return; }
+    const cls = d.state === "ok" ? "ok-text" : d.state === "warn" ? "warn-text" : "muted";
+    status.innerHTML = span(cls, "\u25cf " + (st.configured ? (st.available ? "Backing up to " + escapeHtml(st.root) : "Not reachable \u2014 " + escapeHtml(st.root)) : "No cloud folder set"));
+    const sw = st.sweep || {};
+    const bits = [];
+    if (st.configured) bits.push(st.onCloud + " backed up \u00b7 " + st.onlyHere + " on this PC only");
+    if (sw.running) bits.push("copying\u2026 " + sw.copied + " so far");
+    else if (sw.lastSweepAt) bits.push("last sweep " + Math.max(1, Math.round((Date.now() - sw.lastSweepAt) / 60000)) + " min ago" + (sw.copied ? ", " + sw.copied + " copied" : ""));
+    if (sw.lastError) bits.push(escapeHtml(sw.lastError));
+    counts.textContent = bits.join(" \u00b7 ");
+    bSweep.disabled = !st.configured || !st.available || !!sw.running;
+    bSweep.textContent = sw.running ? "Working\u2026" : "Back up now";
+    bOpen.disabled = !st.configured;
+    clearTimeout(timer); timer = null;
+    if (sw.running) timer = setTimeout(async () => { await Backup.refresh(); refresh(); }, 3000);
+  }
+  bSweep.addEventListener("click", async () => { bSweep.disabled = true; bSweep.textContent = "Working\u2026"; await Backup.sweep(); refresh(); });
+  bOpen.addEventListener("click", () => { const st = Backup.status(); if (st && st.root && bridge) bridge.openPath(st.root); });
+  bChange.addEventListener("click", () => { const tab = document.querySelector("#settabs [data-t=" + String.fromCharCode(34) + "storage" + String.fromCharCode(34) + "]"); if (tab) tab.click(); });
+  let modalTimer = null;
+  const start = async () => { await Backup.refresh(); refresh(); clearInterval(modalTimer); modalTimer = setInterval(async () => { await Backup.refresh(); refresh(); }, 15000); };
+  const stop = () => { clearInterval(modalTimer); modalTimer = null; clearTimeout(timer); timer = null; };
+  return { refresh, start, stop };
+})();
+const SourceCards = [ChatGptSource, GeminiSource, CloudCard];
 /* ---------- Clean up ------------------------------------------------------
    The engine says what could go and why; this screen lets you tick it and
    move it. Selection lives here, not in the engine, so looking again never
@@ -625,7 +661,7 @@ const FIELDS = {
   mirrorImages: 'bool', startWithWindows: 'bool', startMinimized: 'bool', closeToTray: 'bool',
   notifyOnProblem: 'bool', autoUpdate: 'bool',
   mediaRoot: 'text', cloudRoot: 'text', excludedChats: 'lines',
-  retentionDays: 'int', port: 'int', downloadTimeoutSec: 'int', logMaxMB: 'int',
+  port: 'int', downloadTimeoutSec: 'int', logMaxMB: 'int',
   autoImportHours: 'int',
   aiEnabled: 'bool', aiConsent: 'bool', aiAnalyseImages: 'bool', aiAnalyseChats: 'bool', aiChainEnabled: 'bool',
   aiProvider: 'text', aiModel: 'text', aiBaseUrl: 'text', aiMode: 'text', aiMonthlyBudget: 'int',
@@ -1088,22 +1124,64 @@ const Convo = (function () {
   }
   function refreshChats() { if (!searchMode) loadChats(); }
 
+  // The list has one state — which project, which order — read by the chips
+  // and the select alike. The project sort is the grouped list with headings;
+  // the others are flat.
+  let project = '';
+  let sort = 'project';
+  let lastChats = [];
+  const projectOf = (id) => (typeof AI !== 'undefined' && AI.chatLabelFor(id)) || null;
+
+  function renderProjectChips() {
+    const row = document.getElementById('convo-projects');
+    if (!row) return;
+    const groups = (typeof AI !== 'undefined' && AI.chatGroups()) || [];
+    if (!groups.length) { row.innerHTML = ''; return; }
+    const chip = (id, label) => '<button class="chip' + (project === id ? ' active' : '') + '" data-project="' + escapeHtml(id) + '">' + escapeHtml(label) + '</button>';
+    row.innerHTML = chip('', 'All') + groups.map((g) => chip(g.id, (g.emoji ? g.emoji + ' ' : '') + g.name)).join('');
+  }
+  const chipsRow = document.getElementById('convo-projects');
+  if (chipsRow) chipsRow.addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-project]'); if (!b) return;
+    project = b.dataset.project || '';
+    renderProjectChips();
+    renderChats(lastChats);
+  });
+  const sortSel = document.getElementById('convo-sort');
+  if (sortSel) sortSel.addEventListener('change', () => { sort = sortSel.value; renderChats(lastChats); });
+
+  // Opening a project from the Overview picks its chip rather than typing
+  // its name into the search box.
+  function setProject(id) {
+    project = id || '';
+    if (sortSel && sort !== 'project' && project) { sort = 'project'; sortSel.value = 'project'; }
+    renderProjectChips();
+    renderChats(lastChats);
+  }
+
   function renderChats(chats) {
-    if (!chats.length) { chatsEl.innerHTML = '<div class="convo-empty" style="padding:24px">No conversations stored yet. Turn on “Capture message text” in ⚙︎ Settings, then Import history.</div>'; return; }
+    lastChats = chats;
+    renderProjectChips();
+    if (!chats.length) { chatsEl.innerHTML = '<div class="convo-empty empty-state">No conversations stored yet. Turn on “Capture message text” in ⚙︎ Settings, then Import older.</div>'; return; }
     chatsEl.innerHTML = '';
-    // Once the AI has grouped them, the list is ordered by project rather than
-    // by recency alone — chats without a project fall to the bottom.
-    const projectOf = (id) => (typeof AI !== 'undefined' && AI.chatLabelFor(id)) || null;
-    const grouped = chats.some((c) => projectOf(c.chatId) && projectOf(c.chatId).groupName);
+    let list = chats.slice();
+    if (project) list = list.filter((c) => { const p = projectOf(c.chatId); return p && p.groupId === project; });
+    const hasProjects = list.some((c) => projectOf(c.chatId) && projectOf(c.chatId).groupName);
+    const grouped = sort === 'project' && hasProjects;
     if (grouped) {
-      chats = chats.slice().sort((a, b) => {
+      list.sort((a, b) => {
         const pa = projectOf(a.chatId), pb = projectOf(b.chatId);
         const na = (pa && pa.groupName) || '￿', nb = (pb && pb.groupName) || '￿';
         return na === nb ? (b.lastTs || 0) - (a.lastTs || 0) : na.localeCompare(nb);
       });
+    } else if (sort === 'name') {
+      list.sort((a, b) => String(a.chatName || a.chatId).localeCompare(String(b.chatName || b.chatId)));
+    } else {
+      list.sort((a, b) => (b.lastTs || 0) - (a.lastTs || 0));
     }
+    if (!list.length) { chatsEl.innerHTML = '<div class="convo-empty empty-state">No conversations in this project yet.</div>'; return; }
     let lastProject = null;
-    for (const c of chats) {
+    for (const c of list) {
       if (grouped) {
         const p = projectOf(c.chatId);
         const name = (p && p.groupName) || 'Not in a project';
@@ -1273,7 +1351,7 @@ const Convo = (function () {
 
   bodyEl.addEventListener('scroll', () => { if (bodyEl.scrollTop < 60) loadOlder(); });
 
-  return { enter, pollActive, refreshChats };
+  return { enter, pollActive, refreshChats, setProject };
 })();
 
 
@@ -2770,7 +2848,8 @@ const Overview = (function () {
     const g = projects.find((x) => x.id === b.dataset.id);
     setView('convo');
     const box = document.getElementById('convo-search');
-    if (box && g) { box.value = g.name; box.dispatchEvent(new Event('input', { bubbles: true })); }
+    if (box) { box.value = ''; }
+    Promise.resolve(typeof Convo !== 'undefined' && Convo.enter()).then(() => { if (g && typeof Convo !== 'undefined') Convo.setProject(g.id); });
   };
   projEl.addEventListener('click', go);
   albEl.addEventListener('click', go);

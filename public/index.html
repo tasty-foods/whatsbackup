@@ -134,6 +134,14 @@
     <aside class="chatlist">
       <div class="chatlist-head">
         <input id="convo-search" type="search" placeholder="Search what a chat is about…" autocomplete="off" />
+        <div class="chipsrow" id="convo-projects"></div>
+        <label class="sortlbl">Sort by
+          <select id="convo-sort">
+            <option value="project">Project</option>
+            <option value="recent">Most recent</option>
+            <option value="name">Name A–Z</option>
+          </select>
+        </label>
       </div>
       <div id="chats" class="chats"></div>
     </aside>
@@ -447,11 +455,11 @@
       </div>
 
       <div class="tabs settabs" id="settabs">
-        <button data-t="connection" class="active">Connection</button>
+        <button data-t="connection" class="active">Sources</button>
         <button data-t="capture">What to save</button>
         <button data-t="storage">Where</button>
-        <button data-t="history">History</button>
-        <button data-t="ai">AI sorting</button>
+        <button data-t="history">Import older</button>
+        <button data-t="ai">Albums &amp; projects</button>
         <button data-t="app">App</button>
         <button data-t="advanced">Advanced</button>
       </div>
@@ -524,6 +532,21 @@
               </label>
             </div>
           </div>
+
+          <div class="sec" id="cloud-sec">
+            <div class="sec-title">pCloud</div>
+            <p class="muted small">The folder everything is copied to, so nothing is lost if this PC is. Checked against the folder itself, not assumed.</p>
+            <div class="row"><span id="cloud-status" class="muted">&hellip;</span></div>
+            <div class="row"><span id="cloud-counts" class="muted small"></span></div>
+            <div class="row wrap">
+              <button id="cloud-sweep" class="btn primary">Back up now</button>
+              <button id="cloud-open" class="btn">Open folder</button>
+              <button id="cloud-change" class="btn">Change folder&hellip;</button>
+            </div>
+            <label class="row toggle"><input type="checkbox" id="set-mirrorImages" /><span class="switch"></span>
+              <span>Back up photos to the cloud folder too &mdash; recommended</span></label>
+            <p class="muted small">Videos always go straight to the cloud folder. Photos are copied there as they arrive and again on every sweep, whether this is on or not; the switch only decides whether the copy happens at once.</p>
+          </div>
         </div>
 
         <!-- Capture -->
@@ -578,19 +601,12 @@
               <button class="btn" id="btn-browse-cloud">Browse…</button>
               <button class="btn" id="btn-checkpath">Check</button>
             </div>
-            <label class="row toggle"><input type="checkbox" id="set-mirrorImages" /><span class="switch"></span>
-              <span>Also copy every <b>image</b> there</span></label>
             <div class="row"><span id="path-status" class="muted small"></span></div>
           </div>
           <div class="sec">
             <div class="sec-title">Space used</div>
             <table class="paths" id="storage-table"></table>
-            <div class="row">
-              <label class="lbl">Delete local copies older than
-                <input id="set-retentionDays" type="number" min="0" max="3650" step="30" class="num" /> days
-              </label>
-              <span class="muted small">(0 = keep everything)</span>
-            </div>
+            <!-- Retention is not implemented in the engine; no control until src/ deletes anything. -->
           </div>
           <div class="sec">
             <div class="sec-title">Where everything lives</div>
