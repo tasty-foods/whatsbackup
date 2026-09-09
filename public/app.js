@@ -342,6 +342,7 @@ els.search.addEventListener('input', () => {
 async function loadState() {
   try {
     const s = await (await fetch('/api/state')).json();
+    lastStateSeen = s;                       // the backup card reads the link from here
     if (typeof updateConn === 'function') updateConn(s);
     // Which version this is doesn't depend on whether WhatsApp is linked.
     if (typeof showVersion === 'function') showVersion(s.version);
