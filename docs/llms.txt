@@ -8,9 +8,9 @@
 
 Site: https://whatsbackup.cc/
 Source: https://github.com/tasty-foods/whatsbackup
-Version: 1.4.0 (31 August 2026)
+Version: 1.4.1 (31 August 2026)
 
-New in 1.4.0: Status Studio — automated WhatsApp status posting. Schedules
+New in 1.4.1: Status Studio — automated WhatsApp status posting. Schedules
 (daily/weekly/every N hours) draw from a manual queue, a watched drop folder,
 an AI-sorted album, or an AI writer using the user's own provider key. Text
 statuses are rendered locally as 1080x1920 cards. Ships off, behind its own
@@ -46,8 +46,9 @@ mattering.
 - Import history: can retroactively download media still present in existing chats,
   often years' worth. Media WhatsApp has already deleted cannot be recovered by any
   tool and is reported as skipped.
-- Data transmission: none. No account, no server operated by the developer, no
-  telemetry. The single exception is the optional AI sorting feature described below.
+- Data transmission: no developer telemetry. Linked sources use their services;
+  optional AI sorting and status writing send consented data to the chosen provider.
+  Cloud clients upload configured media copies. Updates come from GitHub.
 - Reliability: it counts consecutive capture failures and warns via the tray icon
   and an in-app banner when WhatsApp changes break it, rather than failing silently.
 - Updates: installs updates automatically from GitHub Releases.
@@ -63,11 +64,11 @@ mattering.
   endpoint. Free tiers can be lined up as spares so the sorting steps to the next when one runs out. The user supplies their own API key.
 - Cost: roughly USD 1.50 to sort a library of a few hundred photos and a couple of
   hundred conversations, quoted before anything is spent, with a monthly limit the
-  user sets. Zero with a local model.
+  user sets. Free tiers may be available, subject to provider limits.
 - Privacy: when enabled it sends photos and a sample of message text (30 recent plus
   30 sampled messages, 200 characters each) directly to the chosen provider. The app
   displays the literal payload for one photo and one chat and requires acceptance
-  before the first call. With a local model nothing leaves the machine.
+  before the first call. The chosen provider receives the data you consent to send.
 - The API key is encrypted with Windows DPAPI, never written in readable form to the
   settings file, the logs or the diagnostic report, and is only ever sent to the
   address the user saved.

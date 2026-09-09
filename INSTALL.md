@@ -1,84 +1,52 @@
-# Installing WhatsBackUp
+# Install and use WhatsBackUp
 
-WhatsBackUp keeps a copy of every photo, video and message from your WhatsApp — on your PC, and in a cloud folder if you have one.
+WhatsBackUp saves WhatsApp messages and media on Windows. It can also import images from ChatGPT and Gemini and copy media to a folder managed by pCloud, OneDrive, Dropbox or another cloud client.
 
-You need: a Windows 10 or 11 PC, and the phone your WhatsApp runs on. Nothing else — no Node, no Chrome, no accounts to create.
+## Install
 
----
+1. Download **WhatsBackUp-Setup-1.4.1.exe** from [GitHub Releases](https://github.com/tasty-foods/whatsbackup/releases/latest).
+2. Run the installer on Windows 10 or 11. Node and Chrome are included; administrator access is not required. The installer is unsigned, so Windows may show a publisher warning. Verify that your download came from the release above before deciding to run it.
+3. Read the unofficial-client notice, choose a media folder, optionally choose a cloud folder, and decide whether to start with Windows.
 
-## 1. Run the installer
+## Save your first items
 
-Double-click **WhatsBackUp-Setup-1.1.0.exe**.
+The **Overview** shows your next step and the state of each source.
 
-**Windows will probably warn you: "Windows protected your PC".** That is expected. The installer isn't signed with a paid certificate, so Windows doesn't recognise the publisher yet — it says nothing about whether the app is safe.
+- **WhatsApp:** choose **Link WhatsApp**. On your phone, open WhatsApp → Settings → Linked devices → Link a device and scan the QR code. New messages and selected media are captured while the app runs. Choose **Import older chats** to retrieve available history; expired media cannot always be recovered.
+- **ChatGPT or Gemini:** open **Settings → Sources**, connect the account in the sign-in window, then choose **Import now**. ChatGPT reads conversations before downloading their images. Gemini imports generated images from its Library. You can keep browsing during imports. Turn on the schedule if you want periodic imports.
 
-To continue: click **More info**, then **Run anyway**.
+The app depends on these services' web clients. A completed import may still include failed requests; Sources shows failures so you can retry missing items. Previously saved items are skipped.
 
-Your antivirus may also flag it once. The app carries its own copy of Chrome (that's how it talks to WhatsApp Web), and antivirus software sometimes treats "an app with a browser inside it that reads messages" as suspicious on sight. If it gets quarantined, restore it and allow it.
+## Find and organise
 
-The app installs for your user only, so it never asks for an administrator password.
+**Gallery** searches chats, captions and filenames. Source, type, date and other filters narrow the results; **Clear all** removes the filters. The photo download contains all archived photos, regardless of the current filter. **Conversations** reads and searches saved WhatsApp message text.
 
-## 2. First run
+AI sorting is optional. In **Settings → Albums & projects**, enable it, choose a provider, enter your own API key, test the connection and review what will be sent before accepting the notice. Review the estimate and monthly budget before starting. Sorting creates albums and conversation projects and adds image descriptions to search. Your edits to names and assignments are retained. Providers may charge for usage; free tiers have limits. Spare providers can keep sorting going when one reaches a limit.
 
-WhatsBackUp asks four short questions:
+## Understand your backup
 
-1. **A short notice to read and accept** — the important part is that this is *not* an official WhatsApp app (see below).
-2. **Where to keep your media** — its own folder, or anywhere you like. Pick a drive with room; photos and videos add up.
-3. **A cloud folder (optional)** — if you use pCloud, OneDrive, Dropbox or a network drive, point it there and videos are written straight in, so your cloud client syncs them off the PC.
-4. **Start with Windows** — recommended, since the app only captures while it's running.
+The overview counts media files in your configured cloud folder and checks their sizes. **Back up now** checks again and copies missing or incomplete media when a local original is available. The cloud client performs the upload; check that client to confirm remote completion.
 
-## 3. Link your phone
+**Message text stays on this PC.** To export a readable copy, use **Settings → What to save → Export full transcript (local HTML)** and keep the export somewhere safe. Media-folder copies do not constitute a database backup.
 
-A QR code appears. On your phone:
+The app stores settings, message databases and browser sessions under `%LOCALAPPDATA%\WhatsBackUp\`. Media uses the folder you chose. Keep browser sessions private: they contain account login state. Uninstalling preserves your archive.
 
-**WhatsApp → Settings → Linked devices → Link a device** → scan the code.
+## Clean up or post statuses
 
-That's it. From then on every photo and video you send or receive is saved automatically. To also pull in what's already in your chats, open **⚙︎ Settings → History → Import history now**.
+**Clean up** suggests possible copies, small images and similar items. Review them: a suggestion is not proof that a file is disposable. **Set aside selected** is reversible; **Delete selected forever** is permanent.
 
-## 4. AI sorting (optional)
+**Status Studio** is optional and separate from archiving. It posts from your WhatsApp account only after you enable it and turn off dry run. Review the audience, schedule and preview before going live.
 
-Left alone, your archive is one long list in date order. AI sorting reads it and groups it: photos land in albums it names itself — *Deliveries*, *Machine repairs*, *Paperwork* — and conversations group under the project or subject they're actually about. Search then finds a photo by what is *in* it, including text it read off the picture.
+## If something needs attention
 
-This is the one part of the app that talks to the outside world, so it is off until you switch it on, and it needs an API key of your own:
-
-1. **⚙︎ Settings → AI sorting → Enable.**
-2. **Pick a provider and paste your key.** Anthropic, OpenAI, Google Gemini, OpenRouter and Groq all work. So do **Ollama** and **LM Studio** running on your own PC, which need no key and cost nothing — with those, nothing leaves the machine.
-3. **Test connection.** It asks the model three questions and tells you the answers separately: whether the key and model name are real, whether it can follow a strict format, and whether it can actually see images. A model that can't see images will still sort your conversations; it just leaves the photos alone rather than failing hundreds of times over.
-4. **Read the notice.** *Show me exactly what leaves my PC* prints the literal data for one photo and one chat. Nothing is sent until you accept it.
-5. **Analyse now.** It shows the estimated cost first — for a library of a few hundred photos and a couple of hundred chats, roughly **$1.50** with the default model. Results are cached, so a second run only pays for what's new.
-
-Afterwards it stays out of your way: **Manual** sorts only when you ask, **Manual then automatic** starts sorting new arrivals once you've done the first pass, and **Automatic** handles everything as it lands. A monthly budget cap stops it either way.
-
-Rename an album or drag a photo into a different one and it stays that way — the next sort is told about your corrections and works around them rather than undoing them.
-
----
-
-## Things worth knowing
-
-**It is not an official WhatsApp app.** It connects the same way WhatsApp Web does, using an open-source library that WhatsApp doesn't endorse. WhatsApp's terms don't permit unofficial clients, and there is a real if small chance an account gets limited or banned for using one. If that risk isn't acceptable to you, don't install it.
-
-**It saves other people's media too.** Everything sent to you in a chat gets archived, and the people who sent it never agreed to that. Keep the copies to yourself.
-
-**Nothing leaves your PC unless you switch on AI sorting.** Media goes to your folders (and your own cloud folder if you set one). Message text stays on the PC. There is no account, no server of ours, and no telemetry.
-
-The single exception is **AI sorting**, which is off until you turn it on. When it is on, it sends your photos and a sample of your message text to the AI provider *you* choose, using *your* own API key — Anthropic, OpenAI, Google, OpenRouter, Groq, or a model running on your own machine via Ollama or LM Studio, in which case nothing leaves the PC at all. Before the first call it shows you the literal data it would send and asks you to accept it, and ⚙︎ Settings → AI sorting → **Show me exactly what leaves my PC** will show you again at any time. Your key is encrypted with Windows' own protection and never appears in logs or the diagnostic report. **Delete all AI labels and albums** removes everything it produced.
-
-**It has to keep running.** WhatsApp only delivers to a connected device. If you quit the app, anything that arrives while it's closed is missed — though **Import history** can often pick it up afterwards.
-
-**WhatsApp changes break it sometimes.** WhatsApp updates its website without warning, and that can stop capture dead. The app watches for this: if downloads start failing it turns the tray icon amber and tells you. Keep automatic updates on so fixes reach you.
-
----
-
-## If something goes wrong
-
-| What you see | What to do |
+| What you see | Next step |
 |---|---|
-| Tray icon is amber, "capture may be broken" | ⚙︎ Settings → App → **Check for updates**. |
-| "Device unlinked" | Open the app and scan the QR code again. |
-| Videos aren't in the cloud folder | ⚙︎ Settings → Where → **Check**. If the drive is offline, videos are saved locally until it returns. |
-| Nothing is being captured | ⚙︎ Settings → Connection → **Reconnect now**, then **Restart capture** on the App tab. |
-| AI sorting says the key is wrong | ⚙︎ Settings → AI sorting → **Test connection**. It says which of the three checks failed. |
-| Photos didn't get sorted but chats did | The model you picked can't see images. Test connection says so; pick a vision model. |
-| You want to hand over details for help | ⚙︎ Settings → App → **Copy diagnostic report**, then paste it into an email. Your API key is never in it. |
+| WhatsApp not connected | Follow the overview's linking step, or use Settings → Sources → Reconnect now. |
+| Downloads failing | Check the connection and Settings → App → Check for updates. |
+| Import incomplete | Read the error in Sources, check sign-in if needed, then Import now to retry. |
+| Cloud folder offline | Reconnect your drive or cloud client, then Back up now. |
+| Items remain local | Check that the originals exist and the cloud folder is writable. |
+| Settings could not save | Read the error, correct the field or restore the connection, then save again. |
+| AI cannot see photos | Test the selected provider/model and choose one that supports images. |
 
-Uninstalling leaves your saved photos, videos and messages exactly where they are.
+Closing the app window normally leaves capture running in the tray. **Quit WhatsBackUp** stops capture, imports and scheduled posts until you open it again.

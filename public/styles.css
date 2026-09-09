@@ -253,8 +253,9 @@ body {
 .num { width: 90px; background: var(--bg); border: 1px solid var(--line); color: var(--text); border-radius: 8px; padding: 6px 8px; }
 
 /* toggle switch */
-.toggle { cursor: pointer; user-select: none; }
-.toggle input { display: none; }
+.toggle { cursor: pointer; user-select: none; position: relative; }
+.toggle input { position: absolute; width: 40px; height: 22px; margin: 0; opacity: 0; z-index: 1; cursor: pointer; }
+.toggle input:focus-visible + .switch { outline: 2px solid var(--accent); outline-offset: 3px; }
 .switch { width: 40px; height: 22px; border-radius: 999px; background: var(--line); position: relative; transition: background .15s; flex: none; }
 .switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: transform .15s; }
 .toggle input:checked + .switch { background: var(--accent2); }
@@ -719,3 +720,29 @@ table.paths td.v { color: var(--text); font-family: ui-monospace, Consolas, mono
 .section-title { font-size: 15px; margin: 0 0 4px; }
 .empty-state { padding: 24px; color: var(--muted); }
 .dim { opacity: .65; }
+
+/* First-use guidance and source activity stay above the archive collections. */
+.overview-intro h1 { font-size: 26px; margin: 6px 0; letter-spacing: -.4px; }
+.overview-intro p { margin: 0 0 22px; max-width: 75ch; }
+.next-step { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 18px; padding: 18px 20px; background: var(--panel2); border-radius: var(--r-md); border-left: 3px solid var(--accent); }
+.next-step:empty { display: none; }
+.next-step h2 { font-size: 17px; margin: 0 0 5px; }
+.next-step p { margin: 0; color: var(--text-dim); max-width: 76ch; font-size: 14px; }
+.source-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 12px 0 24px; }
+.source-card { border: 1px solid var(--line); border-radius: var(--r-md); padding: 16px; display: flex; flex-direction: column; align-items: flex-start; }
+.source-heading { display: flex; align-items: center; gap: 10px; justify-content: space-between; flex-wrap: wrap; width: 100%; }
+.source-heading h3 { font-size: 15px; margin: 0; }
+.source-card p { font-size: 13px; color: var(--muted); flex: 1; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.seg, .settabs { max-width: 100%; overflow-x: auto; }
+#save-status { overflow-wrap: anywhere; }
+@media (max-width: 760px) {
+  .source-cards { grid-template-columns: 1fr; }
+  .next-step { flex-direction: column; align-items: flex-start; }
+  .ov-backup { grid-template-columns: 1fr; }
+  .ov-backup .side { align-items: flex-start; }
+  .ov-backup .big { font-size: 20px; }
+  .ov-backup .line { overflow-wrap: anywhere; }
+  .viewtoggle { max-width: 100%; overflow-x: auto; }
+  .controls { max-width: 100%; }
+}

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Download WhatsBackUp — free WhatsApp backup for Windows</title>
-<meta name="description" content="Download WhatsBackUp 1.4.0 free for Windows 10 and 11. No admin password, no prerequisites — install it, scan one QR code, and your photos are saved.">
+<meta name="description" content="Download WhatsBackUp 1.4.1 free for Windows 10 and 11. No admin password, no prerequisites — install it, scan one QR code, and your photos are saved.">
 <link rel="canonical" href="https://whatsbackup.cc/download.html">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="theme-color" content="#f4f1e8" media="(prefers-color-scheme: light)">
@@ -12,7 +12,7 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="WhatsBackUp">
 <meta property="og:title" content="Download WhatsBackUp for Windows — free">
-<meta property="og:description" content="WhatsBackUp 1.4.0 for Windows 10 and 11. Free, open source, no account. Install it, scan a QR code, and every WhatsApp photo is saved.">
+<meta property="og:description" content="WhatsBackUp 1.4.1 for Windows 10 and 11. Free, open source, no account. Install it, scan a QR code, and every WhatsApp photo is saved.">
 <meta property="og:url" content="https://whatsbackup.cc/download.html">
 <meta property="og:image" content="https://whatsbackup.cc/assets/og.png">
 <meta property="og:image:width" content="1200">
@@ -38,11 +38,11 @@
         { "@type": "HowToTool", "name": "The phone your WhatsApp account runs on" }
       ],
       "step": [
-        { "@type": "HowToStep", "name": "Download the installer", "text": "Download WhatsBackUp-Setup-1.4.0.exe from the GitHub releases page.", "url": "https://whatsbackup.cc/download.html#step-1" },
+        { "@type": "HowToStep", "name": "Download the installer", "text": "Download WhatsBackUp-Setup-1.4.1.exe from the GitHub releases page.", "url": "https://whatsbackup.cc/download.html#step-1" },
         { "@type": "HowToStep", "name": "Get past the SmartScreen warning", "text": "Windows shows 'Windows protected your PC' because the installer is not signed with a paid certificate. Click More info, then Run anyway.", "url": "https://whatsbackup.cc/download.html#step-2" },
         { "@type": "HowToStep", "name": "Answer four setup questions", "text": "Accept the notice, choose where to keep your media, optionally point it at a cloud folder, and decide whether it starts with Windows.", "url": "https://whatsbackup.cc/download.html#step-3" },
         { "@type": "HowToStep", "name": "Scan the QR code", "text": "On your phone open WhatsApp, go to Settings, then Linked devices, then Link a device, and scan the code shown by WhatsBackUp.", "url": "https://whatsbackup.cc/download.html#step-4" },
-        { "@type": "HowToStep", "name": "Import your existing photos", "text": "Open Settings, then History, then Import history now to pull in media already sitting in your chats.", "url": "https://whatsbackup.cc/download.html#step-5" }
+        { "@type": "HowToStep", "name": "Import your existing photos", "text": "Open Settings, then Import older, then Import history now to pull in media already sitting in your chats.", "url": "https://whatsbackup.cc/download.html#step-5" }
       ]
     },
     {
@@ -61,7 +61,7 @@
 
 <header class="site-head">
   <div class="wrap">
-    <a class="brand" href="./"><span class="mark">Whats<i>BackUp</i></span><span class="ref">v1.4.0</span></a>
+    <a class="brand" href="./"><span class="mark">Whats<i>BackUp</i></span><span class="ref">v1.4.1</span></a>
     <nav class="nav" aria-label="Main">
       <a href="index.html#problem" class="hide-sm">Why</a>
       <a href="index.html#how" class="hide-sm">How</a>
@@ -77,7 +77,7 @@
 
 <section class="hero">
   <div class="wrap">
-    <p class="label">Release 1.4.0 <span class="no">·</span> 31 August 2026</p>
+    <p class="label">Release 1.4.1 <span class="no">·</span> 31 August 2026</p>
     <h1 style="max-width:16ch">Take a copy.</h1>
     <p class="lede" style="margin-top:.7em">Free and open source. About five minutes from here to <em>every photograph I am sent is now kept</em>.</p>
 
@@ -87,7 +87,7 @@
         Download for Windows
       </a>
       <p class="manifest">
-        <span>File</span><b>WhatsBackUp-Setup-1.4.0.exe</b><br>
+        <span>File</span><b>WhatsBackUp-Setup-1.4.1.exe</b><br>
         <span>Size</span><b>237 MB</b><br>
         <span>Requires</span><b>Windows 10 / 11, 64-bit</b><br>
         <span>Installs</span><b>per user — no admin password</b><br>
@@ -102,40 +102,17 @@
     <div class="head">
       <p class="marker">§ 00 <span>This release</span></p>
       <div>
-        <h2>New in 1.4.0 &#8212; a dashboard built around what it is for</h2>
-        <p>Existing installations update themselves on the next restart.</p>
+        <h2>New in 1.4.1 &#8212; clearer steps, more reliable feedback</h2>
+        <p>With automatic updates enabled, the new version downloads and installs when you quit. You can also download the installer below.</p>
       </div>
     </div>
 
     <dl class="defs">
-      <div>
-        <dt>It opens on the promise</dt>
-        <dd>The first thing on the Overview is now the backup: how many of your items are in pCloud, how many are still only on this PC with a button that shows them, whether the folder is reachable, and Back up now. The engine checks the cloud folder itself rather than trusting a flag &#8212; the old one was only ever set on videos &#8212; and copies whatever is missing after every capture, every half hour, and on demand. Every photo not yet in the folder carries a small mark; opening one says <em>Backed up to pCloud</em> or <em>On this PC only</em> in those words.</dd>
-      </div>
-      <div>
-        <dt>Choose what to see, in one place</dt>
-        <dd>A source switcher &#8212; All &#183; WhatsApp &#183; ChatGPT &#183; Gemini &#8212; sits at the top of the Gallery and the Overview, with counts. Beside it: what kind, the search, the sort. Everything that narrows the gallery now shares one state, so a chip above the grid shows each thing in force with an &#215; and one Clear all. The header carries only navigation: the six-tabs-and-a-search-box strip is gone.</dd>
-      </div>
-      <div>
-        <dt>Gemini joins ChatGPT as a source</dt>
-        <dd>Every photo Gemini made for you, from its Library, kept with the rest. Signed in once with Google in a window that opens; read on a schedule from a browser profile of its own. Google publishes no way to fetch these, so it reads the page a person sees and pulls each picture at full size &#8212; verified against a live account before it was built.</dd>
-      </div>
-      <div>
-        <dt>Settings, sorted</dt>
-        <dd>A Sources pane with four cards of one shape: WhatsApp, ChatGPT, Gemini and pCloud &#8212; the destination, which had no card at all. Tabs named for what they do: Sources, What to save, Where, Import older, Albums &amp; projects, App. Switches and menus apply the moment they are set and say so; Save is for what you type. A retention control that nothing implemented is gone.</dd>
-      </div>
-      <div>
-        <dt>Conversations, the same shape in miniature</dt>
-        <dd>A chip per project above the list and a Sort by &#8212; Project, Most recent, Name &#8212; instead of a list that silently regrouped itself once the AI had been through it. Opening a project from the Overview picks its chip.</dd>
-      </div>
-      <div>
-        <dt>One word per thing</dt>
-        <dd>Photos, not images or pictures. Set aside, not quarantine. A service, not a provider. Import older, not History. A paused service says why and for how long; a blind one says it can&#8217;t see photos; a cleanup badge says Safe to go, Probably or Your call.</dd>
-      </div>
-      <div>
-        <dt>Fixes</dt>
-        <dd>chatgpt.com sits behind Cloudflare, which turned away the automated browser with a 403 &#8212; measured: same profile, same cookies, refused with the automation flags on and welcomed with them off. A connect that had merely opened a window reported itself as linked; linked now means a sign-in was seen. A crawl of every conversation ran longer than the browser gave it. The Clean up view, cut out by accident in the release before, is back.</dd>
-      </div>
+      <div><dt>Know what to do next</dt><dd>The Overview guides linking and the first history import, with live cards for WhatsApp, ChatGPT and Gemini. Partial imports and connection problems are visible without hunting through settings.</dd></div>
+      <div><dt>Know what your backup means</dt><dd>Cloud-folder checks now expire, compare file sizes and repair incomplete copies when a local original is available. The app distinguishes files in the cloud folder from uploads completed by your cloud client. Message text stays local.</dd></div>
+      <div><dt>Recover from problems</dt><dd>Import summaries survive restarts, failed saves show an error, and setup stays on the current step if it cannot save. Import progress explains when chats are being read and when images are downloading.</dd></div>
+      <div><dt>Browse and set up more easily</dt><dd>Source filters apply to overview collections, empty galleries offer direct next steps, and settings switches work with a keyboard. The overview adapts to narrow windows.</dd></div>
+      <div><dt>Review cleanup suggestions</dt><dd>Potential duplicates and small images are described as suggestions. Review before setting aside; permanent deletion stays a separate action.</dd></div>
     </dl>
   </div>
 </section>
@@ -152,7 +129,7 @@
         <span class="n">01</span>
         <div>
           <h3>Run the installer</h3>
-          <p>Double-click <code>WhatsBackUp-Setup-1.4.0.exe</code>. There is nothing to install beforehand — no Node.js, no Chrome, no developer tools. The app carries everything it needs.</p>
+          <p>Double-click <code>WhatsBackUp-Setup-1.4.1.exe</code>. There is nothing to install beforehand — no Node.js, no Chrome, no developer tools. The app carries everything it needs.</p>
         </div>
       </li>
       <li id="step-2">
@@ -174,14 +151,14 @@
         <span class="n">04</span>
         <div>
           <h3>Scan the QR code</h3>
-          <p>On your phone: <strong>WhatsApp → Settings → Linked devices → Link a device</strong>, then scan the code on screen. Exactly the flow you know from WhatsApp Web. From that moment, everything you send or receive is kept automatically.</p>
+          <p>On your phone: <strong>WhatsApp → Settings → Linked devices → Link a device</strong>, then scan the code on screen. Exactly the flow you know from WhatsApp Web. From that moment, new messages and the media types you enabled are saved while the app is running.</p>
         </div>
       </li>
       <li id="step-5">
         <span class="n">05</span>
         <div>
-          <h3>Pull in what you already have</h3>
-          <p>Open <strong>⚙︎ Settings → History → Import history now</strong>. It walks your existing chats and downloads the media WhatsApp still holds — frequently years of photographs. Anything WhatsApp has already deleted is reported as skipped rather than silently missed.</p>
+          <h3>Import older chats, then explore your archive</h3>
+          <p>Open <strong>⚙︎ Settings → Import older → Import history now</strong>. It walks your existing chats and downloads the media WhatsApp still holds — frequently years of photographs. Anything WhatsApp has already deleted is reported as skipped rather than silently missed.</p>
         </div>
       </li>
     </ol>

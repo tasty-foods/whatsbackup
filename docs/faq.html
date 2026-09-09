@@ -32,7 +32,7 @@
     { "@type": "Question", "name": "How do I automatically save WhatsApp photos to my PC?", "acceptedAnswer": { "@type": "Answer", "text": "Install WhatsBackUp on Windows and link it to your phone by scanning a QR code, the same way you link WhatsApp Web. From that moment every photo and video you send or receive is written to a folder on your PC automatically, with no further action. One click also imports media already sitting in your existing chats." } },
     { "@type": "Question", "name": "What is WhatsBackUp?", "acceptedAnswer": { "@type": "Answer", "text": "WhatsBackUp is a free, open-source Windows desktop application that automatically archives every photo, video and message from WhatsApp to a folder on your own PC, and optionally into a cloud folder such as pCloud, OneDrive or Dropbox. It can also sort photos into named albums and conversations into projects using an AI provider of your choice." } },
     { "@type": "Question", "name": "Does WhatsBackUp cost anything?", "acceptedAnswer": { "@type": "Answer", "text": "No. WhatsBackUp is free and open source, with no account, no subscription and no limits. Only the optional AI sorting can cost money, because it uses your own API key with a provider you choose — around $1. Free tiers can be lined up as spares, so it can cost nothing." } },
-    { "@type": "Question", "name": "Does WhatsBackUp upload my messages to a server?", "acceptedAnswer": { "@type": "Answer", "text": "No. There is no account, no server operated by the developer and no telemetry. Media is written to folders on your PC and to your own cloud folder if you configure one. The single exception is optional AI sorting, which is switched off by default; when enabled it sends photos and sampled message text to the AI provider you choose using your own API key, and shows you the exact data before the first call." } },
+    { "@type": "Question", "name": "Does WhatsBackUp upload my messages to a server?", "acceptedAnswer": { "@type": "Answer", "text": "No. There is no account, no server operated by the developer and no telemetry. Media is written to folders on your PC and to your own cloud folder if you configure one. One optional use is optional AI sorting, which is switched off by default; when enabled it sends photos and sampled message text to the AI provider you choose using your own API key, and shows you the exact data before the first call." } },
     { "@type": "Question", "name": "Where does WhatsBackUp save my photos and videos?", "acceptedAnswer": { "@type": "Answer", "text": "In ordinary folders you pick during setup. Photos and videos are saved as normal JPG and MP4 files you can open, copy, move or back up like any other file. Message text goes into a local SQLite database. If you set a cloud folder, videos are written straight into it so your cloud client syncs them off the PC." } },
     { "@type": "Question", "name": "Can WhatsBackUp back up WhatsApp to pCloud, OneDrive or Dropbox?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Point WhatsBackUp at any folder your cloud client syncs — pCloud Drive, OneDrive, Dropbox, Google Drive for desktop, or a mapped network drive — and videos are written directly there as they arrive, so the cloud client uploads them without a second copy on your disk." } },
     { "@type": "Question", "name": "Will using WhatsBackUp get my WhatsApp account banned?", "acceptedAnswer": { "@type": "Answer", "text": "There is a real if small risk. WhatsBackUp uses an unofficial client library, and WhatsApp's terms of service do not permit unofficial clients. It behaves like a normal linked device and does not send messages, spam or automate anything, but the risk is not zero. If your WhatsApp account is critical to your livelihood, consider that before installing." } },
@@ -54,7 +54,7 @@
 
 <header class="site-head">
   <div class="wrap">
-    <a class="brand" href="./"><span class="mark">Whats<i>BackUp</i></span><span class="ref">v1.4.0</span></a>
+    <a class="brand" href="./"><span class="mark">Whats<i>BackUp</i></span><span class="ref">v1.4.1</span></a>
     <nav class="nav" aria-label="Main">
       <a href="index.html#problem" class="hide-sm">Why</a>
       <a href="index.html#how" class="hide-sm">How</a>
@@ -120,7 +120,7 @@
       <div><span class="n">Q6</span><div>
         <h3>Does it upload my messages anywhere?</h3>
         <p><strong>No.</strong> There is no account, no server of ours, and no telemetry of any kind. Media goes into folders on your PC, and into your own cloud folder if you set one up.</p>
-        <p>The single exception is <strong>AI sorting</strong>, off until you deliberately enable it. When on, it sends photographs and a sample of message text to the provider you pick, using your own API key. Before the first call the app shows you the literal data it would send and asks you to accept it. Pick a local model and nothing leaves the machine.</p>
+        <p>One optional use is <strong>AI sorting</strong>, off until you deliberately enable it. When on, it sends photographs and a sample of message text to the provider you pick, using your own API key. Before the first call the app shows you the literal data it would send and asks you to accept it. Review the provider and budget before starting a run.</p>
       </div></div>
       <div><span class="n">Q7</span><div>
         <h3>Where is my API key stored?</h3>
@@ -133,7 +133,7 @@
       <div>
         <h3>Will this get my WhatsApp account banned?</h3>
         <p><strong>There is a real if small risk, and pretending otherwise would be dishonest.</strong> WhatsBackUp uses an unofficial client library. WhatsApp's terms don't permit unofficial clients, and accounts have been limited for using them.</p>
-        <p>In its favour: it behaves like an ordinary linked device, sends no messages, does no bulk operations, and automates nothing resembling spam. But the risk is not zero. If your WhatsApp account is essential to your livelihood, weigh that before installing.</p>
+        <p>In its favour: capture reads from a linked device. Optional Status Studio posts from your account only after you enable it. But the risk is not zero. If your WhatsApp account is essential to your livelihood, weigh that before installing.</p>
       </div></div>
       <div><span class="n">Q9</span><div>
         <h3>Is it legal to archive messages other people sent me?</h3>

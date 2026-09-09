@@ -1,9 +1,9 @@
 {
   "name": "whatsbackup",
   "productName": "WhatsBackUp",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "private": true,
-  "description": "Saves every WhatsApp image, video and message to your PC Ã¢â‚¬â€ and to your cloud folder.",
+  "description": "Saves WhatsApp media and messages, imports ChatGPT and Gemini images, and copies media to your cloud folder.",
   "author": {
     "name": "Tasty Foods",
     "email": "info@tasty-foods.be"
@@ -19,7 +19,8 @@
     "dist": "npm run prepack && electron-builder --win --publish never",
     "release": "npm run prepack && electron-builder --win --publish always",
     "backfill": "node src/backfill.js",
-    "reset": "node src/reset.js"
+    "reset": "node src/reset.js",
+    "test": "node --test tests/*.test.cjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.117.1",
@@ -36,7 +37,7 @@
   "build": {
     "appId": "be.tastyfoods.whatsbackup",
     "productName": "WhatsBackUp",
-    "copyright": "Copyright Ã‚Â© 2026 Tasty Foods",
+    "copyright": "Copyright © 2026 Tasty Foods",
     "directories": {
       "output": "dist",
       "buildResources": "build"

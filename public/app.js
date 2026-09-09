@@ -219,7 +219,7 @@ function render(all) {
   if (none) {
     els.empty.innerHTML = allItems.length
       ? 'Nothing matches. <button class="btn small" id="empty-clear">Clear all</button>'
-      : 'No photos or videos yet. New ones appear here the moment they arrive — or open <b>⚙︎ Settings → Import older</b> to pull in what came before.';
+      : 'Your gallery is empty. <button class="btn small" data-source-action="connection">Connect a source</button> <button class="btn small" data-source-action="history">Import WhatsApp history</button>';
     const ec = document.getElementById('empty-clear'); if (ec) ec.addEventListener('click', clearAll);
   }
   if (els.zip) els.zip.textContent = filtersActive() ? '⭳ Download all photos' : '⭳ Download all photos';
@@ -277,7 +277,7 @@ function showCurrent() {
   els.lbStage.appendChild(el);
   const sizeKb = r.size ? (r.size / 1024).toFixed(0) + ' KB' : '';
   const cloudTag = typeof Backup !== 'undefined' && Backup.configured()
-    ? (Backup.onlyHere().has(r.id) ? ' · <span class="tag warn">⚠ On this PC only</span>' : ' · <span class="tag ok">☁ Backed up to pCloud</span>')
+    ? (Backup.onlyHere().has(r.id) ? ' · <span class="tag warn">⚠ On this PC only</span>' : ' · <span class="tag ok">☁ In cloud folder</span>')
     : '';
   const lbl = typeof AI !== 'undefined' ? AI.labelFor(r.id) : null;
   const l = lbl && lbl.label;
@@ -341,7 +341,7 @@ els.search.addEventListener('input', () => {
 /* ---------- Data + live updates ---------- */
 async function loadState() {
   try {
-    const s = await (await fetch('/api/state')).json();
+    const s = await requestJson('/api/state');
     lastStateSeen = s;                       // the backup card reads the link from here
     if (typeof updateConn === 'function') updateConn(s);
     // Which version this is doesn't depend on whether WhatsApp is linked.
@@ -353,7 +353,7 @@ async function loadState() {
     // fetch everything once rather than wait for a reload.
     const haveNow = allItems.filter((r) => r.kind === 'image' || r.kind === 'video').length;
     const wantNow = (s.counts && (s.counts.images || 0) + (s.counts.videos || 0)) || 0;
-    if (wantNow && wantNow !== haveNow && !reloadingAll && typeof loadItems === 'function') {
+    if (s.counts && wantNow !== haveNow && !reloadingAll && typeof loadItems === 'function') {
       reloadingAll = true;
       loadItems(true).then(() => { renderSourceBar(); if (typeof Overview !== 'undefined' && currentView === 'overview') Overview.render(); }).finally(() => { reloadingAll = false; });
     }
@@ -383,10 +383,10 @@ async function loadState() {
 async function loadItems(initial) {
   try {
     const url = initial ? '/api/list' : '/api/list?since=' + newestTs;
-    const rows = await (await fetch(url)).json();
+    const rows = await requestJson(url);
     if (initial) {
       allItems = rows;
-      if (allItems.length) newestTs = allItems[0].ts;
+      newestTs = allItems.length ? allItems[0].ts : 0;
       render(allItems);
       return;
     }
@@ -446,7 +446,8 @@ function makeSourceCard(prefix, api, label) {
 
   async function refresh() {
     let s = null;
-    try { s = await (await fetch(api + "/state")).json(); } catch (e) { return; }
+    try { s = await requestJson(api + '/state'); }
+    catch (e) { status.textContent = 'Source status unavailable — try again shortly.'; return; }
     const busy = !!s.busy;
     let line;
     if (s.status === "connecting") line = span("warn-text", "● A window is open — sign in there");
@@ -456,18 +457,22 @@ function makeSourceCard(prefix, api, label) {
       if (pr.of) bits.push(pr.conversations + " of " + pr.of + " chats read");
       if (pr.images) bits.push(pr.images + " photos found");
       if (pr.saved) bits.push(pr.saved + " saved");
-      line = span("warn-text", "● Backing up…" + (bits.length ? " " + bits.join(" · ") : ""));
+      line = span("warn-text", "● Importing…" + (bits.length ? " " + bits.join(" · ") : ""));
     }
-    else if (s.linked) line = span("ok-text", "● Connected");
     else if (s.status === "error") line = span("bad-text", "● " + escapeHtml(s.lastError || "Something went wrong"));
+    else if (s.lastRun && s.lastRun.failed) line = span('warn-text', '● Import incomplete');
+    else if (s.linked) line = span("ok-text", "● Connected");
     else line = span("muted", "● Not connected");
     status.innerHTML = line;
 
     const bits = [];
     if (s.lastRun) bits.push((s.lastRun.saved ? s.lastRun.saved + " new" : "nothing new") + " of " + s.lastRun.images + " photos" + (s.lastRun.conversations ? " in " + s.lastRun.conversations + " chats" : "") + ", " + ago(s.lastRun.at));
-    else if (s.linked) bits.push("not backed up yet");
+    else if (s.linked) bits.push("No completed import recorded on this installation");
+    if (s.status === 'scanning' && s.progress && s.progress.phase === 'reading') bits.push('Reading chats first; downloads follow. You can keep browsing.');
+    if (s.lastRun && s.lastRun.failed) bits.push(s.lastRun.failed + ' failed — import again to retry missing items');
+    if (s.lastRun && s.lastRun.firstError) bits.push(escapeHtml(s.lastRun.firstError));
     if (s.enabled && s.nextScanAt && !busy) bits.push("next look " + inWhen(s.nextScanAt));
-    if (!s.enabled && s.linked) bits.push("schedule off — only when you press Back up now");
+    if (!s.enabled && s.linked) bits.push("schedule off — use Import now");
     if (s.lastError && s.status !== "error") bits.push(escapeHtml(s.lastError));
     last.innerHTML = bits.join(" · ");
 
@@ -479,7 +484,10 @@ function makeSourceCard(prefix, api, label) {
     if (busy) timer = setTimeout(refresh, 2500);
   }
 
-  const post = (url) => fetch(url, { method: "POST" });
+  const post = async (url) => {
+    try { return await requestJson(url, { method: 'POST' }); }
+    catch (e) { alert('Could not start: ' + e.message); }
+  };
   bConnect.addEventListener("click", async () => { bConnect.disabled = true; await post(api + "/connect"); refresh(); });
   bScan.addEventListener("click", async () => { bScan.disabled = true; await post(api + "/scan"); refresh(); });
   bForget.addEventListener("click", async () => {
@@ -721,8 +729,21 @@ function writeField(key, type, value) {
   else el.value = value === undefined || value === null ? '' : value;
 }
 
-function openSettings() { S.modal.classList.remove('hidden'); loadSettings(); if (typeof SourceCards !== 'undefined') SourceCards.forEach((c) => c.start()); }
-function closeSettings() { S.modal.classList.add('hidden'); if (typeof SourceCards !== 'undefined') SourceCards.forEach((c) => c.stop()); }
+let settingsOpener = null;
+function openSettings() { settingsOpener = document.activeElement; S.modal.classList.remove('hidden'); S.close.focus(); loadSettings(); if (typeof SourceCards !== 'undefined') SourceCards.forEach((c) => c.start()); }
+function closeSettings() { S.modal.classList.add('hidden'); if (typeof SourceCards !== 'undefined') SourceCards.forEach((c) => c.stop()); if (settingsOpener && settingsOpener.isConnected) settingsOpener.focus(); }
+function openSettingsTab(name) {
+  openSettings();
+  const button = document.querySelector('#settabs [data-t="' + name + '"]');
+  if (button) button.click();
+}
+S.modal.addEventListener('keydown', (e) => {
+  if (e.key !== 'Tab') return;
+  const items = [...S.modal.querySelectorAll('button, input, select, textarea, a[href], [tabindex="0"]')].filter((el) => !el.disabled && el.getClientRects().length);
+  const first = items[0], last = items[items.length - 1];
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+});
 S.open.addEventListener('click', openSettings);
 S.close.addEventListener('click', closeSettings);
 
@@ -730,11 +751,11 @@ S.close.addEventListener('click', closeSettings);
 // Save is for the things you type. Anything that is not a set-* field, or is
 // typed, is left to Save — including a number typed into a box.
 let savedFlash = null;
-function flashSaved(text) {
+function flashSaved(text, failed = false) {
   if (!S.saveStatus) return;
-  S.saveStatus.innerHTML = '<span class="ok-text">' + escapeHtml(text || 'Saved ✓') + '</span>';
+  S.saveStatus.innerHTML = '<span class="' + (failed ? 'bad-text' : 'ok-text') + '">' + escapeHtml(text || 'Saved ✓') + '</span>';
   clearTimeout(savedFlash);
-  savedFlash = setTimeout(() => { if (S.saveStatus) S.saveStatus.textContent = ''; }, 1800);
+  if (!failed) savedFlash = setTimeout(() => { if (S.saveStatus) S.saveStatus.textContent = ''; }, 3500);
 }
 S.modal.addEventListener('change', async (e) => {
   const el = e.target;
@@ -748,9 +769,9 @@ S.modal.addEventListener('change', async (e) => {
   if (v === undefined) return;
   try {
     if (key === 'startWithWindows' && bridge) await bridge.setStartup(v);
-    const r = await (await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ [key]: v }) })).json();
+    const r = await requestJson('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ [key]: v }) });
     flashSaved(r && r.restartRequired ? 'Saved ✓ — applies after a restart' : 'Saved ✓');
-  } catch (err) { flashSaved('Could not save'); }
+  } catch (err) { flashSaved('Could not save: ' + err.message, true); }
 });
 S.modal.addEventListener('click', (e) => { if (e.target === S.modal) closeSettings(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !S.modal.classList.contains('hidden')) closeSettings(); });
@@ -822,13 +843,13 @@ S.save.addEventListener('click', async () => {
   }
   try {
     if (bridge) await bridge.setStartup(body.startWithWindows);
-    const r = await (await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json();
+    const r = await requestJson('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     S.saveStatus.innerHTML = '<span class="ok-text">Saved ✓</span>';
     S.restartNote.textContent = r.restartRequired
       ? 'Some changes (folders, port, timeouts) apply after a restart — use “Restart capture” on the App tab.'
       : '';
     setTimeout(() => { S.saveStatus.textContent = ''; }, 2500);
-  } catch (e) { S.saveStatus.textContent = 'Save failed'; }
+  } catch (e) { flashSaved('Could not save: ' + e.message, true); }
 });
 
 /* ---------- Folder pickers ---------- */
@@ -997,7 +1018,7 @@ if (WZ.root) WZ.root.addEventListener('click', (e) => { if (e.target.closest('.w
 
 async function maybeRunWizard() {
   let d;
-  try { d = await (await fetch('/api/settings')).json(); } catch (e) { return; }
+  try { d = await requestJson('/api/settings'); } catch (e) { return; }
   if (d.settings.setupComplete) return;
 
   if (bridge) appInfo = appInfo || await bridge.info();
@@ -1007,7 +1028,7 @@ async function maybeRunWizard() {
 
   $('wz-consent').addEventListener('change', (e) => { $('wz-consent-next').disabled = !e.target.checked; });
   $('wz-consent-next').addEventListener('click', async () => {
-    await saveWizard({ consentAccepted: true });
+    if (!await saveWizard({ consentAccepted: true })) return;
     const old = appInfo && appInfo.oldInstall;
     if (old) {
       $('wz-found').innerHTML = `<b>${escapeHtml(old.path)}</b><br>
@@ -1049,7 +1070,7 @@ async function maybeRunWizard() {
       const r = await (await fetch('/api/check-path', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: dir, sub: 'images' }) })).json();
       if (!r.writable) { $('wz-media-status').innerHTML = `<span class="bad-text">${escapeHtml(r.message)}</span>`; return; }
     }
-    await saveWizard({ mediaRoot: dir });
+    if (!await saveWizard({ mediaRoot: dir })) return;
     WZ.show('cloud');
   });
 
@@ -1058,25 +1079,25 @@ async function maybeRunWizard() {
     const dir = await bridge.pickFolder({ title: 'Choose your cloud folder' });
     if (dir) $('wz-cloud-root').value = dir;
   });
-  $('wz-cloud-skip').addEventListener('click', async () => { await saveWizard({ cloudRoot: '', mirrorImages: false }); WZ.show('startup'); });
+  $('wz-cloud-skip').addEventListener('click', async () => { if (await saveWizard({ cloudRoot: '', mirrorImages: false })) WZ.show('startup'); });
   $('wz-cloud-next').addEventListener('click', async () => {
     const dir = $('wz-cloud-root').value.trim();
     if (dir) {
       const r = await (await fetch('/api/check-path', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: dir }) })).json();
       if (!r.writable) { $('wz-cloud-status').innerHTML = `<span class="bad-text">${escapeHtml(r.message)}</span>`; return; }
     }
-    await saveWizard({ cloudRoot: dir, mirrorImages: $('wz-mirror').checked });
+    if (!await saveWizard({ cloudRoot: dir, mirrorImages: $('wz-mirror').checked })) return;
     WZ.show('startup');
   });
 
   $('wz-finish').addEventListener('click', async () => {
     const startup = $('wz-startup').checked;
     if (bridge) await bridge.setStartup(startup);
-    await saveWizard({
+    if (!await saveWizard({
       startWithWindows: startup,
       captureConversations: $('wz-convos').checked,
       setupComplete: true,
-    });
+    })) return;
     WZ.done();
     if (bridge) bridge.restart();     // folders only take effect on a fresh start
   });
@@ -1084,8 +1105,10 @@ async function maybeRunWizard() {
 
 async function saveWizard(patch) {
   try {
-    await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) });
-  } catch (e) {}
+    await requestJson('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) });
+    $('wizard-error').textContent = '';
+    return true;
+  } catch (e) { $('wizard-error').textContent = 'Could not save this step: ' + e.message; return false; }
 }
 /* ---------- Open one media item in the lightbox (from a message bubble) ---------- */
 function openSingleMedia(serve, kind) {
@@ -1122,7 +1145,7 @@ let currentView = 'media';
 V.toggle.addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) setView(b.dataset.v); });
 function setView(v) {
   currentView = v;
-  [...V.toggle.children].forEach((c) => c.classList.toggle('active', c.dataset.v === v));
+  [...V.toggle.children].forEach((c) => { c.classList.toggle('active', c.dataset.v === v); c.setAttribute('aria-pressed', String(c.dataset.v === v)); });
   const ovEl = document.getElementById('view-overview');
   if (ovEl) ovEl.classList.toggle('hidden', v !== 'overview');
   const clEl = document.getElementById('view-cleanup');
@@ -1134,6 +1157,7 @@ function setView(v) {
   if (v === 'convo') Convo.enter();
   if (v === 'status' && typeof StatusView !== 'undefined') StatusView.enter();
   if (v === 'overview' && typeof Overview !== 'undefined') Overview.enter();
+  if (v === 'overview' && typeof SourceOverview !== 'undefined') SourceOverview.refresh();
   if (v === 'cleanup' && typeof Cleanup !== 'undefined') Cleanup.enter();
 }
 
@@ -2042,7 +2066,7 @@ function openQuickPlay(startId) {
 // offered; Gemini appears the moment its first picture arrives.
 function visibleSources() {
   const have = new Set(allItems.map(srcOf));
-  return SOURCES.filter((s) => s.id === 'whatsapp' || s.id === 'chatgpt' || have.has(s.id));
+  return SOURCES;
 }
 function renderSourceBar() {
   const counts = {};
@@ -2076,7 +2100,7 @@ const ACTIVE_LABELS = {
   album: (v) => v === 'unsorted' ? 'No album yet' : 'Album: ' + (((typeof AI !== 'undefined' && AI.groups()) || []).find((g) => g.id === v) || { name: v }).name,
   project: (v) => 'Project: ' + (((typeof AI !== 'undefined' && AI.chatGroups()) || []).find((g) => g.id === v) || { name: v }).name,
   tag: (v) => '#' + v,
-  backup: (v) => v === 'local' ? 'On this PC only' : 'In pCloud',
+  backup: (v) => v === 'local' ? 'On this PC only' : 'In cloud folder',
   from: (v) => 'From ' + v,
   to: (v) => 'To ' + v,
 };
@@ -2701,12 +2725,14 @@ let lastStateSeen = null;
 let reloadingAll = false;
 const Backup = (function () {
   let st = null;                 // last /api/backup/status
+  let statusError = false;
   let only = new Set();
   let dismissed = false, wasUp = null;
   const configured = () => !!(st && st.configured);
   const onlyHere = () => only;
   async function refresh() {
-    try { st = await (await fetch('/api/backup/status')).json(); } catch (e) { return; }
+    try { st = await requestJson('/api/backup/status'); statusError = false; }
+    catch (e) { statusError = true; renderPill(); if (typeof Overview !== 'undefined') Overview.renderBackup(); return; }
     only = new Set(st.onlyHereIds || []);
     renderPill(); renderBanner();
     if (typeof Overview !== 'undefined') Overview.renderBackup();
@@ -2714,11 +2740,13 @@ const Backup = (function () {
   }
   function noteState(s) { lastStateSeen = s; renderPill(); renderBanner(); }
   function describe() {
+    if (statusError) return { state: 'warn', short: '☁ Backup unchecked', text: 'Backup status is unavailable. Restore the connection to the app, then check again.' };
     if (!st) return null;
-    if (!st.configured) return { state: 'none', short: '☁ No cloud folder', text: 'Not backed up — no cloud folder is set.' };
-    if (!st.available) return { state: 'warn', short: '☁ pCloud not reachable', text: 'Your cloud folder is not reachable — new photos and videos stay on this PC until it is back.' };
+    if (!st.configured) return { state: 'none', short: '☁ Local archive', text: 'Saved on this PC. Choose a cloud folder if you want a second copy of your media.' };
+    if (!st.available) return { state: 'warn', short: '☁ Cloud folder offline', text: 'The cloud folder is unavailable. Copy counts are last known; reconnect the drive and check again.' };
+    if (!st.total) return { state: 'none', short: '☁ Ready for media', text: 'Your cloud folder is ready. Import or capture some media to begin.' };
     if (st.onlyHere > 0) return { state: 'warn', short: '☁ ' + st.onlyHere + ' not backed up', text: st.onlyHere + ' item' + (st.onlyHere === 1 ? ' is' : 's are') + ' on this PC only.' };
-    return { state: 'ok', short: '☁ Backed up', text: 'Everything is backed up to pCloud.' };
+    return { state: 'ok', short: '☁ Media copied', text: 'All archived media files are present with matching sizes in your cloud folder. Check your cloud app for upload completion. Messages remain on this PC.' };
   }
   function renderPill() {
     const p = fEl('cloud-pill'); if (!p) return;
@@ -2738,7 +2766,10 @@ const Backup = (function () {
     if (down) fEl('cloud-text').textContent = 'Your cloud folder ' + (st.root || '') + ' is not reachable. New photos and videos are being kept on this PC only.';
   }
   async function sweep() {
-    try { await fetch('/api/backup/sweep', { method: 'POST' }); } catch (e) {}
+    try {
+      const result = await requestJson('/api/backup/sweep', { method: 'POST' });
+      if (result.failed) alert(result.failed + ' files could not be copied. Check the source and cloud folders, then try again.');
+    } catch (e) { alert('Could not complete backup: ' + e.message); }
     await refresh();
   }
   const pill = fEl('cloud-pill'); if (pill) pill.addEventListener('click', () => setView('overview'));
@@ -2781,14 +2812,13 @@ const Overview = (function () {
     const el = $('ov-backup'); if (!el) return;
     const st = Backup.status();
     const d = Backup.describe();
-    if (!st || !d) { el.innerHTML = '<div><div class="big">Checking your backup…</div></div>'; el.dataset.state = 'none'; return; }
+    if (!st || !d) { el.innerHTML = '<div><div class="big">' + escapeHtml(d ? d.text : 'Checking your backup…') + '</div></div>'; el.dataset.state = d ? d.state : 'none'; return; }
     el.dataset.state = d.state;
-    if (!st.total) { el.innerHTML = '<div><div class="big">Nothing saved yet</div><div class="line">' + escapeHtml(d.text) + '</div></div>'; return; }
     const pct = st.total ? Math.round(100 * st.onCloud / st.total) : 0;
     const link = lastStateSeen && lastStateSeen.status === 'ready'
       ? '● Linked' + (lastStateSeen.me ? ' as ' + escapeHtml(lastStateSeen.me) : '') + (typeof syncLine === 'function' ? syncLine(lastStateSeen) : '')
       : '● WhatsApp not linked yet';
-    let left = '<div class="big">' + (st.configured ? '<b>' + st.onCloud + '</b> of ' + st.total + ' backed up to pCloud' : st.total + ' items, none backed up yet') + '</div>'
+    let left = '<div class="big">' + (!st.total ? 'Your archive is ready to begin' : st.configured ? '<b>' + st.onCloud + '</b> of ' + st.total + ' media files in cloud folder' + (!st.available ? ' (last known)' : '') : st.total + ' media files saved on this PC') + '</div>'
       + '<div class="line">' + escapeHtml(d.text) + (st.configured && st.available ? ' Backing up to ' + escapeHtml(st.root) + '.' : '') + '</div>'
       + (st.configured ? '<div class="bar"><i style="width:' + pct + '%"></i></div>' : '')
       + '<div class="line">' + link + '</div>';
@@ -2804,9 +2834,9 @@ const Overview = (function () {
   function renderUpkeep() {
     const el = $('ov-upkeep'); if (!el) return;
     const go = (t) => { openSettings(); const tab = document.querySelector('#settabs [data-t="' + t + '"]'); if (tab) tab.click(); };
-    el.innerHTML = '<button class="btn small" data-up="history">Import older</button>'
-      + '<button class="btn small" data-up="ai">Organise now</button>'
-      + '<button class="btn small" data-up="connection">Back up ChatGPT / Gemini</button>'
+    el.innerHTML = '<button class="btn small" data-up="history">Import WhatsApp history</button>'
+      + '<button class="btn small" data-up="ai">Set up AI sorting</button>'
+      + '<button class="btn small" data-up="connection">Manage sources</button>'
       + '<button class="btn small" data-up="cleanup">Clean up</button>';
     el.querySelectorAll('button[data-up]').forEach((b) => b.addEventListener('click', () => b.dataset.up === 'cleanup' ? setView('cleanup') : go(b.dataset.up)));
   }
@@ -2821,18 +2851,21 @@ const Overview = (function () {
     const photos = shown.filter((r) => r.kind === 'image' || r.kind === 'sticker').length;
     const videos = shown.filter((r) => r.kind === 'video').length;
 
+    const shownIds = new Set(shown.map((r) => r.id));
+    const shownAlbums = albums.map((g) => ({ ...g, items: (g.items || []).filter((id) => shownIds.has(id)) })).filter((g) => g.items.length);
+    const shownProjects = !F.source || F.source === 'whatsapp' ? projects : [];
     statsEl.innerHTML = stat(photos, photos === 1 ? 'photo' : 'photos')
       + stat(videos, videos === 1 ? 'video' : 'videos')
-      + stat(chats.length, 'conversations')
-      + stat(projects.length, 'projects')
-      + stat(albums.length, 'albums');
+      + stat(!F.source || F.source === 'whatsapp' ? chats.length : 0, 'WhatsApp conversations')
+      + stat(shownProjects.length, 'projects')
+      + stat(shownAlbums.length, 'albums');
     renderBackup();
     renderUpkeep();
 
     // Projects, busiest first — a project with two chats in it is less of a
     // thing than one with thirty, and the eye should land on the thirty.
     const byName = new Map(chats.map((c) => [c.chatId, c]));
-    const withCounts = projects.map((g) => {
+    const withCounts = shownProjects.map((g) => {
       const ids = (g.items || []).filter((id) => byName.has(id));
       const names = ids
         .map((id) => byName.get(id))
@@ -2842,22 +2875,22 @@ const Overview = (function () {
       return { g, n: (g.items || []).length, names };
     }).sort((a, b) => b.n - a.n);
 
-    projCount.textContent = projects.length ? projects.length + ' found' : '';
+    projCount.textContent = shownProjects.length ? shownProjects.length + ' found' : '';
     projEl.innerHTML = withCounts.length
       ? withCounts.map((x) => card({
           kind: 'project', id: x.g.id, emoji: x.g.emoji, name: x.g.name,
           desc: x.g.description, count: x.n,
           foot: x.names.length ? escapeHtml(x.names.join(' · ')) : '',
         })).join('')
-      : '<p class="muted small">No projects yet — run the sorting and they appear here.</p>';
+      : '<p class="muted small">Projects organise your WhatsApp conversations. Set up AI sorting to create them.</p>';
 
-    albCount.textContent = albums.length ? albums.length + ' found' : '';
-    albEl.innerHTML = albums.length
-      ? albums.slice().sort((a, b) => (b.items || []).length - (a.items || []).length).map((g) => card({
+    albCount.textContent = shownAlbums.length ? shownAlbums.length + ' found' : '';
+    albEl.innerHTML = shownAlbums.length
+      ? shownAlbums.slice().sort((a, b) => (b.items || []).length - (a.items || []).length).map((g) => card({
           kind: 'album', id: g.id, emoji: g.emoji, name: g.name,
           desc: g.description, count: (g.items || []).length, foot: '',
         })).join('')
-      : '<p class="muted small">No albums yet — the pictures are still being read.</p>';
+      : '<p class="muted small">No albums for this source yet. Browse the Gallery, or set up AI sorting to group your pictures.</p>';
   }
 
   const fetchGroups = async (kind) => {
@@ -2868,11 +2901,11 @@ const Overview = (function () {
   async function enter() {
     if (!entered) { entered = true; }
     const [c, p, a] = await Promise.all([
-      fetch('/api/chats').then((r) => r.json()).catch(() => []),
+      requestJson('/api/chats').catch(() => []),
       fetchGroups('chat'),
       fetchGroups('media'),
     ]);
-    chats = c; projects = p; albums = a;
+    chats = Array.isArray(c) ? c : []; projects = p; albums = a;
     if (typeof AI !== 'undefined') {
       try { await AI.ensureChatGroups(); } catch (e) {}
       try { await AI.loadLabels(); } catch (e) {}
@@ -2886,6 +2919,7 @@ const Overview = (function () {
     const b = e.target.closest('.ov-card');
     if (!b) return;
     if (b.dataset.kind === 'album') {
+      const source = F.source; clearAll(); F.source = source; renderSourceBar();
       setView('media');
       if (typeof AI !== 'undefined' && AI.selectAlbum) AI.selectAlbum(b.dataset.id);
       return;
@@ -2902,6 +2936,72 @@ const Overview = (function () {
   return { enter, render, renderBackup };
 })();
 
+
+async function requestJson(url, options = {}) {
+  const response = await fetch(url, { signal: AbortSignal.timeout(120000), ...options });
+  let data;
+  try { data = await response.json(); } catch (_) { throw new Error('The app returned an unreadable response. Try again.'); }
+  if (!response.ok || data.ok === false) throw new Error(data.error || data.message || 'Request failed (' + response.status + ')');
+  if (data.rejected && data.rejected.length) throw new Error('Some settings were not saved: ' + data.rejected.join(', '));
+  return data;
+}
+
+// The overview exposes connection state without starting imports or changing consent.
+const SourceOverview = (() => {
+  const root = $('ov-connections'), next = $('ov-next');
+  let running = false;
+  const ago = (at) => at ? new Date(at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '';
+  const update = (el, html) => { if (el.innerHTML !== html) el.innerHTML = html; };
+  function card(name, text, detail, action, state = '') {
+    return '<article class="source-card"><div class="source-heading"><h3>' + escapeHtml(name) + '</h3><span class="tag ' + state + '">' + escapeHtml(text) + '</span></div><p>' + escapeHtml(detail) + '</p><button class="btn small" data-source-action="' + action + '">' + (action === 'link' ? 'Link WhatsApp' : action === 'history' ? 'Import history' : 'Manage source') + '</button></article>';
+  }
+  function source(name, s) {
+    if (!s) return card(name, 'Unavailable', 'Could not read this source. Open Sources to retry.', 'connection', 'warn');
+    let status = s.linked ? 'Connected' : 'Not connected';
+    let detail = s.linked ? 'Import images to keep a copy in your archive.' : 'Optional: sign in once to import your images.';
+    let tone = s.linked ? 'ok' : '';
+    if (s.status === 'error') { status = 'Needs attention'; detail = s.lastError || 'Open Sources to retry.'; tone = 'bad'; }
+    else if (s.busy) {
+      const p = s.progress || {};
+      status = s.status === 'connecting' ? 'Sign-in window open' : 'Importing'; tone = 'warn';
+      detail = s.status === 'connecting' ? 'Complete sign-in in the window that opened.' : p.of && p.conversations < p.of
+        ? 'Reading chat ' + p.conversations + ' of ' + p.of + '. ' + (p.images || 0) + ' images found; downloads follow.'
+        : 'Downloading images: ' + (p.saved || 0) + ' saved of ' + (p.images || 0) + ' found. You can keep browsing.';
+    } else if (s.lastRun) {
+      detail = 'Last import: ' + ago(s.lastRun.at) + '. ' + s.lastRun.saved + ' new, ' + s.lastRun.skipped + ' already saved.';
+      if (s.lastRun.failed) { status = 'Import incomplete'; detail += ' ' + s.lastRun.failed + ' failed; open Sources for details and retry.'; tone = 'warn'; }
+    }
+    if (s.linked && !s.busy) detail += s.enabled ? ' Scheduled every ' + s.scanHours + ' hours.' : ' Manual imports.';
+    return card(name, status, detail, 'connection', tone);
+  }
+  async function refresh() {
+    if (running || currentView !== 'overview') return;
+    running = true;
+    try {
+      const [wa, cg, gm] = await Promise.all(['/api/state', '/api/chatgpt/state', '/api/gemini/state'].map((url) => requestJson(url).catch(() => null)));
+      const ready = wa && wa.status === 'ready';
+      const broken = wa && wa.health && !wa.health.ok;
+      update(root, card('WhatsApp', !wa ? 'Unavailable' : broken ? 'Needs attention' : ready ? 'Capturing' : wa.status === 'qr' ? 'Scan QR code' : 'Not connected',
+        !wa ? 'The capture engine is unavailable. Check the app or try again.' : broken ? 'Downloads are failing. Open Sources to check the connection.' : ready ? 'New messages and selected media are saved while this app runs.' : 'Link your phone to start saving WhatsApp messages and media.', !wa ? 'app' : ready || broken ? 'connection' : 'link', ready && !broken ? 'ok' : 'warn') + source('ChatGPT', cg) + source('Gemini', gm));
+      let title, detail, action, button;
+      if (!wa) { title = 'The capture engine is unavailable'; detail = 'Open App settings to restart capture. Your saved files remain in their folders.'; action = 'app'; button = 'Open app settings'; }
+      else if (broken) { title = 'WhatsApp capture needs attention'; detail = 'Some downloads are failing. Check the connection before relying on new captures.'; action = 'connection'; button = 'Check connection'; }
+      else if (!ready) { title = 'Start by linking WhatsApp'; detail = 'Have your phone ready. The Gallery shows the QR code and linking instructions.'; action = 'link'; button = 'Link WhatsApp'; }
+      else if (wa.backfill && wa.backfill.running) { title = 'Importing WhatsApp history'; detail = (wa.backfill.doneChats || 0) + ' of ' + (wa.backfill.totalChats || 0) + ' chats checked. You can keep browsing.'; action = 'history'; button = 'View import'; }
+      else if (!(wa.backfill && wa.backfill.lastImportAt)) { title = 'Bring in your older WhatsApp chats'; detail = 'Live capture is running. Import history once to save older messages and media that WhatsApp still makes available.'; action = 'history'; button = 'Import older chats'; }
+      else { title = 'Your archive is ready to explore'; detail = 'Browse your media, read saved conversations, or connect another source below. AI sorting is optional.'; action = 'gallery'; button = 'Browse gallery'; }
+      update(next, '<div><h2>' + escapeHtml(title) + '</h2><p>' + escapeHtml(detail) + '</p></div><button class="btn primary" data-source-action="' + action + '">' + button + '</button>');
+    } finally { running = false; }
+  }
+  document.addEventListener('click', (e) => {
+    const button = e.target.closest('[data-source-action]'); if (!button) return;
+    const action = button.dataset.sourceAction;
+    if (action === 'link' || action === 'gallery') { setView('media'); if (action === 'link') $('link').scrollIntoView({ block: 'center' }); }
+    else openSettingsTab(action);
+  });
+  setInterval(refresh, 5000);
+  return { refresh };
+})();
 
 /* Start-up, last: every module above is defined by this point, and a const
    that has not been reached yet cannot be tested for with typeof. */

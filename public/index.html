@@ -25,8 +25,8 @@
         <button data-v="cleanup">Clean up</button>
       </div>
       <button id="cloud-pill" class="pill cloud" hidden title="Where your backup stands — click for the Overview"></button>
-      <button id="open-settings" class="btn icon" title="Settings">⚙︎</button>
-      <button id="app-exit" class="btn icon danger" title="Close WhatsBackUp completely - it stops capturing until you open it again">&#9211;</button>
+      <button id="open-settings" class="btn icon" title="Settings" aria-label="Settings">⚙︎</button>
+      <button id="app-exit" class="btn icon danger" aria-label="Quit WhatsBackUp" title="Close WhatsBackUp completely - it stops capturing until you open it again">&#9211;</button>
     </div>
   </header>
 
@@ -56,7 +56,7 @@
         <button data-kind="videos">Videos</button>
         <button data-kind="files">Files</button>
       </div>
-      <input id="search" class="grow" type="search" placeholder="Search chats, captions, file names and what is in the photos…" autocomplete="off" />
+      <input id="search" aria-label="Search your gallery" class="grow" type="search" placeholder="Search chats, captions, file names and what is in the photos…" autocomplete="off" />
       <div class="right">
         <select id="f-sort" class="sort" title="Sort by">
           <option value="new">Newest first</option>
@@ -107,7 +107,7 @@
         <label>Backed up
           <select id="f-backup">
             <option value="">Any</option>
-            <option value="cloud">In pCloud</option>
+            <option value="cloud">In cloud folder</option>
             <option value="local">On this PC only</option>
           </select>
         </label>
@@ -133,7 +133,7 @@
   <div id="view-convo" class="convo hidden">
     <aside class="chatlist">
       <div class="chatlist-head">
-        <input id="convo-search" type="search" placeholder="Search what a chat is about…" autocomplete="off" />
+        <input id="convo-search" aria-label="Search saved conversations" type="search" placeholder="Search what a chat is about…" autocomplete="off" />
         <div class="chipsrow" id="convo-projects"></div>
         <label class="sortlbl">Sort by
           <select id="convo-sort">
@@ -155,7 +155,10 @@
 
   <!-- ===== Status Studio ===== -->
   <div id="view-overview" class="overview hidden">
+    <div class="overview-intro"><h1>Your archive, at a glance</h1><p class="muted">Save from your accounts, find what you need, and keep a second copy in your cloud folder.</p></div>
+    <section id="ov-next" class="next-step" aria-label="Next step"></section>
     <section class="ov-backup" id="ov-backup" data-state="none"></section>
+    <section class="ov-sec" aria-labelledby="sources-title"><h2 id="sources-title" class="section-title">Your sources</h2><div id="ov-connections" class="source-cards"></div></section>
     <div class="ov-sources"><span class="muted small">Show</span><div class="seg" id="ov-sources"></div></div>
     <div class="ov-stats" id="ov-stats"></div>
     <div class="ov-sec">
@@ -353,10 +356,11 @@
   <!-- ===== First run ===== -->
   <div id="wizard" class="wizard hidden">
     <div class="wizard-card">
+      <p id="wizard-error" class="bad-text" role="alert"></p>
 
       <section class="wz-step" data-step="welcome">
         <h1>Welcome to WhatsBackUp</h1>
-        <p class="lead">It keeps a copy of every photo, video and message from your WhatsApp — on this PC, and in a cloud folder if you want one.</p>
+        <p class="lead">Save WhatsApp messages and selected media on this PC. You can also copy media to your cloud folder and import images from ChatGPT or Gemini.</p>
         <div class="notice">
           <p><b>Before you start, three things worth knowing:</b></p>
           <ul>
@@ -409,7 +413,7 @@
 
       <section class="wz-step hidden" data-step="cloud">
         <h1>Also copy to a cloud folder?</h1>
-        <p class="lead">If you use pCloud, OneDrive, Dropbox or a network drive, point this at it and videos are written straight there — so your phone's storage never becomes the only copy.</p>
+        <p class="lead">If you use pCloud, OneDrive, Dropbox or a network drive, choose a folder inside it. Media is copied there; your cloud app handles the upload. Message text remains on this PC.</p>
         <div class="row">
           <input id="wz-cloud-root" type="text" class="txt" placeholder="P:\WhatsApp Media  (leave empty to skip)" />
           <button class="btn" id="wz-browse-cloud">Browse…</button>
@@ -446,11 +450,11 @@
   </div>
 
   <!-- ===== Settings ===== -->
-  <div id="settings" class="modal hidden">
+  <div id="settings" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="settings-title">
     <div class="modal-card wide">
       <div class="modal-head">
-        <h2>Settings</h2>
-        <button class="modal-close" id="settings-close">✕</button>
+        <h2 id="settings-title">Settings</h2>
+        <button class="modal-close" id="settings-close" aria-label="Close settings">✕</button>
       </div>
 
       <div class="tabs settabs" id="settabs">
@@ -485,12 +489,12 @@
             <div class="row"><span id="cgpt-last" class="muted small"></span></div>
             <div class="row wrap">
               <button id="cgpt-connect" class="btn primary">Connect ChatGPT&hellip;</button>
-              <button id="cgpt-scan" class="btn">Back up now</button>
+              <button id="cgpt-scan" class="btn">Import now</button>
               <button id="cgpt-disconnect" class="btn danger">Forget this account&hellip;</button>
             </div>
             <label class="row toggle">
               <input type="checkbox" id="set-chatgptEnabled" /><span class="switch"></span>
-              <span>Keep backing up on a schedule</span>
+              <span>Import new images on a schedule</span>
             </label>
             <div class="row">
               <label class="muted small">Look for new photos every
@@ -512,12 +516,12 @@
             <div class="row"><span id="gem-last" class="muted small"></span></div>
             <div class="row wrap">
               <button id="gem-connect" class="btn primary">Connect Gemini&hellip;</button>
-              <button id="gem-scan" class="btn">Back up now</button>
+              <button id="gem-scan" class="btn">Import now</button>
               <button id="gem-disconnect" class="btn danger">Forget this account&hellip;</button>
             </div>
             <label class="row toggle">
               <input type="checkbox" id="set-geminiEnabled" /><span class="switch"></span>
-              <span>Keep backing up on a schedule</span>
+              <span>Import new images on a schedule</span>
             </label>
             <div class="row">
               <label class="muted small">Look for new photos every
@@ -533,8 +537,8 @@
           </div>
 
           <div class="sec" id="cloud-sec">
-            <div class="sec-title">pCloud</div>
-            <p class="muted small">The folder everything is copied to, so nothing is lost if this PC is. Checked against the folder itself, not assumed.</p>
+            <div class="sec-title">Cloud folder</div>
+            <p class="muted small">A second copy of your media. File sizes are checked here; check your cloud app to confirm uploads have finished. Message text stays on this PC.</p>
             <div class="row"><span id="cloud-status" class="muted">&hellip;</span></div>
             <div class="row"><span id="cloud-counts" class="muted small"></span></div>
             <div class="row wrap">
@@ -543,8 +547,8 @@
               <button id="cloud-change" class="btn">Change folder&hellip;</button>
             </div>
             <label class="row toggle"><input type="checkbox" id="set-mirrorImages" /><span class="switch"></span>
-              <span>Back up photos to the cloud folder too &mdash; recommended</span></label>
-            <p class="muted small">Videos always go straight to the cloud folder. Photos are copied there as they arrive and again on every sweep, whether this is on or not; the switch only decides whether the copy happens at once.</p>
+              <span>Copy photos immediately when they arrive</span></label>
+            <p class="muted small">When the cloud folder is available, videos save there directly. All media is checked and copied every 30 minutes. This switch also copies new WhatsApp photos immediately.</p>
           </div>
         </div>
 
@@ -814,7 +818,7 @@
 
       </div>
       <div class="modal-foot">
-        <span id="save-status" class="muted small"></span>
+        <span id="save-status" role="status" aria-live="polite" class="muted small"></span>
         <button id="settings-save" class="btn primary">Save settings</button>
       </div>
     </div>

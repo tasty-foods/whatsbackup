@@ -4,6 +4,8 @@ A Windows desktop app that saves every photo, video and message from your WhatsA
 
 For installing and using it, see **[INSTALL.md](INSTALL.md)**. This file is about how it's built.
 
+The [1.4.1 usability audit](AUDIT.md) records the reviewed flows, shipped changes and remaining product limits. Current additions include ChatGPT and Gemini image imports (`src/chatgpt/`, `src/gemini/`), media copy verification (`src/backup.js`), reversible cleanup (`src/cleanup/`), and opt-in status scheduling (`src/status/`). Import summaries are persisted in `data/*-import.json`. Run `npm test` for backup regression checks.
+
 ---
 
 ## How it works
@@ -45,8 +47,7 @@ Nothing writable lives next to the program. Installed, everything is under
 | `logs\` | rotating log, capped by the `logMaxMB` setting |
 | `media\` | images / videos / files, unless the user chose another folder |
 
-Run from source (`npm run server`) and it all falls back to the project folder,
-so development doesn't touch the installed copy. `src/paths.js` is the switch.
+Run only the server (`npm run server`) without `WB_HOME` and data falls back to the project folder. The Electron shell (`npm start`) sets `WB_HOME` to the installed app's data folder even in development, so it shares that archive. Use a separate `WB_HOME` with the server for isolated testing. `src/paths.js` is the switch.
 
 `electron/migrate.js` imports an older install: it refuses to run while the old
 copy is alive (a live SQLite `-wal` holds writes the `.db` doesn't have yet),

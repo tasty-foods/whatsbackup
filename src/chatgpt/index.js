@@ -20,6 +20,7 @@ const paths = require('../paths');
 const cfg = require('../config');
 const settings = require('../settings');
 const store = require('../store');
+const history = require('../source-history');
 
 const PROFILE_DIR = paths.CHATGPT_DIR;
 const ORIGIN = 'https://chatgpt.com';
@@ -94,7 +95,7 @@ async function sessionToken(page) {
   try {
     return await page.evaluate(async () => {
       try {
-        const r = await fetch('/api/auth/session', { credentials: 'include' });
+        const r = await fetch('/api/auth/session', { credentials: 'include', signal: AbortSignal.timeout(45000) });
         if (!r.ok) return null;
         const j = await r.json();
         return j && j.accessToken ? j.accessToken : null;
@@ -176,6 +177,7 @@ async function checkLink() {
 // that hangs — and one did, for half an hour, with nothing to show — is then
 // one failed chat or one failed picture, not a scan that never ends.
 const REQ_TIMEOUT_MS = 45 * 1000;
+const READ_PAUSE_MS = 700;                   // between conversation reads; grows when the server pushes back
 
 async function listConversations(page, token) {
   return page.evaluate(async (tok, reqMs) => {
@@ -205,7 +207,11 @@ async function readConversation(page, token, conv) {
     const h = { Authorization: 'Bearer ' + tok };
     const ac = new AbortController(); const t = setTimeout(() => ac.abort(), reqMs);
     let d;
-    try { const r = await fetch('/backend-api/conversation/' + c.id, { headers: h, credentials: 'include', signal: ac.signal }); if (!r.ok) throw new Error('http ' + r.status); d = await r.json(); }
+    try {
+      const r = await fetch('/backend-api/conversation/' + c.id, { headers: h, credentials: 'include', signal: ac.signal });
+      if (!r.ok) { const e = new Error('http ' + r.status); e.status = r.status; e.retryAfter = Number(r.headers.get('retry-after')) || 0; throw e; }
+      d = await r.json();
+    } catch (e) { return { error: String(e && e.message || e), status: e && e.status, retryAfter: e && e.retryAfter }; }
     finally { clearTimeout(t); }
     const parts = [];
     const nodes = Object.values(d.mapping || {});
@@ -232,7 +238,7 @@ async function readConversation(page, token, conv) {
         });
       }
     }
-    return parts;
+    return { parts };
   }, token, conv, REQ_TIMEOUT_MS);
 }
 
@@ -240,8 +246,7 @@ async function fetchImage(page, token, fileId) {
   return page.evaluate(async (tok, fid, reqMs) => {
     const h = { Authorization: 'Bearer ' + tok };
     const withDeadline = async (url, opts) => {
-      const ac = new AbortController(); const t = setTimeout(() => ac.abort(), reqMs);
-      try { return await fetch(url, { ...opts, signal: ac.signal }); } finally { clearTimeout(t); }
+      return fetch(url, { ...opts, signal: AbortSignal.timeout(reqMs) });
     };
     const r = await withDeadline('/backend-api/files/' + fid + '/download', { headers: h, credentials: 'include' });
     if (!r.ok) return { error: 'download ' + r.status };
@@ -276,7 +281,7 @@ async function scan({ reason = 'manual' } = {}) {
   if (state.busy) return { ok: false, error: 'already busy' };
   if (!hasProfile()) { state.status = 'unlinked'; return { ok: false, error: 'not connected' }; }
   state.busy = true; state.status = 'scanning'; state.lastError = null; state.progress = { conversations: 0, of: 0, images: 0, saved: 0 };
-  const run = { conversations: 0, images: 0, saved: 0, skipped: 0, failed: 0, at: Date.now(), reason };
+  const run = { conversations: 0, images: 0, saved: 0, skipped: 0, failed: 0, failedChats: 0, failedImages: 0, firstError: null, at: Date.now(), reason };
   try {
     const b = await launch();
     const page = await openPage(b);
@@ -285,16 +290,36 @@ async function scan({ reason = 'manual' } = {}) {
     state.linked = true;
 
     const convs = await listConversations(page, token);
-    state.progress = { conversations: 0, of: convs.length, images: 0, saved: 0 };
+    state.progress = { phase: 'reading', conversations: 0, of: convs.length, images: 0, saved: 0 };
     const parts = []; const seenFiles = new Set();
+    // Read at a walking pace. Two thousand conversations at full speed is what
+    // a rate limiter is for, and it answered accordingly: 2,081 of 2,098 refused.
+    let pause = READ_PAUSE_MS;
     for (const c of convs) {
-      let got = [];
-      try { got = await readConversation(page, token, c); } catch (e) { run.failed++; }
-      for (const x of got) { if (!seenFiles.has(x.fileId)) { seenFiles.add(x.fileId); parts.push(x); } }
+      let got = null;
+      for (let attempt = 0; attempt < 4 && !got; attempt++) {
+        let res = null;
+        try { res = await readConversation(page, token, c); } catch (e) { res = { error: e.message }; }
+        if (res && res.parts) { got = res.parts; pause = Math.max(READ_PAUSE_MS, Math.round(pause * 0.8)); break; }
+        const status = res && res.status;
+        run.lastReadError = (res && res.error) || 'unknown';
+        if (status === 429 || status === 403 || status >= 500 || !status) {
+          // Backed off: what the server asked for, or doubling, up to a minute.
+          const wait = Math.min(60000, Math.max((res && res.retryAfter || 0) * 1000, pause * 2 * (attempt + 1)));
+          pause = Math.min(10000, pause * 2);
+          await new Promise((r) => setTimeout(r, wait));
+          continue;
+        }
+        break;                                   // a 404 or similar: not worth retrying
+      }
+      if (!got) { run.failed++; run.failedChats++; if (!run.firstError) run.firstError = run.lastReadError; }
+      for (const x of (got || [])) { if (!seenFiles.has(x.fileId)) { seenFiles.add(x.fileId); parts.push(x); } }
       run.conversations++;
+      await new Promise((r) => setTimeout(r, pause));
       state.progress.conversations = run.conversations; state.progress.images = parts.length;
     }
     run.images = parts.length;
+    state.progress.phase = 'downloading';
 
     fs.mkdirSync(cfg.IMAGES_DIR, { recursive: true });
     for (const part of parts) {
@@ -303,13 +328,13 @@ async function scan({ reason = 'manual' } = {}) {
       let got;
       try { got = await fetchImage(page, token, part.fileId); }
       catch (e) { got = { error: e.message }; }
-      if (!got || got.error) { run.failed++; continue; }
+      if (!got || got.error) { run.failed++; run.failedImages++; if (!run.firstError) run.firstError = got && got.error || 'Image download failed'; continue; }
       const ts = part.createTime ? Math.round(part.createTime * 1000) : Date.now();
       const ext = extFor(got.mime || part.mime, got.name);
       const filename = `${stamp(ts)}__chatgpt__${safe(part.title)}__${part.fileId.slice(-10)}.${ext}`;
       const bytes = Buffer.from(got.b64, 'base64');
       try { fs.writeFileSync(path.join(cfg.IMAGES_DIR, filename), bytes); }
-      catch (e) { run.failed++; continue; }
+      catch (e) { run.failed++; run.failedImages++; if (!run.firstError) run.firstError = e.message; continue; }
       const rec = {
         id, ts,
         // What you sent in is "out", what came back is "in" — the same reading
@@ -335,9 +360,11 @@ async function scan({ reason = 'manual' } = {}) {
     }
     state.lastScanAt = Date.now();
     state.lastRun = run;
+    history.write('chatgpt', run);
     state.status = 'linked';
     if (run.saved) { try { require('../backup').nudge(); } catch (_) {} }
-    log(`scan (${reason}): ${run.conversations} conversations, ${run.images} images, ${run.saved} new, ${run.skipped} already had, ${run.failed} failed`);
+    log(`scan (${reason}): ${run.conversations} conversations, ${run.images} images, ${run.saved} new, ${run.skipped} already had, ${run.failed} failed${run.lastReadError ? ' (last: ' + run.lastReadError + ')' : ''}`);
+    if (run.failed > run.conversations / 2) state.lastError = run.failed + ' of ' + run.conversations + ' chats could not be read' + (run.lastReadError ? ' — ' + run.lastReadError : '') + '. It will try again on the next look.';
     return { ok: true, ...run };
   } catch (e) {
     state.lastError = e.message;
@@ -366,6 +393,8 @@ function schedule() {
 
 function init() {
   const s = settings.read();
+  state.lastRun = history.read('chatgpt');
+  state.lastScanAt = state.lastRun ? state.lastRun.at : null;
   state.linked = hasProfile();
   state.status = state.linked ? 'linked' : (s.chatgptEnabled ? 'unlinked' : 'off');
   if (!s.chatgptEnabled) return;

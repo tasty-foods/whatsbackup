@@ -20,6 +20,7 @@ const paths = require('../paths');
 const cfg = require('../config');
 const settings = require('../settings');
 const store = require('../store');
+const history = require('../source-history');
 
 const PROFILE_DIR = paths.GEMINI_DIR;
 const ORIGIN = 'https://gemini.google.com';
@@ -276,6 +277,7 @@ async function scan({ reason = 'manual' } = {}) {
     }
     state.lastScanAt = Date.now();
     state.lastRun = run;
+    history.write('gemini', run);
     state.status = 'linked';
     if (run.saved) { try { require('../backup').nudge(); } catch (_) {} }
     log(`scan (${reason}): ${run.images} pictures in the library, ${run.saved} new, ${run.skipped} already had, ${run.failed} failed`);
@@ -307,6 +309,8 @@ function schedule() {
 
 function init() {
   const s = settings.read();
+  state.lastRun = history.read('gemini');
+  state.lastScanAt = state.lastRun ? state.lastRun.at : null;
   state.linked = hasProfile();
   state.status = state.linked ? 'linked' : (s.geminiEnabled ? 'unlinked' : 'off');
   if (!s.geminiEnabled) return;

@@ -22,7 +22,6 @@ const PROBE_TTL_MS = 30 * 1000;       // how often to re-check that the drive is
 const EXIST_TTL_MS = 120 * 1000;      // how long a "yes, it is on the cloud" answer is trusted
 const NUDGE_DELAY_MS = 20 * 1000;     // captures come in bursts; one sweep after the burst
 const SWEEP_EVERY_MS = 30 * 60 * 1000;
-const MAX_LIST = 2000;
 
 const state = {
   running: false,
@@ -65,17 +64,22 @@ function available() {
   if (!cfg.CLOUD_ROOT) return false;
   if (Date.now() - probe.at < PROBE_TTL_MS) return probe.available;
   let ok = false;
-  try { fs.mkdirSync(path.join(cfg.CLOUD_ROOT, 'Images'), { recursive: true }); ok = fs.existsSync(cfg.CLOUD_ROOT); } catch (_) { ok = false; }
+  try { ok = fs.statSync(cfg.CLOUD_ROOT).isDirectory(); } catch (_) { ok = false; }
   probe = { at: Date.now(), available: ok };
   return ok;
 }
 
 function onCloud(rec) {
   const hit = known.get(rec.id);
-  if (hit && (hit.on || Date.now() - hit.at < EXIST_TTL_MS)) return hit.on;
+  if (hit && Date.now() - hit.at < EXIST_TTL_MS) return hit.on;
   const p = cloudPathFor(rec);
   let on = false;
-  if (p) { try { on = fs.existsSync(p); } catch (_) { on = false; } }
+  if (p) {
+    try {
+      const file = fs.statSync(p);
+      on = file.isFile() && file.size > 0 && (!rec.size || file.size === rec.size);
+    } catch (_) { on = false; }
+  }
   known.set(rec.id, { on, at: Date.now() });
   return on;
 }
@@ -95,7 +99,7 @@ function status({ ids = true } = {}) {
     // With no drive configured nothing is on the cloud and that is the answer;
     // with one configured but away, the last known answers stand.
     const here = configured && onCloud(r);
-    if (here) { on++; byKind[k].onCloud++; } else if (onlyHere.length < MAX_LIST) onlyHere.push(r.id);
+    if (here) { on++; byKind[k].onCloud++; } else onlyHere.push(r.id);
   }
   return {
     configured, available: avail, root: cfg.CLOUD_ROOT || null,
@@ -111,7 +115,9 @@ function status({ ids = true } = {}) {
 async function sweep({ reason = 'manual' } = {}) {
   if (state.running) return { ok: false, error: 'already running' };
   if (!cfg.CLOUD_ROOT) return { ok: false, error: 'no cloud folder set' };
+  probe.at = 0;
   if (!available()) return { ok: false, error: 'cloud folder not reachable' };
+  known.clear();
   state.running = true; state.startedAt = Date.now(); state.finishedAt = null;
   state.copied = 0; state.failed = 0; state.bytes = 0; state.lastError = null;
   const hidden = store.hiddenIds();
@@ -122,17 +128,27 @@ async function sweep({ reason = 'manual' } = {}) {
       if (onCloud(r)) continue;
       const src = localPathFor(r);
       const dst = cloudPathFor(r);
-      if (!src || !dst) continue;                 // nothing here to copy from
+      if (!src || !dst) {
+        state.failed++; state.lastError = 'An original file is missing. Check your media folder.';
+        continue;
+      }
+      const temporary = dst + '.whatsbackup-part';
       try {
+        if (path.resolve(src) === path.resolve(dst)) throw new Error('The cloud file is incomplete and no separate local copy is available.');
         fs.mkdirSync(path.dirname(dst), { recursive: true });
-        fs.copyFileSync(src, dst);
+        fs.copyFileSync(src, temporary);
+        const size = fs.statSync(temporary).size;
+        if (!size || (r.size && size !== r.size)) throw new Error('The copied file size does not match the archive.');
+        fs.renameSync(temporary, dst);
         state.copied++;
         try { state.bytes += fs.statSync(dst).size; } catch (_) {}
         known.set(r.id, { on: true, at: Date.now() });
       } catch (e) {
+        try { fs.rmSync(temporary, { force: true }); } catch (_) {}
         state.failed++; state.lastError = e.message;
         // The drive going away mid-sweep looks like a run of failures; stop
         // rather than fail every remaining item one by one.
+        probe.at = 0;
         if (!available()) break;
       }
       // Yield now and then so a big first sweep does not stall the server.
