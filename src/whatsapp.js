@@ -531,12 +531,14 @@ function buildClient() {
   });
 
   c.on('qr', async (qr) => {
+    clearTimeout(startWatchdog);
     state.status = 'qr';
     try { state.qrDataUrl = await qrcode.toDataURL(qr, { margin: 1, width: 320 }); } catch (_) {}
     console.log(`\n[link] Scan required at http://localhost:${cfg.PORT}\n`);
   });
-  c.on('authenticated', () => { state.status = 'authenticated'; state.qrDataUrl = null; });
+  c.on('authenticated', () => { state.status = 'authenticated'; state.qrDataUrl = null; clearTimeout(startWatchdog); });
   c.on('ready', () => {
+    clearTimeout(startWatchdog); startAttempts = 0;
     state.status = 'ready';
     state.qrDataUrl = null;
     state.needsRelink = false;
@@ -586,10 +588,38 @@ function scheduleReconnect(c) {
   }, delay);
 }
 
-function startClient() {
-  store.loadAll();
-  try { messages.init(); } catch (e) { console.error('[messages] init failed:', e.message); }
+// A start that neither succeeds nor fails is the worst kind: no QR, no
+// "ready", no error — and no browser, once, for nine minutes, after a start
+// that had timed out and been killed. Nothing is captured while it waits.
+// So a start is watched: make no progress for this long and it is torn
+// down and begun again, a few times, with the wait growing each time.
+const START_WATCHDOG_MS = 4 * 60 * 1000;
+let startAttempts = 0;
+let startWatchdog = null;
+
+function watchStart() {
+  clearTimeout(startWatchdog);
+  startWatchdog = setTimeout(async () => {
+    if (state.status !== 'starting') return;          // it got somewhere
+    startAttempts++;
+    const again = startAttempts <= 5;
+    console.error(`[link] no progress after ${Math.round(START_WATCHDOG_MS / 60000)} min — ${again ? 'restarting the link (attempt ' + startAttempts + ')' : 'giving up until the app is restarted'}`);
+    try { if (client) await client.destroy(); } catch (_) {}
+    client = null;
+    if (!again) { state.status = 'error'; state.lastError = 'WhatsApp did not start after several tries. Restart the app.'; return; }
+    setTimeout(() => startClient({ retry: true }), Math.min(60000, 5000 * startAttempts));
+  }, START_WATCHDOG_MS);
+  if (startWatchdog.unref) startWatchdog.unref();
+}
+
+function startClient({ retry = false } = {}) {
+  if (!retry) {
+    store.loadAll();
+    try { messages.init(); } catch (e) { console.error('[messages] init failed:', e.message); }
+  }
+  state.status = 'starting';
   client = buildClient();
+  watchStart();
   // A failed first start is retried the way a dropped link is, rather than
   // left as an error until someone restarts the app.
   client.initialize().catch((e) => { state.status = 'error'; state.lastError = e.message; console.error('[link] initialize failed:', e.message); scheduleReconnect(client); });
