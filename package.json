@@ -1,7 +1,7 @@
 {
   "name": "whatsbackup",
   "productName": "WhatsBackUp",
-  "version": "1.4.4",
+  "version": "1.4.5",
   "private": true,
   "description": "Saves WhatsApp media and messages, imports ChatGPT and Gemini images, and copies media to your cloud folder.",
   "author": {

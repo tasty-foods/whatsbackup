@@ -6,7 +6,7 @@
 
 Site: https://whatsbackup.cc/
 Source: https://github.com/tasty-foods/whatsbackup
-Current application version: 1.4.4
+Current application version: 1.4.5
 Website updated: 9 September 2026
 Primary audience: small businesses that use WhatsApp for daily work, with dedicated
 paths for personal memories and creators collecting AI images. The homepage uses
@@ -42,14 +42,14 @@ Price: the app is free. Optional AI provider charges and limits apply.
   consent and initially in dry run, with quiet hours and posting limits.
 - Search saved conversations and export readable HTML transcripts.
 
-## Latest improvements in 1.4.4
+## Latest improvements in 1.4.5
 
-- ChatGPT import can take the photos you sent, the photos it made, or both;
-  conversations are never imported or stored.
-- Source cards say where photos are saved, where the cloud copy goes and how
-  many there are; Settings → Where lists the archive per source.
-- A chat outside the address book is shown by its number instead of "unknown".
-- A maintenance route merges another WhatsBackUp data folder into this one.
+- Each fallback-chain row that needs an API key carries its own key box; the
+  key is saved against that provider and encrypted with the Windows account.
+- The per-row model box refuses anything shaped like an API key and says where
+  the key belongs, so a key is never written to the settings file in the clear.
+- From 1.4.4: sources say what they import, where photos are saved and how many
+  there are; a chat outside the address book is shown by its number.
 
 ## Limits and privacy
 
