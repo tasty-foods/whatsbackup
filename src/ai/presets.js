@@ -76,14 +76,14 @@ const PRESETS = {
     api: 'openai',
     baseUrl: 'https://api.groq.com/openai/v1',
     keyRequired: true,
-    keyHint: 'console.groq.com — 1,000 requests a day, text only',
-    // Groq's catalogue carried vision models once and does not now: on
-    // 2026-09-09 nothing in it reads images. Left as a text provider, which is
-    // what it is good at — the chain routes photographs past a blind provider
-    // on its own, so this still earns its place on the conversations.
-    models: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'openai/gpt-oss-120b'],
-    defaultModel: 'llama-3.3-70b-versatile',
-    vision: false,
+    keyHint: 'console.groq.com — 1,000 requests a day',
+    // Groq's catalogue lost its vision models and has them back: checked
+    // 2026-09-10, the qwen3 pair reads images, the llamas do not. The reading
+    // one leads, so a chain that reaches Groq can still sort photographs; the
+    // llamas stay on the list because they are quicker on conversations.
+    models: ['qwen/qwen3.8-27b', 'qwen/qwen3.6-27b', 'llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'openai/gpt-oss-120b'],
+    defaultModel: 'qwen/qwen3.8-27b',
+    vision: true,
     jsonSchema: true,
   },
   ollama: {
