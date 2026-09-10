@@ -343,7 +343,9 @@ table.paths td.v { color: var(--text); font-family: ui-monospace, Consolas, mono
 /* ===== AI sorting ===== */
 
 /* Album chips above the gallery */
-.albumbar { display: flex; gap: 8px; flex-wrap: wrap; padding: 12px 18px 0; }
+/* One scrollable line: thirty-five albums in three rows pushed the photos down. */
+.albumbar { display: flex; gap: 8px; flex-wrap: nowrap; overflow-x: auto; padding: 12px 18px 4px; scrollbar-width: thin; }
+.albumbar .chip { flex: 0 0 auto; }
 .albumbar.hidden { display: none; }
 .chip { display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
   background: var(--panel); border: 1px solid var(--line); color: var(--text);
