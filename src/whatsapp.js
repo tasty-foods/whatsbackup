@@ -574,6 +574,7 @@ function buildClient() {
 // reschedule if the attempt itself fails — so a transient failure doesn't
 // permanently kill capture.
 function scheduleReconnect(c) {
+  if (c !== client) return;                              // not the one that is running any more
   if (reconnecting) return;
   reconnecting = true;
   const delay = Math.min(60000, 5000 * Math.pow(2, reconnectAttempts));
@@ -604,8 +605,9 @@ function watchStart() {
     startAttempts++;
     const again = startAttempts <= 5;
     console.error(`[link] no progress after ${Math.round(START_WATCHDOG_MS / 60000)} min — ${again ? 'restarting the link (attempt ' + startAttempts + ')' : 'giving up until the app is restarted'}`);
-    try { if (client) await client.destroy(); } catch (_) {}
-    client = null;
+    clearTimeout(reconnectTimer); reconnectTimer = null;
+    const old = client; client = null;                  // nothing may reconnect the old one now
+    try { if (old) await old.destroy(); } catch (_) {}
     if (!again) { state.status = 'error'; state.lastError = 'WhatsApp did not start after several tries. Restart the app.'; return; }
     setTimeout(() => startClient({ retry: true }), Math.min(60000, 5000 * startAttempts));
   }, START_WATCHDOG_MS);
@@ -622,7 +624,11 @@ function startClient({ retry = false } = {}) {
   watchStart();
   // A failed first start is retried the way a dropped link is, rather than
   // left as an error until someone restarts the app.
-  client.initialize().catch((e) => { state.status = 'error'; state.lastError = e.message; console.error('[link] initialize failed:', e.message); scheduleReconnect(client); });
+  const mine = client;
+  client.initialize().catch((e) => {
+    if (client !== mine) return;                         // torn down by the watchdog; it is starting a fresh one
+    state.status = 'error'; state.lastError = e.message; console.error('[link] initialize failed:', e.message); scheduleReconnect(mine);
+  });
   return client;
 }
 
