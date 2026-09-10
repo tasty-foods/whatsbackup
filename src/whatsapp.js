@@ -507,12 +507,24 @@ async function sendStatus(content) {
 // The status-card renderer borrows the browser this client already owns.
 const getBrowser = () => (client && client.pupBrowser) || null;
 
+function browserUserAgent() {
+  let major = '146';
+  try {
+    const m = /win64-(\d+)\./.exec(String(cfg.CHROME_PATH || '')) || /^(\d+)\./.exec(process.versions.chrome || '');
+    if (m) major = m[1];
+  } catch (_) {}
+  return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/' + major + '.0.0.0 Safari/537.36';
+}
+
 function buildClient() {
   // Chromium's sandbox works out of the box on Windows — the --no-sandbox pair
   // this used to carry are Linux/CI habits, and running unsandboxed while
   // rendering media from strangers is exposure we don't need. WB_NO_SANDBOX is
   // the escape hatch if some machine turns out to need it.
-  const args = ['--disable-gpu'];
+  // WhatsApp Web answers a browser that calls itself HeadlessChrome with
+  // "update Chrome" and nothing else - from one morning on, after months of
+  // working. It is the same Chrome; it gives the name of the Chrome it is.
+  const args = ['--disable-gpu', '--user-agent=' + browserUserAgent(), '--disable-blink-features=AutomationControlled'];
   if (process.env.WB_NO_SANDBOX === '1') args.push('--no-sandbox', '--disable-setuid-sandbox');
   // WA_DEBUG_PORT opens Chrome's debugging port so the WhatsApp Web page can be
   // inspected while the app runs — needed whenever WhatsApp changes its
@@ -522,7 +534,7 @@ function buildClient() {
   const puppeteerOpts = {
     // WhatsApp Web can take minutes to come up on a large account; the
     // three-minute default was hit once and left the link in "error".
-    protocolTimeout: 10 * 60 * 1000, headless: true, args };
+    protocolTimeout: 10 * 60 * 1000, headless: true, args, ignoreDefaultArgs: ['--enable-automation'] };
   if (cfg.CHROME_PATH) puppeteerOpts.executablePath = cfg.CHROME_PATH;  // the Chrome we ship
 
   const c = new Client({
