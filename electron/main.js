@@ -487,7 +487,9 @@ function registerIpc() {
   ipcMain.handle('wb:installUpdate', () => {
     if (!updater || updateState.status !== 'ready') return false;
     quitting = true;
-    setImmediate(() => { try { updater.quitAndInstall(false, true); } catch (e) { console.error('[update] install failed:', e.message); } });
+    // Silent: the person pressed Install in the app; a second wizard asking
+    // the same question is the thing that made it look like nothing happened.
+    setImmediate(() => { try { updater.quitAndInstall(true, true); } catch (e) { console.error('[update] install failed:', e.message); } });
     return true;
   });
   ipcMain.handle('wb:quit', () => { quitting = true; app.quit(); return true; });
