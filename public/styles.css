@@ -711,7 +711,10 @@ table.paths td.v { color: var(--text); font-family: ui-monospace, Consolas, mono
 .tile .badge[data-source=gemini] { color: var(--src-gemini); }
 
 /* Conversations head: chips and a sort. */
-.chipsrow { display: flex; gap: 6px; flex-wrap: wrap; padding: 8px 0 0; }
+/* One scrollable line: eighteen projects stacked one per line in a 300px pane
+   pushed the conversations themselves below the fold. */
+.chipsrow { display: flex; gap: 6px; flex-wrap: nowrap; overflow-x: auto; padding: 8px 0 4px; scrollbar-width: thin; }
+.chipsrow .chip { flex: 0 0 auto; }
 .chipsrow .chip { font-size: var(--fs-sm); padding: 4px 10px; }
 .sortlbl { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: var(--fs-sm); padding-top: 8px; }
 .sortlbl select { background: var(--panel); border: 1px solid var(--line); color: var(--text); border-radius: var(--r-pill); padding: 4px 8px; font: inherit; font-size: var(--fs-sm); }
