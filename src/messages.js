@@ -196,7 +196,11 @@ function renameChat(chatId, name) {
 // newest real name a chat has ever been saved under wins for all its rows.
 function bestNameFor(chatId) {
   const r = init().prepare("SELECT chat_name AS name FROM messages WHERE chat_id = ? AND chat_name IS NOT NULL AND chat_name <> '' AND chat_name <> 'unknown' ORDER BY ts DESC LIMIT 1").get(chatId);
-  return r ? r.name : null;
+  if (r) return r.name;
+  // A number that is in no address book has no name to find; the number
+  // itself is a better label than "unknown". (@lid ids are not numbers.)
+  const m = /^(\d{8,15})@c\.us$/.exec(String(chatId || ''));
+  return m ? '+' + m[1] : null;
 }
 function selfHealNames() {
   let fixed = 0;
