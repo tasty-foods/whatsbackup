@@ -723,6 +723,65 @@ function createApp() {
     res.json(out);
   });
 
+  // The same picture, saved more than once. Gemini minted a new id for a
+  // picture on every visit until this was fixed, so a library could be held
+  // several times over. Sameness is the bytes, not the name or the id: the
+  // oldest record of each picture is kept and the rest let go, file and cloud
+  // copy with them. A backup of the index is written first.
+  app.post('/api/maintenance/dedupe', sameOrigin, (req, res) => {
+    const fsx = require('fs');
+    const crypto = require('crypto');
+    const dry = !!(req.body && req.body.dryRun);
+    const only = String((req.body && req.body.source) || '').trim();
+    const out = { dryRun: dry, source: only || 'every source', looked: 0, pictures: 0, extra: 0,
+                  removed: 0, filesDeleted: 0, cloudDeleted: 0, bytesFreed: 0, backup: null, errors: [] };
+    const localOf = (r) => path.join(r.kind === 'video' ? cfg.VIDEO_DIR : (r.kind === 'image' || r.kind === 'sticker') ? cfg.IMAGES_DIR : cfg.FILES_DIR, r.filename);
+    const cloudOf = (r) => cfg.CLOUD_ROOT ? path.join(cfg.CLOUD_ROOT, r.kind === 'video' ? 'Videos' : 'Images', r.filename) : null;
+    try {
+      const groups = new Map();                       // hash -> records, oldest first
+      for (const r of store.listRecords({})) {
+        if (only && (r.source || 'whatsapp') !== only) continue;
+        out.looked++;
+        let h = r.hash;
+        if (!h) { try { h = crypto.createHash('sha1').update(fsx.readFileSync(localOf(r))).digest('hex'); } catch (_) { continue; } }
+        // The same picture sent to two people is two pictures: it belongs in
+        // both conversations, and collapsing them would empty one. Only a
+        // picture repeated within one chat is the same picture twice.
+        const key = (r.source || 'whatsapp') + ':' + (r.chat || '') + ':' + h;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(r);
+      }
+      out.pictures = groups.size;
+      const doomed = [];
+      for (const list of groups.values()) {
+        if (list.length < 2) continue;
+        list.sort((a, b) => (a.ts - b.ts) || String(a.id).localeCompare(String(b.id)));
+        for (const r of list.slice(1)) doomed.push(r);   // everything but the oldest
+      }
+      out.extra = doomed.length;
+      if (!doomed.length || dry) {
+        out.bytesFreed = doomed.reduce((s, r) => s + (r.size || 0), 0);
+        return res.json(out);
+      }
+      const bk = path.join(cfg.DATA_DIR, 'index.before-dedupe-' + Date.now() + '.ndjson');
+      fsx.copyFileSync(cfg.INDEX_FILE, bk);
+      out.backup = bk;
+      const namedBy = new Map();                       // filename -> how many records name it
+      for (const r of store.listRecords({})) namedBy.set(r.filename, (namedBy.get(r.filename) || 0) + 1);
+      for (const r of doomed) {
+        if ((namedBy.get(r.filename) || 0) <= 1) {       // never delete a file another record still names
+          try { const p = localOf(r); if (fsx.existsSync(p)) { out.bytesFreed += fsx.statSync(p).size; fsx.unlinkSync(p); out.filesDeleted++; } }
+          catch (e) { out.errors.push('local ' + r.filename + ': ' + e.message); }
+          const c = cloudOf(r);
+          try { if (c && fsx.existsSync(c)) { fsx.unlinkSync(c); out.cloudDeleted++; } }
+          catch (e) { out.errors.push('cloud ' + r.filename + ': ' + e.message); }
+        }
+      }
+      out.removed = store.removeRecords(doomed.map((r) => r.id));
+    } catch (e) { out.errors.push(e.message); }
+    res.json(out);
+  });
+
   app.get('/healthz', (req, res) => res.json({ ok: true }));
   return app;
 }

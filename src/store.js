@@ -98,4 +98,21 @@ function renameChat(chatId, name) {
   return changed;
 }
 
-module.exports = { renameChat, ensureDirs, loadAll, has, get, addRecord, listRecords, counts, hide, unhide, hiddenIds };
+// Records taken out for good — the one case the append-only index is
+// rewritten with something missing. Used where a record should never have
+// existed (the same picture saved twice), not for anything a person might
+// want back: that is what quarantine is for.
+function removeRecords(ids) {
+  const drop = new Set(ids);
+  const before = records.length;
+  records = records.filter((r) => !drop.has(r.id));
+  if (records.length === before) return 0;
+  for (const id of drop) { seen.delete(id); byId.delete(id); hidden.delete(id); }
+  saveHidden();
+  const tmp = cfg.INDEX_FILE + '.tmp';
+  fs.writeFileSync(tmp, records.slice().sort((a, b) => a.ts - b.ts).map((r) => JSON.stringify(r)).join('\n') + '\n');
+  fs.renameSync(tmp, cfg.INDEX_FILE);
+  return before - records.length;
+}
+
+module.exports = { renameChat, ensureDirs, loadAll, has, get, addRecord, removeRecords, listRecords, counts, hide, unhide, hiddenIds };
