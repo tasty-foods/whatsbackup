@@ -6,6 +6,7 @@ const path = require('path');
 const cfg = require('./config');
 const store = require('./store');
 const settings = require('./settings');
+const paths = require('./paths');
 const maintenance = require('./maintenance');
 const messages = require('./messages');
 const exporter = require('./exporter');
@@ -102,6 +103,8 @@ const SETTING_SPEC = {
   statusAiChatAware: { type: 'bool' },
   chatgptEnabled: { type: 'bool' },
   chatgptScanHours: { type: 'int', min: 1, max: 168 },
+  chatgptUploads: { type: 'bool' },
+  chatgptGenerated: { type: 'bool' },
   geminiEnabled: { type: 'bool' },
   geminiScanHours: { type: 'int', min: 1, max: 168 },
 };
@@ -274,6 +277,26 @@ function createApp() {
   });
 
   // ---- Storage readout ----
+  // Per source: how many, how much, where — so Settings can say it.
+  app.get('/api/sources/summary', (req, res) => {
+    const hidden = store.hiddenIds();
+    const out = { whatsapp: { count: 0, bytes: 0 }, chatgpt: { count: 0, bytes: 0 }, gemini: { count: 0, bytes: 0 } };
+    for (const r of store.listRecords({})) {
+      if (hidden.has(r.id) || r.sample) continue;
+      const k = r.source === 'chatgpt' || r.source === 'gemini' ? r.source : 'whatsapp';
+      out[k].count++; out[k].bytes += r.size || 0;
+    }
+    res.json({
+      ...out,
+      dirs: {
+        images: cfg.IMAGES_DIR, videos: cfg.VIDEO_DIR, files: cfg.FILES_DIR,
+        cloudImages: cfg.CLOUD_ROOT ? path.join(cfg.CLOUD_ROOT, 'Images') : null,
+        cloudVideos: cfg.CLOUD_ROOT ? path.join(cfg.CLOUD_ROOT, 'Videos') : null,
+        chatgptProfile: paths.CHATGPT_DIR, geminiProfile: paths.GEMINI_DIR,
+      },
+    });
+  });
+
   app.get('/api/storage', (req, res) => {
     const images = folderSize(cfg.IMAGES_DIR);
     const files = folderSize(cfg.FILES_DIR);
@@ -574,6 +597,90 @@ function createApp() {
   app.post('/api/export', sameOrigin, (req, res) => {
     try { res.json({ ok: true, ...exporter.exportTranscript() }); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+
+  // What this engine actually resolves to on disk. The same path string can
+  // name two different files under Windows app virtualisation; this says
+  // which one is in use, with sizes, so a mismatch is visible in one call.
+  app.get('/api/diag', (req, res) => {
+    const fsx = require('fs'); const osx = require('os');
+    const st = (f) => { try { const s = fsx.statSync(f); return { size: s.size, mtime: new Date(s.mtimeMs).toISOString(), real: fsx.realpathSync.native(f) }; } catch (e) { return { error: e.code || e.message }; } };
+    res.json({
+      pid: process.pid, user: osx.userInfo().username,
+      env: { LOCALAPPDATA: process.env.LOCALAPPDATA, WB_HOME: process.env.WB_HOME, APPDATA: process.env.APPDATA, TEMP: process.env.TEMP },
+      home: cfg.APP_HOME, cwd: process.cwd(), exec: process.execPath,
+      index: st(cfg.INDEX_FILE), db: st(path.join(cfg.DATA_DIR, 'messages.db')), log: st(logger.FILE), images: st(cfg.IMAGES_DIR),
+      recordsInMemory: store.listRecords({}).length,
+    });
+  });
+
+  // Merge another WhatsBackUp data folder into this one — records, media
+  // files and everything the AI wrote — taking only what this one lacks. Built
+  // for the day a copy of the archive was found to have been written to a
+  // sandboxed shadow of the real folder; general enough to fold in a backup.
+  app.post('/api/maintenance/merge-from', sameOrigin, (req, res) => {
+    const fsx = require('fs');
+    const from = String((req.body && req.body.from) || '').trim();
+    const dry = !!(req.body && req.body.dryRun);
+    if (!from || !fsx.existsSync(from)) return res.status(400).json({ error: 'folder not found: ' + from });
+    if (path.resolve(from) === path.resolve(cfg.APP_HOME)) return res.status(400).json({ error: 'that is this folder' });
+    const out = { from, dryRun: dry, records: { there: 0, new: 0, added: 0 }, files: { copied: 0, missing: 0 }, ai: {}, backup: null, errors: [] };
+    try {
+      // 1. records the other index has and this one does not
+      const otherIndex = path.join(from, 'data', 'index.ndjson');
+      const news = [];
+      if (fsx.existsSync(otherIndex)) {
+        for (const line of fsx.readFileSync(otherIndex, 'utf8').split('\n')) {
+          if (!line.trim()) continue;
+          let r; try { r = JSON.parse(line); } catch (_) { continue; }
+          out.records.there++;
+          if (!store.has(r.id)) news.push(r);
+        }
+      }
+      out.records.new = news.length;
+      // 2. their files, from the other media folders, only where ours are missing
+      const dirFor = (r) => r.kind === 'video' ? 'videos' : (r.kind === 'image' || r.kind === 'sticker') ? 'images' : 'files';
+      for (const r of news) {
+        const src = path.join(from, 'media', dirFor(r), r.filename);
+        const dst = path.join(r.kind === 'video' ? cfg.VIDEO_DIR : r.kind === 'image' || r.kind === 'sticker' ? cfg.IMAGES_DIR : cfg.FILES_DIR, r.filename);
+        if (fsx.existsSync(dst)) continue;
+        if (!fsx.existsSync(src)) { out.files.missing++; continue; }
+        if (!dry) { fsx.mkdirSync(path.dirname(dst), { recursive: true }); fsx.copyFileSync(src, dst); }
+        out.files.copied++;
+      }
+      // 3. what the AI wrote, table by table, rows we do not have
+      const otherDb = path.join(from, 'data', 'messages.db');
+      if (fsx.existsSync(otherDb)) {
+        const db = messages.init();
+        if (!dry) {
+          const bk = path.join(cfg.DATA_DIR, 'messages.before-merge-' + Date.now() + '.db');
+          fsx.copyFileSync(path.join(cfg.DATA_DIR, 'messages.db'), bk);
+          out.backup = bk;
+        }
+        db.exec("ATTACH DATABASE '" + otherDb.replace(/'/g, "''") + "' AS other");
+        try {
+          const tables = ['ai_labels', 'ai_groups', 'ai_group_members', 'ai_corrections', 'ai_runs', 'ai_jobs'];
+          for (const tb of tables) {
+            let there = 0, mine = 0;
+            try { there = db.prepare('SELECT COUNT(*) c FROM other.' + tb).get().c; } catch (e) { out.ai[tb] = 'absent there'; continue; }
+            try { mine = db.prepare('SELECT COUNT(*) c FROM main.' + tb).get().c; } catch (e) { out.ai[tb] = 'absent here'; continue; }
+            out.ai[tb] = { there, here: mine };
+            if (!dry) {
+              // INSERT OR IGNORE keeps every row we already have; the primary
+              // key decides. ai_jobs is state, not history: theirs replaces ours.
+              if (tb === 'ai_jobs') db.exec('DELETE FROM main.ai_jobs');
+              const r = db.exec('INSERT OR IGNORE INTO main.' + tb + ' SELECT * FROM other.' + tb);
+              out.ai[tb].after = db.prepare('SELECT COUNT(*) c FROM main.' + tb).get().c;
+            }
+          }
+          // names this copy learned that the other one has: nothing to take — ours are newer
+        } finally { try { db.exec('DETACH DATABASE other'); } catch (_) {} }
+      }
+      // 4. the records themselves, appended last so their files exist first
+      if (!dry) for (const r of news) { if (store.addRecord(r)) out.records.added++; }
+      // 5. what is in quarantine there is not carried; what is hidden there stays hidden there
+    } catch (e) { out.errors.push(e.message); }
+    res.json(out);
   });
 
   app.get('/healthz', (req, res) => res.json({ ok: true }));

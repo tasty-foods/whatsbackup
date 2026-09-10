@@ -58,6 +58,8 @@ const DEFAULTS = {
   // ChatGPT as a second source: off until connected, then read on a schedule.
   chatgptEnabled: false,
   chatgptScanHours: 6,
+  chatgptUploads: true,      // photos you sent to ChatGPT
+  chatgptGenerated: true,    // photos ChatGPT made
   geminiEnabled: false,
   geminiScanHours: 6,
   aiChainEnabled: false,

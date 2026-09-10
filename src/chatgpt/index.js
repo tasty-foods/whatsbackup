@@ -322,7 +322,11 @@ async function scan({ reason = 'manual' } = {}) {
     state.progress.phase = 'downloading';
 
     fs.mkdirSync(cfg.IMAGES_DIR, { recursive: true });
+    const want = settings.read();
+    const takeUploads = want.chatgptUploads !== false, takeGenerated = want.chatgptGenerated !== false;
     for (const part of parts) {
+      // What to import is a choice: the photos you sent in, the ones it made, or both.
+      if (part.role === 'user' ? !takeUploads : !takeGenerated) { run.skipped++; continue; }
       const id = 'chatgpt_' + part.fileId;
       if (store.has(id)) { run.skipped++; continue; }
       let got;

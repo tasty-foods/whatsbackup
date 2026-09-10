@@ -493,6 +493,12 @@
               <button id="cgpt-scan" class="btn">Import now</button>
               <button id="cgpt-disconnect" class="btn danger">Forget this account&hellip;</button>
             </div>
+            <div class="sec-title" style="margin-top:14px;font-size:12px">What to import</div>
+            <label class="row toggle"><input type="checkbox" id="set-chatgptUploads" /><span class="switch"></span><span>Photos you sent to ChatGPT</span></label>
+            <label class="row toggle"><input type="checkbox" id="set-chatgptGenerated" /><span class="switch"></span><span>Photos ChatGPT made for you</span></label>
+            <p class="muted small">Conversations are never imported or stored &mdash; only photos. The import reads each conversation to find them and keeps nothing else.</p>
+            <div class="row"><span id="cgpt-where" class="muted small"></span></div>
+            <div class="sec-title" style="margin-top:14px;font-size:12px">When</div>
             <label class="row toggle">
               <input type="checkbox" id="set-chatgptEnabled" /><span class="switch"></span>
               <span>Import new images on a schedule</span>
@@ -520,6 +526,10 @@
               <button id="gem-scan" class="btn">Import now</button>
               <button id="gem-disconnect" class="btn danger">Forget this account&hellip;</button>
             </div>
+            <div class="sec-title" style="margin-top:14px;font-size:12px">What to import</div>
+            <p class="muted small">Every photo in your Gemini Library. Gemini keeps no separate uploads there, so there is nothing to choose; conversations are never stored.</p>
+            <div class="row"><span id="gem-where" class="muted small"></span></div>
+            <div class="sec-title" style="margin-top:14px;font-size:12px">When</div>
             <label class="row toggle">
               <input type="checkbox" id="set-geminiEnabled" /><span class="switch"></span>
               <span>Import new images on a schedule</span>

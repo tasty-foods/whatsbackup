@@ -539,6 +539,21 @@ const CloudCard = (function () {
   return { refresh, start, stop };
 })();
 const SourceCards = [ChatGptSource, GeminiSource, CloudCard];
+
+// Where each source's photos live and how much of them there is — said on
+// the card, in the same words the Where tab uses.
+async function fillSourceWhere() {
+  let s = null;
+  try { s = await (await fetch('/api/sources/summary')).json(); } catch (e) { return; }
+  const line = (k) => {
+    const n = s[k] ? s[k].count : 0, b = s[k] ? s[k].bytes : 0;
+    return (n ? n + ' photo' + (n === 1 ? '' : 's') + ' · ' + fmtBytes(b) : 'Nothing imported yet') + ' · saved to ' + escapeHtml(s.dirs.images)
+      + (s.dirs.cloudImages ? ' · copied to ' + escapeHtml(s.dirs.cloudImages) : '');
+  };
+  const c = document.getElementById('cgpt-where'); if (c) c.innerHTML = line('chatgpt');
+  const g = document.getElementById('gem-where'); if (g) g.innerHTML = line('gemini');
+  return s;
+}
 /* ---------- Clean up ------------------------------------------------------
    The engine says what could go and why; this screen lets you tick it and
    move it. Selection lives here, not in the engine, so looking again never
@@ -690,7 +705,7 @@ const FIELDS = {
   autoImportHours: 'int',
   aiEnabled: 'bool', aiConsent: 'bool', aiAnalyseImages: 'bool', aiAnalyseChats: 'bool',
   aiProvider: 'text', aiModel: 'text', aiBaseUrl: 'text', aiMode: 'text', aiMonthlyBudget: 'int',
-  chatgptEnabled: 'bool', chatgptScanHours: 'int',
+  chatgptEnabled: 'bool', chatgptScanHours: 'int', chatgptUploads: 'bool', chatgptGenerated: 'bool',
   geminiEnabled: 'bool', geminiScanHours: 'int',
 };
 
@@ -730,7 +745,7 @@ function writeField(key, type, value) {
 }
 
 let settingsOpener = null;
-function openSettings() { settingsOpener = document.activeElement; S.modal.classList.remove('hidden'); S.close.focus(); loadSettings(); if (typeof SourceCards !== 'undefined') SourceCards.forEach((c) => c.start()); }
+function openSettings() { settingsOpener = document.activeElement; S.modal.classList.remove('hidden'); S.close.focus(); loadSettings(); if (typeof SourceCards !== 'undefined') SourceCards.forEach((c) => c.start()); if (typeof fillSourceWhere === 'function') fillSourceWhere(); }
 function closeSettings() { S.modal.classList.add('hidden'); if (typeof SourceCards !== 'undefined') SourceCards.forEach((c) => c.stop()); if (settingsOpener && settingsOpener.isConnected) settingsOpener.focus(); }
 function openSettingsTab(name) {
   openSettings();
@@ -807,7 +822,9 @@ async function loadSettings() {
     S.paths.innerHTML = [
       ['App data folder', p.home], ['Images', p.images], ['Videos', p.videos], ['Files', p.files],
       ['Message database', p.data], ['Settings file', p.settingsFile], ['Log file', p.log],
-      ['WhatsApp link', p.auth], ['Dashboard address', 'http://localhost:' + d.port],
+      ['WhatsApp link', p.auth], ['ChatGPT sign-in', p.chatgptProfile || '—'], ['Gemini sign-in', p.geminiProfile || '—'],
+      ['Cloud copies', p.cloudImages ? p.cloudImages + '  and  ' + p.cloudVideos : 'no cloud folder set'],
+      ['Dashboard address', 'http://localhost:' + d.port],
     ].map(([k, v]) => `<tr><td class="k">${k}</td><td class="v">${escapeHtml(v)}</td></tr>`).join('');
 
     if (bridge && !appInfo) appInfo = await bridge.info();
@@ -824,13 +841,17 @@ async function loadStorage() {
   S.storage.innerHTML = '<tr><td class="k">Measuring…</td><td class="v"></td></tr>';
   try {
     const s = await (await fetch('/api/storage')).json();
+    let src = null;
+    try { src = await (await fetch('/api/sources/summary')).json(); } catch (e) {}
+    const per = (k, label) => src && src[k] ? [label, `${fmtBytes(src[k].bytes)} · ${src[k].count} photos`] : null;
     S.storage.innerHTML = [
       ['Images', `${fmtBytes(s.images.bytes)} · ${s.images.files} files`],
+      per('whatsapp', '   from WhatsApp'), per('chatgpt', '   from ChatGPT'), per('gemini', '   from Gemini'),
       ['Videos', `${fmtBytes(s.videos.bytes)} · ${s.videos.files} files${s.videos.cloud ? ' (cloud folder)' : ''}`],
       ['Voice, audio, documents', `${fmtBytes(s.files.bytes)} · ${s.files.files} files`],
       ['Messages & index', fmtBytes(s.data.bytes)],
       ['Total', fmtBytes(s.total)],
-    ].map(([k, v]) => `<tr><td class="k">${k}</td><td class="v">${escapeHtml(v)}</td></tr>`).join('');
+    ].filter(Boolean).map(([k, v]) => `<tr><td class="k">${escapeHtml(k)}</td><td class="v">${escapeHtml(v)}</td></tr>`).join('');
   } catch (e) { S.storage.innerHTML = '<tr><td class="k">Could not measure</td><td class="v"></td></tr>'; }
 }
 
