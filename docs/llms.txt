@@ -6,7 +6,7 @@
 
 Site: https://whatsbackup.cc/
 Source: https://github.com/tasty-foods/whatsbackup
-Current application version: 1.4.1
+Current application version: 1.4.2
 Website updated: 9 September 2026
 Primary audience: small businesses that use WhatsApp for daily work, with dedicated
 paths for personal memories and creators collecting AI images. The homepage uses
@@ -42,7 +42,7 @@ Price: the app is free. Optional AI provider charges and limits apply.
   consent and initially in dry run, with quiet hours and posting limits.
 - Search saved conversations and export readable HTML transcripts.
 
-## Latest improvements in 1.4.1
+## Latest improvements in 1.4.2
 
 - A clearer next-step overview and source cards with progress and errors.
 - Source filters and persistent last-import summaries.

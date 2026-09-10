@@ -4,7 +4,7 @@ WhatsBackUp saves WhatsApp messages and media on Windows. It can also import ima
 
 ## Install
 
-1. Download **WhatsBackUp-Setup-1.4.1.exe** from [GitHub Releases](https://github.com/tasty-foods/whatsbackup/releases/latest).
+1. Download **WhatsBackUp-Setup-1.4.2.exe** from [GitHub Releases](https://github.com/tasty-foods/whatsbackup/releases/latest).
 2. Run the installer on Windows 10 or 11. Node and Chrome are included; administrator access is not required. The installer is unsigned, so Windows may show a publisher warning. Verify that your download came from the release above before deciding to run it.
 3. Read the unofficial-client notice, choose a media folder, optionally choose a cloud folder, and decide whether to start with Windows.
 
