@@ -4,7 +4,7 @@ A Windows desktop app that saves every photo, video and message from your WhatsA
 
 For installing and using it, see **[INSTALL.md](INSTALL.md)**. This file is about how it's built.
 
-The [1.4.2 usability audit](AUDIT.md) records the reviewed flows, shipped changes and remaining product limits. Current additions include ChatGPT and Gemini image imports (`src/chatgpt/`, `src/gemini/`), media copy verification (`src/backup.js`), reversible cleanup (`src/cleanup/`), and opt-in status scheduling (`src/status/`). Import summaries are persisted in `data/*-import.json`. Run `npm test` for backup regression checks.
+The [1.4.3 usability audit](AUDIT.md) records the reviewed flows, shipped changes and remaining product limits. Current additions include ChatGPT and Gemini image imports (`src/chatgpt/`, `src/gemini/`), media copy verification (`src/backup.js`), reversible cleanup (`src/cleanup/`), and opt-in status scheduling (`src/status/`). Import summaries are persisted in `data/*-import.json`. Run `npm test` for backup regression checks.
 
 ---
 
