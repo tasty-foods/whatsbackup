@@ -618,13 +618,24 @@ function createApp() {
   // files and everything the AI wrote — taking only what this one lacks. Built
   // for the day a copy of the archive was found to have been written to a
   // sandboxed shadow of the real folder; general enough to fold in a backup.
+  // A picture is the same picture when its bytes are, whatever id the other
+  // copy gave it (Gemini hands out a new token per scan): such records are
+  // not added, and the AI's notes about them are carried over to our id.
   app.post('/api/maintenance/merge-from', sameOrigin, (req, res) => {
     const fsx = require('fs');
+    const crypto = require('crypto');
     const from = String((req.body && req.body.from) || '').trim();
     const dry = !!(req.body && req.body.dryRun);
+    // Sources listed in `skip` are not brought over as records: a source this
+    // copy has already scanned for itself (Gemini re-fetches the whole library,
+    // re-encoded, so bytes will not match) would only come in twice.
+    const skip = new Set(Array.isArray(req.body && req.body.skip) ? req.body.skip.map(String) : []);
     if (!from || !fsx.existsSync(from)) return res.status(400).json({ error: 'folder not found: ' + from });
     if (path.resolve(from) === path.resolve(cfg.APP_HOME)) return res.status(400).json({ error: 'that is this folder' });
-    const out = { from, dryRun: dry, records: { there: 0, new: 0, added: 0 }, files: { copied: 0, missing: 0 }, ai: {}, backup: null, errors: [] };
+    const out = { from, dryRun: dry, records: { there: 0, new: 0, samePicture: 0, skipped: 0, added: 0 }, files: { copied: 0, missing: 0 }, ai: {}, backup: null, errors: [] };
+    const dirFor = (r) => r.kind === 'video' ? cfg.VIDEO_DIR : (r.kind === 'image' || r.kind === 'sticker') ? cfg.IMAGES_DIR : cfg.FILES_DIR;
+    const subFor = (r) => r.kind === 'video' ? 'videos' : (r.kind === 'image' || r.kind === 'sticker') ? 'images' : 'files';
+    const md5 = (f) => { try { return crypto.createHash('md5').update(fsx.readFileSync(f)).digest('hex'); } catch (_) { return null; } };
     try {
       // 1. records the other index has and this one does not
       const otherIndex = path.join(from, 'data', 'index.ndjson');
@@ -637,18 +648,37 @@ function createApp() {
           if (!store.has(r.id)) news.push(r);
         }
       }
-      out.records.new = news.length;
-      // 2. their files, from the other media folders, only where ours are missing
-      const dirFor = (r) => r.kind === 'video' ? 'videos' : (r.kind === 'image' || r.kind === 'sticker') ? 'images' : 'files';
-      for (const r of news) {
-        const src = path.join(from, 'media', dirFor(r), r.filename);
-        const dst = path.join(r.kind === 'video' ? cfg.VIDEO_DIR : r.kind === 'image' || r.kind === 'sticker' ? cfg.IMAGES_DIR : cfg.FILES_DIR, r.filename);
+      // 2. of those, the ones that are a picture we already hold under another id
+      const idMap = {}; // their id -> our id, for pictures we already have
+      if (news.length) {
+        const oursByHash = new Map();
+        for (const r of store.listRecords({})) {
+          if (!r.source || r.source === 'whatsapp') continue; // WhatsApp ids are stable; only the scanned sources re-key
+          const h = md5(path.join(dirFor(r), r.filename));
+          if (h) oursByHash.set((r.source || '') + ':' + h, r.id);
+        }
+        for (const r of news) {
+          if (!r.source || r.source === 'whatsapp') continue;
+          const h = md5(path.join(from, 'media', subFor(r), r.filename));
+          const ours = h && oursByHash.get(r.source + ':' + h);
+          if (ours) idMap[r.id] = ours;
+        }
+      }
+      const dropped = new Set(news.filter((r) => !idMap[r.id] && skip.has(r.source || 'whatsapp')).map((r) => r.id));
+      const fresh = news.filter((r) => !idMap[r.id] && !dropped.has(r.id));
+      out.records.new = fresh.length;
+      out.records.skipped = dropped.size;
+      out.records.samePicture = news.length - fresh.length - dropped.size;
+      // 3. their files, only where ours are missing
+      for (const r of fresh) {
+        const src = path.join(from, 'media', subFor(r), r.filename);
+        const dst = path.join(dirFor(r), r.filename);
         if (fsx.existsSync(dst)) continue;
         if (!fsx.existsSync(src)) { out.files.missing++; continue; }
         if (!dry) { fsx.mkdirSync(path.dirname(dst), { recursive: true }); fsx.copyFileSync(src, dst); }
         out.files.copied++;
       }
-      // 3. what the AI wrote, table by table, rows we do not have
+      // 4. what the AI wrote, row by row, ids translated where the picture was already ours
       const otherDb = path.join(from, 'data', 'messages.db');
       if (fsx.existsSync(otherDb)) {
         const db = messages.init();
@@ -659,26 +689,34 @@ function createApp() {
         }
         db.exec("ATTACH DATABASE '" + otherDb.replace(/'/g, "''") + "' AS other");
         try {
-          const tables = ['ai_labels', 'ai_groups', 'ai_group_members', 'ai_corrections', 'ai_runs', 'ai_jobs'];
-          for (const tb of tables) {
-            let there = 0, mine = 0;
-            try { there = db.prepare('SELECT COUNT(*) c FROM other.' + tb).get().c; } catch (e) { out.ai[tb] = 'absent there'; continue; }
-            try { mine = db.prepare('SELECT COUNT(*) c FROM main.' + tb).get().c; } catch (e) { out.ai[tb] = 'absent here'; continue; }
-            out.ai[tb] = { there, here: mine };
-            if (!dry) {
-              // INSERT OR IGNORE keeps every row we already have; the primary
-              // key decides. ai_jobs is state, not history: theirs replaces ours.
-              if (tb === 'ai_jobs') db.exec('DELETE FROM main.ai_jobs');
-              const r = db.exec('INSERT OR IGNORE INTO main.' + tb + ' SELECT * FROM other.' + tb);
-              out.ai[tb].after = db.prepare('SELECT COUNT(*) c FROM main.' + tb).get().c;
+          const tr = (id) => idMap[id] || id;
+          const count = (schema, tb) => db.prepare('SELECT COUNT(*) c FROM ' + schema + '.' + tb).get().c;
+          const both = (tb) => { try { return { there: count('other', tb), here: count('main', tb) }; } catch (e) { return null; } };
+          const insertRows = (tb, rows, keyed) => {
+            if (!rows.length) return;
+            const cols = Object.keys(rows[0]);
+            const st = db.prepare('INSERT OR IGNORE INTO main.' + tb + ' (' + cols.join(',') + ') VALUES (' + cols.map(() => '?').join(',') + ')');
+            for (const row of rows) {
+              if (keyed.some((c) => dropped.has(row[c]))) continue; // about a record we chose not to take
+              st.run(...cols.map((c) => keyed.includes(c) ? tr(row[c]) : row[c]));
             }
+          };
+          for (const tb of ['ai_labels', 'ai_groups', 'ai_group_members', 'ai_corrections', 'ai_runs', 'ai_jobs']) {
+            const c = both(tb); if (!c) { out.ai[tb] = 'absent on one side'; continue; }
+            out.ai[tb] = c;
+            if (dry) continue;
+            if (tb === 'ai_jobs') db.exec('DELETE FROM main.ai_jobs'); // state, not history: theirs replaces ours
+            const rows = db.prepare('SELECT * FROM other.' + tb).all();
+            // autoincrement ids must not collide with ours: let SQLite assign them
+            if (tb === 'ai_corrections' || tb === 'ai_runs' || tb === 'ai_jobs') rows.forEach((r) => { delete r.id; });
+            insertRows(tb, rows, ['ref_id']);
+            out.ai[tb].after = count('main', tb);
           }
-          // names this copy learned that the other one has: nothing to take — ours are newer
         } finally { try { db.exec('DETACH DATABASE other'); } catch (_) {} }
       }
-      // 4. the records themselves, appended last so their files exist first
-      if (!dry) for (const r of news) { if (store.addRecord(r)) out.records.added++; }
-      // 5. what is in quarantine there is not carried; what is hidden there stays hidden there
+      // 5. the records themselves, appended last so their files exist first
+      if (!dry) for (const r of fresh) { if (store.addRecord(r)) out.records.added++; }
+      // what is in quarantine there is not carried; what is hidden there stays hidden there
     } catch (e) { out.errors.push(e.message); }
     res.json(out);
   });
