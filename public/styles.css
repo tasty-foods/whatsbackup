@@ -563,6 +563,16 @@ table.paths td.v { color: var(--text); font-family: ui-monospace, Consolas, mono
   border-radius: 8px; padding: 5px 9px; font: inherit; font-size: 12.5px; min-width: 0; }
 .chain-row input.chain-model:focus { outline: 0; border-color: var(--accent2); }
 
+.chain-key-row { display: flex; align-items: center; gap: 10px; padding: 0 0 10px 0;
+  border-bottom: 1px solid rgba(38,51,64,.5); }
+.chain-key-row .ord { min-width: 18px; }
+.chain-key-row input { flex: 1; min-width: 0; background: var(--bg); border: 1px solid #f5a623;
+  color: var(--text); border-radius: 8px; padding: 6px 9px; font: inherit; font-size: 12.5px; }
+.chain-key-row input:focus { outline: 0; border-color: var(--accent2); }
+.ck-msg { font-size: 11.5px; }
+.ck-msg.good { color: var(--accent); }
+.ck-msg.bad { color: #f5a623; }
+
 /* Status limits ---------------------------------------------------------- */
 .st-limits { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px 14px; margin-top: 10px; }
 .st-limits label, .st-wide { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--muted); }

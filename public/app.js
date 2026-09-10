@@ -2702,6 +2702,21 @@ const Chain = (function () {
 
   let presets = [];
 
+  // Every provider here hands out keys with a house prefix; none of them is a
+  // model name. Used to keep a key out of the model box.
+  const KEYISH = /^(sk-|gsk_|AIza[0-9A-Za-z_-]|xai-|nvapi-|hf_|Bearer )/i;
+  const looksLikeKey = (v) => KEYISH.test(String(v || '').trim());
+  function say(where, text, bad) {
+    let el = where.querySelector('.ck-msg');
+    if (!el) {
+      el = document.createElement('span');
+      el.className = 'ck-msg';
+      where.appendChild(el);
+    }
+    el.textContent = text;
+    el.className = 'ck-msg' + (bad ? ' bad' : ' good');
+  }
+
   async function refresh() {
     let st = null;
     try { st = await (await fetch('/api/ai/status')).json(); } catch (e) { return; }
@@ -2731,22 +2746,56 @@ const Chain = (function () {
         <span class="who">${escapeHtml(c.provider || '—')}</span>
         ${modelCell}
         ${tag}
-        <button title="${first ? 'The provider above — change it there' : 'Remove from the chain'}" ${first ? 'disabled style="opacity:.3;cursor:default"' : ''}>✕</button>`;
+        <button class="drop" title="${first ? 'The provider above — change it there' : 'Remove from the chain'}" ${first ? 'disabled style="opacity:.3;cursor:default"' : ''}>✕</button>`;
       const mi = row.querySelector('.chain-model');
       if (mi) mi.addEventListener('change', async () => {
+        // This box is the model name. A key pasted here would be written to
+        // settings.json in the clear and would never be used as a key, so it
+        // is refused and the key box is opened instead.
+        if (looksLikeKey(mi.value)) {
+          mi.value = c.model || '';
+          say(row, 'That is an API key, and this box is the model name. Put the key in the box below.', true);
+          const box = row.nextElementSibling;
+          if (box && box.classList.contains('chain-key-row')) box.querySelector('input').focus();
+          return;
+        }
         const s = await (await fetch('/api/settings')).json();
         const models = { ...(s.settings.aiChainModels || {}) };
         models[c.provider] = mi.value.trim();
         await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ aiChainModels: models }) });
         refresh();
       });
-      if (!first) row.querySelector('button').addEventListener('click', async () => {
+      if (!first) row.querySelector('button.drop').addEventListener('click', async () => {
         const s = await (await fetch('/api/settings')).json();
         const next = (s.settings.aiChain || []).filter((x) => x !== c.provider);
         await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ aiChain: next }) });
         refresh();
       });
       list.appendChild(row);
+
+      // The key for this provider, asked for where the gap is. Saving it here
+      // means never having to change the provider above and change it back.
+      if (c.keyRequired && !c.hasKey) {
+        const kr = document.createElement('div');
+        kr.className = 'chain-key-row';
+        kr.innerHTML = `<span class="ord"></span>
+          <input type="password" class="ck" placeholder="paste the ${escapeHtml(c.provider)} key" autocomplete="off" spellcheck="false">
+          <button class="btn small ck-save">Save key</button>
+          <span class="ck-msg"></span>`;
+        const input = kr.querySelector('input');
+        const save = async () => {
+          const v = input.value.trim();
+          if (!v) return;
+          if (!bridge) { say(kr, 'Keys can only be saved in the app itself.', true); return; }
+          const r = await bridge.setAiKey(v, c.provider);
+          input.value = '';
+          if (r && r.ok) { say(kr, 'Saved, encrypted with your Windows account.'); refresh(); }
+          else say(kr, (r && r.message) || 'Could not save the key', true);
+        };
+        kr.querySelector('.ck-save').addEventListener('click', save);
+        input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); save(); } });
+        list.appendChild(kr);
+      }
     });
 
     // Offer only providers that aren't already in the chain.
