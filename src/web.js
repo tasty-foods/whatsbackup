@@ -233,6 +233,8 @@ function createApp() {
         home: cfg.APP_HOME, images: cfg.IMAGES_DIR, videos: cfg.VIDEO_DIR, files: cfg.FILES_DIR,
         data: cfg.DATA_DIR, settingsFile: cfg.SETTINGS_FILE, indexFile: cfg.INDEX_FILE,
         log: logger.FILE, auth: cfg.AUTH_DIR,
+        chatgptProfile: paths.CHATGPT_DIR, geminiProfile: paths.GEMINI_DIR,
+        cloudImages: cfg.CLOUD_ROOT ? path.join(cfg.CLOUD_ROOT, 'Images') : null, cloudVideos: cfg.CLOUD_ROOT ? path.join(cfg.CLOUD_ROOT, 'Videos') : null,
       },
       port: cfg.PORT,
     });
