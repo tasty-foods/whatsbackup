@@ -6,7 +6,7 @@
 
 Site: https://whatsbackup.cc/
 Source: https://github.com/tasty-foods/whatsbackup
-Current application version: 1.4.5
+Current application version: 1.4.6
 Website updated: 9 September 2026
 Primary audience: small businesses that use WhatsApp for daily work, with dedicated
 paths for personal memories and creators collecting AI images. The homepage uses
@@ -42,14 +42,16 @@ Price: the app is free. Optional AI provider charges and limits apply.
   consent and initially in dry run, with quiet hours and posting limits.
 - Search saved conversations and export readable HTML transcripts.
 
-## Latest improvements in 1.4.5
+## Latest improvements in 1.4.6
 
-- Each fallback-chain row that needs an API key carries its own key box; the
-  key is saved against that provider and encrypted with the Windows account.
-- The per-row model box refuses anything shaped like an API key and says where
-  the key belongs, so a key is never written to the settings file in the clear.
-- From 1.4.4: sources say what they import, where photos are saved and how many
-  there are; a chat outside the address book is shown by its number.
+- Gemini imports recognise a picture by its content, so a scan no longer
+  re-imports the whole library when Google reissues its addresses.
+- A maintenance step removes copies of a picture saved more than once, keeping
+  the oldest and deleting the cloud copies of the rest.
+- Duplicates are judged within a conversation: the same photograph sent to two
+  people stays in both chats.
+- From 1.4.5: each fallback-chain row that needs an API key carries its own key
+  box, and the model box refuses anything shaped like a key.
 
 ## Limits and privacy
 
