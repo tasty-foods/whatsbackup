@@ -162,13 +162,62 @@ function authorName(msg, chat) {
   return null;
 }
 
+// A chat's name is the contact's name, and the chat object often does not
+// carry it: for the @lid ids WhatsApp now uses it has neither a name nor a
+// phone number, which is how the busiest chats came to be called "unknown".
+// So the contact is asked, once per chat, and the answer kept for a while.
+const chatNames = new Map();                 // chatId -> { name, at }
+const NAME_TTL_MS = 6 * 60 * 60 * 1000;
+const phoneish = (u) => { const d = String(u || '').replace(/\D/g, ''); return d.length >= 8 && d.length <= 15 ? '+' + d : ''; };
+function cachedChatName(chat) {
+  const id = chat && chat.id && chat.id._serialized;
+  const hit = id && chatNames.get(id);
+  return hit && Date.now() - hit.at < NAME_TTL_MS ? hit.name : '';
+}
+async function chatDisplayName(chat, msg) {
+  if (chat && chat.name) return chat.name;
+  const id = chat && chat.id && chat.id._serialized;
+  const cached = cachedChatName(chat);
+  if (cached) return cached;
+  let name = (id && contacts.resolve(id)) || '';
+  if (!name && chat && typeof chat.getContact === 'function') {
+    try {
+      const ct = await chat.getContact();
+      if (ct) name = ct.isMe ? 'Notes to self' : (ct.name || ct.pushname || ct.shortName || phoneish(ct.number) || '');
+    } catch (_) {}
+  }
+  if (!name && msg && !msg.fromMe && msg._data && msg._data.notifyName) name = String(msg._data.notifyName);
+  if (!name && chat && chat.id && !/@lid$/.test(id || '')) name = phoneish(chat.id.user);
+  if (id && name) chatNames.set(id, { name, at: Date.now() });
+  return name || 'unknown';
+}
+
+// Chats saved before their name could be found are given it now — in the
+// conversations, and in the gallery's copy of the name on each photo.
+let readyClient = null;
+async function repairUnknownChats(c, { reason = 'startup' } = {}) {
+  let ids = [];
+  try { ids = messages.unknownChatIds(); } catch (_) {}
+  let fixed = 0;
+  for (const id of ids) {
+    let chat = null;
+    try { chat = await c.getChatById(id); } catch (_) {}
+    if (!chat) continue;
+    const name = await chatDisplayName(chat, null);
+    if (!name || name === 'unknown') continue;
+    try { messages.renameChat(id, name); store.renameChat(id, name); fixed++; } catch (_) {}
+  }
+  if (ids.length) console.log(`[names] ${reason}: ${fixed} of ${ids.length} unnamed chats given their name`);
+  return { checked: ids.length, fixed };
+}
+
 // Build a conversation row from a message (+ optional saved-media record).
 function buildMsgRow(msg, chat, mediaRec) {
   const id = msgKey(msg);
   if (!id) return null;
   const ts = msg.timestamp ? msg.timestamp * 1000 : Date.now();
   const chatId = (chat && chat.id && chat.id._serialized) || msg.from || 'unknown';
-  const chatName = (chat && chat.name) || (chat && chat.id && chat.id.user) || 'unknown';
+  const chatName = (chat && (chat._wbName || chat.name)) || cachedChatName(chat) || 'unknown';
   // Link to the saved media file: the fresh record, or an already-captured one.
   const existing = mediaRec || store.get(id);
   return {
@@ -238,6 +287,7 @@ async function saveMediaMessage(msg, chatObj) {
 
   let chat = chatObj;
   if (!chat) { try { chat = await msg.getChat(); } catch (_) { chat = null; } }
+  if (chat && !chat._wbName) { try { chat._wbName = await chatDisplayName(chat, msg); } catch (_) {} }
   if (!shouldCapture(msg, chat, kind)) return null;
 
   const id = msgKey(msg);
@@ -249,7 +299,7 @@ async function saveMediaMessage(msg, chatObj) {
 
   const ts = msg.timestamp ? msg.timestamp * 1000 : Date.now();
   const dir = msg.fromMe ? 'out' : 'in';
-  const chatName = (chat && (chat.name || (chat.id && chat.id.user))) || 'unknown';
+  const chatName = (chat && (chat._wbName || chat.name)) || cachedChatName(chat) || 'unknown';
   const number = (chat && chat.id && chat.id.user) || '';
 
   const ext = extFor(media.mimetype);
@@ -290,6 +340,7 @@ async function saveMediaMessage(msg, chatObj) {
 async function handleMessage(msg) {
   let chat = null;
   try { chat = await msg.getChat(); } catch (_) {}
+  if (chat) { try { chat._wbName = await chatDisplayName(chat, msg); } catch (_) {} }
   // Media and transcript are tracked separately: a failed download must not
   // cost us the message text, and only download failures count against health.
   try {
@@ -483,7 +534,9 @@ function buildClient() {
     try { const i = c.info; state.me = (i && (i.pushname || (i.wid && i.wid.user))) || 'linked'; } catch (_) { state.me = 'linked'; }
     console.log(`[link] Ready. Linked as ${state.me}. Capturing images & videos now.`);
     // Load the address book so group authors resolve to names.
-    c.getContacts().then((cs) => console.log('[contacts] loaded', contacts.load(cs), 'names')).catch((e) => console.warn('[contacts] load failed:', e.message));
+    readyClient = c;
+    c.getContacts().then((cs) => { console.log('[contacts] loaded', contacts.load(cs), 'names'); return repairUnknownChats(c); })
+      .catch((e) => console.warn('[contacts] load failed:', e.message));
   });
   c.on('auth_failure', (m) => { state.status = 'error'; state.lastError = 'auth_failure: ' + m; });
   c.on('disconnected', (reason) => {
@@ -557,4 +610,4 @@ function reconnectNow() {
   return { ok: true };
 }
 
-module.exports = { startClient, getState, runBackfill, unlink, reconnectNow, sendStatus, getBrowser };
+module.exports = { repairNames: () => readyClient ? repairUnknownChats(readyClient, { reason: 'manual' }) : Promise.resolve({ checked: 0, fixed: 0, error: 'not linked' }), startClient, getState, runBackfill, unlink, reconnectNow, sendStatus, getBrowser };

@@ -479,7 +479,8 @@ function registerIpc() {
   });
 
   ipcMain.handle('wb:restart', () => { restartEngine(); return true; });
-  ipcMain.handle('wb:checkUpdates', () => { checkForUpdates(true); return true; });
+  // The header button reads the result itself; only the tray asks for a dialog.
+  ipcMain.handle('wb:checkUpdates', (_e, quiet) => { checkForUpdates(!quiet); return true; });
   ipcMain.handle('wb:updateStatus', () => ({ ...updateState, current: app.getVersion(), packaged: isPackaged }));
   // Waiting for the next quit is fine by default, but someone who has just been
   // told an update is ready should be able to take it now.

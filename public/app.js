@@ -454,7 +454,7 @@ function makeSourceCard(prefix, api, label) {
     else if (s.status === "scanning") {
       const pr = s.progress || {};
       const bits = [];
-      if (pr.of) bits.push(pr.conversations + " of " + pr.of + " chats read");
+      if (pr.of) bits.push(pr.conversations + " of " + pr.of + " conversations checked for photos");
       if (pr.images) bits.push(pr.images + " photos found");
       if (pr.saved) bits.push(pr.saved + " saved");
       line = span("warn-text", "● Importing…" + (bits.length ? " " + bits.join(" · ") : ""));
@@ -2357,6 +2357,45 @@ async function refreshUpdateStatus() {
   });
   refreshUpdateStatus();
   setInterval(refreshUpdateStatus, 15000);
+
+  // One button in the header does the whole thing: asks, says what it found,
+  // and installs from here. States are read from the shell, so what it says
+  // is what the updater is doing.
+  const ub = document.getElementById('update-btn');
+  if (ub) {
+    let watching = null;
+    const paint = (u) => {
+      if (!u) return;
+      ub.classList.remove('ready', 'busy');
+      ub.disabled = false;
+      if (!u.packaged) { ub.textContent = 'Updates apply to the installed app'; ub.disabled = true; return; }
+      if (u.status === 'checking') { ub.textContent = 'Checking…'; ub.classList.add('busy'); ub.disabled = true; }
+      else if (u.status === 'downloading') { ub.textContent = 'Downloading ' + (u.version || '') + ' ' + (u.percent || 0) + '%'; ub.classList.add('busy'); ub.disabled = true; }
+      else if (u.status === 'ready') { ub.textContent = 'Install ' + u.version + ' and restart'; ub.classList.add('ready'); }
+      else if (u.status === 'error') { ub.textContent = 'Update check failed — try again'; ub.title = u.error || ''; }
+      else if (u.status === 'current' && u.checkedAt && Date.now() - u.checkedAt < 60000) { ub.textContent = 'Up to date (v' + u.current + ')'; }
+      else ub.textContent = 'Check for updates';
+    };
+    const poll = async () => {
+      if (!bridge || !bridge.updateStatus) return;
+      let u = null; try { u = await bridge.updateStatus(); } catch (e) { return; }
+      paint(u);
+      if (u && (u.status === 'checking' || u.status === 'downloading')) { clearTimeout(watching); watching = setTimeout(poll, 1500); }
+    };
+    ub.addEventListener('click', async () => {
+      if (!bridge) { alert('Open the WhatsBackUp window to check for updates.'); return; }
+      let u = null; try { u = await bridge.updateStatus(); } catch (e) {}
+      if (u && u.status === 'ready' && bridge.installUpdate) {
+        if (confirm('Install ' + u.version + ' now?' + String.fromCharCode(10, 10) + 'The app closes and reopens. Capture resumes straight after.')) await bridge.installUpdate();
+        return;
+      }
+      ub.textContent = 'Checking…'; ub.classList.add('busy'); ub.disabled = true;
+      try { await bridge.checkUpdates(true); } catch (e) {}
+      clearTimeout(watching); watching = setTimeout(poll, 1200);
+    });
+    poll();
+    setInterval(poll, 20000);
+  }
 })();
 
 /* ---------- Status Studio -------------------------------------------------
@@ -2772,7 +2811,14 @@ const Backup = (function () {
     } catch (e) { alert('Could not complete backup: ' + e.message); }
     await refresh();
   }
-  const pill = fEl('cloud-pill'); if (pill) pill.addEventListener('click', () => setView('overview'));
+  // The pill goes to the items themselves when some are only here; to the
+  // overview otherwise, where the whole picture is.
+  const pill = fEl('cloud-pill'); if (pill) pill.addEventListener('click', () => {
+    if (st && st.configured && st.onlyHere > 0) {
+      clearAll(); F.backup = 'local'; const s = fEl('f-backup'); if (s) s.value = 'local';
+      setView('media'); render(allItems);
+    } else setView('overview');
+  });
   const chk = fEl('cloud-check'); if (chk) chk.addEventListener('click', sweep);
   const dis = fEl('cloud-dismiss'); if (dis) dis.addEventListener('click', () => { dismissed = true; renderBanner(); });
   const cs = fEl('cloud-settings'); if (cs) cs.addEventListener('click', () => { openSettings(); const tab = document.querySelector('#settabs [data-t="storage"]'); if (tab) tab.click(); });

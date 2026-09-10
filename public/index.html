@@ -12,7 +12,7 @@
     <div class="brand">
       <span class="logo">💬</span>
       <div>
-        <div class="title">WhatsBackUp <button id="ver-badge" class="verbadge" title="Version — click for update details"></button></div>
+        <div class="title">WhatsBackUp <button id="ver-badge" class="verbadge" title="Version"></button> <button id="update-btn" class="btn small update-btn" title="Check whether a newer version is available and install it from here">Check for updates</button></div>
         <div class="sub" id="sub">Loading…</div>
       </div>
     </div>
@@ -49,6 +49,7 @@
   <div id="view-media">
     <!-- Everything that narrows or orders the gallery lives here, on the gallery. -->
     <div class="toolbar" id="media-toolbar">
+      <span class="muted small">Show</span>
       <div class="seg" id="source" title="Which source to show"></div>
       <div class="seg" id="kind" title="What kind of item to show">
         <button data-kind="" class="active">All</button>
@@ -484,7 +485,7 @@
 
           <div class="sec" id="cgpt-sec">
             <div class="sec-title">ChatGPT</div>
-            <p class="muted small">Every photo you uploaded to ChatGPT or had it make, kept here with the rest and sorted the same way. You sign in once, in a window that opens; nothing is typed for you and the password is never seen by this app.</p>
+            <p class="muted small">Every photo you uploaded to ChatGPT or had it make, kept here with the rest and sorted the same way. Only the photos: no ChatGPT conversation text is stored. You sign in once, in a window that opens; nothing is typed for you and the password is never seen by this app.</p>
             <div class="row"><span id="cgpt-status" class="muted">&hellip;</span></div>
             <div class="row"><span id="cgpt-last" class="muted small"></span></div>
             <div class="row wrap">

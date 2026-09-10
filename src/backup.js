@@ -69,6 +69,15 @@ function available() {
   return ok;
 }
 
+// The size a cloud copy must match is the file we would copy from. The
+// record's size is what the message said on arrival; a re-download can
+// change the bytes, and then a perfect copy would be called missing for ever.
+function expectedSize(rec) {
+  const src = localPathFor(rec);
+  if (src) { try { return fs.statSync(src).size; } catch (_) {} }
+  return rec.size || 0;
+}
+
 function onCloud(rec) {
   const hit = known.get(rec.id);
   if (hit && Date.now() - hit.at < EXIST_TTL_MS) return hit.on;
@@ -77,7 +86,8 @@ function onCloud(rec) {
   if (p) {
     try {
       const file = fs.statSync(p);
-      on = file.isFile() && file.size > 0 && (!rec.size || file.size === rec.size);
+      const want = expectedSize(rec);
+      on = file.isFile() && file.size > 0 && (!want || file.size === want);
     } catch (_) { on = false; }
   }
   known.set(rec.id, { on, at: Date.now() });
@@ -138,7 +148,8 @@ async function sweep({ reason = 'manual' } = {}) {
         fs.mkdirSync(path.dirname(dst), { recursive: true });
         fs.copyFileSync(src, temporary);
         const size = fs.statSync(temporary).size;
-        if (!size || (r.size && size !== r.size)) throw new Error('The copied file size does not match the archive.');
+        const want = fs.statSync(src).size;
+        if (!size || size !== want) throw new Error('The copy came out a different size from the original.');
         fs.renameSync(temporary, dst);
         state.copied++;
         try { state.bytes += fs.statSync(dst).size; } catch (_) {}

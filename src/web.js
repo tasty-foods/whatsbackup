@@ -555,6 +555,7 @@ function createApp() {
   const withNames = (rows) => { for (const r of rows) { if (r.author && r.author !== 'me') { const n = contacts.resolve(r.author); if (n) r.author = n; } } return rows; };
 
   app.get('/api/chats', (req, res) => { try { res.json(messages.listChats()); } catch (e) { res.json([]); } });
+  app.post('/api/chats/repair-names', sameOrigin, async (req, res) => { try { res.json(await require('./whatsapp').repairNames()); } catch (e) { res.status(500).json({ error: e.message }); } });
   app.get('/api/thread', (req, res) => {
     const chat = req.query.chat;
     if (!chat) return res.status(400).json({ error: 'chat required' });

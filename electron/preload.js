@@ -10,7 +10,7 @@ contextBridge.exposeInMainWorld('desktop', {
   openPath: (target) => ipcRenderer.invoke('wb:openPath', target),
   setStartup: (enabled) => ipcRenderer.invoke('wb:setStartup', !!enabled),
   restart: () => ipcRenderer.invoke('wb:restart'),
-  checkUpdates: () => ipcRenderer.invoke('wb:checkUpdates'),
+  checkUpdates: (quiet) => ipcRenderer.invoke('wb:checkUpdates', !!quiet),
   updateStatus: () => ipcRenderer.invoke('wb:updateStatus'),
   installUpdate: () => ipcRenderer.invoke('wb:installUpdate'),
   quit: () => ipcRenderer.invoke('wb:quit'),

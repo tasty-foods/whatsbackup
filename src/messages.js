@@ -183,7 +183,15 @@ function chatFingerprint(chatId) {
   return { count: r ? r.c : 0, last: r ? r.last : 0 };
 }
 
-module.exports = {
+// Chats saved before their name could be found.
+function unknownChatIds() {
+  return init().prepare("SELECT DISTINCT chat_id AS id FROM messages WHERE chat_name IS NULL OR chat_name = '' OR chat_name = 'unknown'").all().map((r) => r.id);
+}
+function renameChat(chatId, name) {
+  return init().prepare('UPDATE messages SET chat_name = ? WHERE chat_id = ?').run(name, chatId).changes;
+}
+
+module.exports = { unknownChatIds, renameChat,
   init, addMessage, addMany, listChats, getThread, getNewer, search, counts, allForExport,
   handle, digest, recentDigest, chatFingerprint, chatsWithText,
 };

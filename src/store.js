@@ -82,4 +82,20 @@ function counts() {
   return { images, videos };
 }
 
-module.exports = { ensureDirs, loadAll, has, get, addRecord, listRecords, counts, hide, unhide, hiddenIds };
+// The index is append-only, so a name learned later is written by rewriting
+// the file once. Only records still called "unknown" that belong to the chat
+// are touched; the id carries the chat id between its underscores.
+function renameChat(chatId, name) {
+  const needle = '_' + chatId + '_';
+  let changed = 0;
+  for (const r of records) {
+    if (r.chat === 'unknown' && String(r.id).includes(needle)) { r.chat = name; changed++; }
+  }
+  if (!changed) return 0;
+  const tmp = cfg.INDEX_FILE + '.tmp';
+  fs.writeFileSync(tmp, records.slice().sort((a, b) => a.ts - b.ts).map((r) => JSON.stringify(r)).join('\n') + '\n');
+  fs.renameSync(tmp, cfg.INDEX_FILE);
+  return changed;
+}
+
+module.exports = { renameChat, ensureDirs, loadAll, has, get, addRecord, listRecords, counts, hide, unhide, hiddenIds };
