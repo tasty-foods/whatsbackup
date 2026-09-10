@@ -55,6 +55,16 @@ const server = app.listen(cfg.PORT, '127.0.0.1', () => {
   try { require('./chatgpt').init(); } catch (e) { console.error('[chatgpt] failed to start:', e.message); }
   try { require('./gemini').init(); } catch (e) { console.error('[gemini] failed to start:', e.message); }
 
+  // Chats whose newer rows say "unknown" while older ones carry the name are
+  // put right from the database alone, before the phone link is even up.
+  try {
+    const messages = require('./messages');
+    const store = require('./store');
+    let n = 0;
+    for (const id of messages.unknownChatIds()) { const name = messages.bestNameFor(id); if (name) { messages.renameChat(id, name); store.renameChat(id, name); n++; } }
+    if (n) console.log('[names] start: ' + n + ' chats named from their own history');
+  } catch (e) { console.warn('[names] start failed:', e.message); }
+
   // What is on pCloud is checked, not assumed; what is not gets copied.
   try { require('./backup').init(); } catch (e) { console.error('[backup] failed to start:', e.message); }
 

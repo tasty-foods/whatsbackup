@@ -196,9 +196,17 @@ async function chatDisplayName(chat, msg) {
 // conversations, and in the gallery's copy of the name on each photo.
 let readyClient = null;
 async function repairUnknownChats(c, { reason = 'startup' } = {}) {
+  // What the database already knows comes first: no network, no waiting.
+  let healed = 0;
+  try {
+    for (const id of messages.unknownChatIds()) {
+      const known = messages.bestNameFor(id);
+      if (known) { messages.renameChat(id, known); store.renameChat(id, known); healed++; }
+    }
+  } catch (_) {}
   let ids = [];
   try { ids = messages.unknownChatIds(); } catch (_) {}
-  let fixed = 0;
+  let fixed = healed;
   for (const id of ids) {
     let chat = null;
     try { chat = await c.getChatById(id); } catch (_) {}
@@ -511,7 +519,10 @@ function buildClient() {
   // internals and the library starts throwing minified errors.
   if (process.env.WA_DEBUG_PORT) args.push('--remote-debugging-port=' + process.env.WA_DEBUG_PORT);
 
-  const puppeteerOpts = { headless: true, args };
+  const puppeteerOpts = {
+    // WhatsApp Web can take minutes to come up on a large account; the
+    // three-minute default was hit once and left the link in "error".
+    protocolTimeout: 10 * 60 * 1000, headless: true, args };
   if (cfg.CHROME_PATH) puppeteerOpts.executablePath = cfg.CHROME_PATH;  // the Chrome we ship
 
   const c = new Client({
@@ -579,7 +590,9 @@ function startClient() {
   store.loadAll();
   try { messages.init(); } catch (e) { console.error('[messages] init failed:', e.message); }
   client = buildClient();
-  client.initialize().catch((e) => { state.status = 'error'; state.lastError = e.message; console.error('[link] initialize failed:', e.message); });
+  // A failed first start is retried the way a dropped link is, rather than
+  // left as an error until someone restarts the app.
+  client.initialize().catch((e) => { state.status = 'error'; state.lastError = e.message; console.error('[link] initialize failed:', e.message); scheduleReconnect(client); });
   return client;
 }
 

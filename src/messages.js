@@ -191,7 +191,23 @@ function renameChat(chatId, name) {
   return init().prepare('UPDATE messages SET chat_name = ? WHERE chat_id = ?').run(name, chatId).changes;
 }
 
-module.exports = { unknownChatIds, renameChat,
+// A chat's rows can disagree with each other: the name was found for some
+// messages and not for others, and the list shows whichever is newest. The
+// newest real name a chat has ever been saved under wins for all its rows.
+function bestNameFor(chatId) {
+  const r = init().prepare("SELECT chat_name AS name FROM messages WHERE chat_id = ? AND chat_name IS NOT NULL AND chat_name <> '' AND chat_name <> 'unknown' ORDER BY ts DESC LIMIT 1").get(chatId);
+  return r ? r.name : null;
+}
+function selfHealNames() {
+  let fixed = 0;
+  for (const id of unknownChatIds()) {
+    const name = bestNameFor(id);
+    if (name) { renameChat(id, name); fixed++; }
+  }
+  return fixed;
+}
+
+module.exports = { unknownChatIds, renameChat, bestNameFor, selfHealNames,
   init, addMessage, addMany, listChats, getThread, getNewer, search, counts, allForExport,
   handle, digest, recentDigest, chatFingerprint, chatsWithText,
 };
