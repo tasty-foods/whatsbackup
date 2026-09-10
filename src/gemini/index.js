@@ -11,11 +11,18 @@
 // full-size URL in the signed-in browser — a page-context fetch is refused by
 // CORS, a navigation is not.
 //
+// The token is the id, but Google mints a new one for the same picture on
+// every visit, so an id seen before is not the only test for one already
+// held: the bytes are. Each picture's hash is kept on its record, and a
+// picture whose hash we already have is passed over. Without this a scan
+// imported the whole library again, every time.
+//
 // The library page carries no titles or dates. Every picture lands under one
 // chat called Gemini, dated the day it was first seen, so it sorts and
 // searches like everything else; the labeller writes the caption.
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const paths = require('../paths');
 const cfg = require('../config');
 const settings = require('../settings');
@@ -226,6 +233,23 @@ const extFor = (mime) => {
   return 'jpg';
 };
 
+const hashOf = (buf) => crypto.createHash('sha1').update(buf).digest('hex');
+
+// Every Gemini picture already here, by content. Records written before this
+// existed carry no hash, so those are read from disk once; from then on the
+// hash is on the record and no file needs opening.
+function heldHashes() {
+  const out = new Set();
+  let records = [];
+  try { records = store.listRecords({}); } catch (_) { return out; }
+  for (const r of records) {
+    if (r.source !== 'gemini') continue;
+    if (r.hash) { out.add(r.hash); continue; }
+    try { out.add(hashOf(fs.readFileSync(path.join(cfg.IMAGES_DIR, r.filename)))); } catch (_) {}
+  }
+  return out;
+}
+
 async function scan({ reason = 'manual' } = {}) {
   if (state.busy) return { ok: false, error: 'already busy' };
   if (!hasProfile()) { state.status = 'unlinked'; return { ok: false, error: 'not connected' }; }
@@ -243,12 +267,16 @@ async function scan({ reason = 'manual' } = {}) {
     state.progress = { images: run.images, saved: 0 };
 
     fs.mkdirSync(cfg.IMAGES_DIR, { recursive: true });
+    const held = heldHashes();
     for (const it of items) {
       const id = 'gemini_' + it.token;
       if (store.has(id)) { run.skipped++; continue; }
       let got = null;
       try { got = await fetchImage(b, it.base); } catch (_) {}
       if (!got) { run.failed++; continue; }
+      // A new token for a picture already here. Nothing to save.
+      const hash = hashOf(got.bytes);
+      if (held.has(hash)) { run.skipped++; continue; }
       const ts = got.modified && Number.isFinite(got.modified) ? got.modified : Date.now();
       const ext = extFor(got.mime);
       const filename = `${stamp(ts)}__gemini__Gemini__${it.token.slice(-10)}.${ext}`;
@@ -268,7 +296,9 @@ async function scan({ reason = 'manual' } = {}) {
         caption: '',
         generated: true,
         cloud: false,
+        hash,
       };
+      held.add(hash);
       if (store.addRecord(rec)) {
         run.saved++;
         if (state.progress) state.progress.saved = run.saved;
