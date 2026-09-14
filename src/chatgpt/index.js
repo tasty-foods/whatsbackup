@@ -194,7 +194,7 @@ async function listConversations(page, token) {
       total = j.total || 0;
       const items = j.items || [];
       if (!items.length) break;
-      for (const it of items) out.push({ id: it.id, title: it.title || '', createTime: it.create_time || 0 });
+      for (const it of items) out.push({ id: it.id, title: it.title || '', createTime: it.create_time || 0, updateTime: it.update_time == null ? null : it.update_time });
       offset += items.length;
     }
     return out;
@@ -277,11 +277,97 @@ const extFor = (mime, name) => {
   return n ? (n[1] === 'jpeg' ? 'jpg' : n[1]) : 'png';
 };
 
+// Which conversations are already fully imported, and as of when.
+//
+// A scan used to read every conversation first and download afterwards, so
+// nothing was kept until the very end — two thousand conversations at a
+// walking pace is hours, and a restart, an update or a sleeping PC anywhere in
+// those hours threw the lot away. In this archive it had never once finished.
+//
+// Now each conversation's pictures are saved the moment it is read, and a
+// conversation is written down here once everything in it is in. The next scan
+// passes over any conversation that has not changed since, so an interrupted
+// import picks up where it stopped and a routine one only reads what is new.
+// A conversation is left off the list if it could not be read or a picture in
+// it failed for a reason that might pass, so it is tried again.
+//
+// What is kept depends on the two import switches; when they change, so does
+// what a conversation owes us, and the list starts over.
+function openLedger(takeUploads, takeGenerated) {
+  const file = path.join(cfg.DATA_DIR, 'chatgpt-imported.json');
+  const want = (takeUploads ? 'sent' : '') + '+' + (takeGenerated ? 'made' : '');
+  let data = { want, done: {} };
+  try {
+    const j = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (j && j.want === want && j.done && typeof j.done === 'object') data = j;
+  } catch (_) {}
+  let dirty = 0;
+  const flush = () => {
+    if (!dirty) return;
+    try { const tmp = file + '.tmp'; fs.writeFileSync(tmp, JSON.stringify(data)); fs.renameSync(tmp, file); dirty = 0; } catch (_) {}
+  };
+  return {
+    isDone: (c) => c.updateTime != null && data.done[c.id] === String(c.updateTime),
+    markDone: (c) => { if (c.updateTime == null) return; data.done[c.id] = String(c.updateTime); if (++dirty >= 10) flush(); },
+    count: () => Object.keys(data.done).length,
+    flush,
+  };
+}
+
+// One picture from a conversation, saved now. Returns what became of it:
+// 'saved', 'skipped' (not wanted, or already here), 'gone' (ChatGPT no longer
+// has it — no point asking again) or 'retry' (worth another try next time).
+async function savePart(page, token, part, takeUploads, takeGenerated, run) {
+  if (part.role === 'user' ? !takeUploads : !takeGenerated) { run.skipped++; return 'skipped'; }
+  const id = 'chatgpt_' + part.fileId;
+  if (store.has(id)) { run.skipped++; return 'skipped'; }
+  let got;
+  try { got = await fetchImage(page, token, part.fileId); }
+  catch (e) { got = { error: e.message }; }
+  if (!got || got.error) {
+    const why = (got && got.error) || 'Image download failed';
+    run.failed++; run.failedImages++; if (!run.firstError) run.firstError = why;
+    // Old pictures ChatGPT has since let go of answer 404 or carry no link.
+    if (/\b(404|410)\b|no url/.test(why)) { run.gone = (run.gone || 0) + 1; return 'gone'; }
+    return 'retry';
+  }
+  const ts = part.createTime ? Math.round(part.createTime * 1000) : Date.now();
+  const ext = extFor(got.mime || part.mime, got.name);
+  const filename = `${stamp(ts)}__chatgpt__${safe(part.title)}__${part.fileId.slice(-10)}.${ext}`;
+  const bytes = Buffer.from(got.b64, 'base64');
+  try { fs.writeFileSync(path.join(cfg.IMAGES_DIR, filename), bytes); }
+  catch (e) { run.failed++; run.failedImages++; if (!run.firstError) run.firstError = e.message; return 'retry'; }
+  const rec = {
+    id, ts,
+    // What you sent in is "out", what came back is "in" — the same reading
+    // the gallery already gives the two directions of a chat.
+    dir: part.role === 'user' ? 'out' : 'in',
+    kind: 'image',
+    source: 'chatgpt',
+    chat: part.title || 'ChatGPT',
+    number: '',
+    mimetype: got.mime || part.mime || ('image/' + (ext === 'jpg' ? 'jpeg' : ext)),
+    filename,
+    serve: '/media/images/' + encodeURIComponent(filename),
+    size: bytes.length,
+    caption: part.prompt || '',
+    generated: !!part.generated,
+    cloud: false,
+  };
+  if (store.addRecord(rec)) {
+    run.saved++;
+    try { require('../ai').noteNewMedia(rec); } catch (_) {}
+    if (run.saved % 25 === 0) { try { require('../backup').nudge(); } catch (_) {} }
+  }
+  return 'saved';
+}
+
 async function scan({ reason = 'manual' } = {}) {
   if (state.busy) return { ok: false, error: 'already busy' };
   if (!hasProfile()) { state.status = 'unlinked'; return { ok: false, error: 'not connected' }; }
   state.busy = true; state.status = 'scanning'; state.lastError = null; state.progress = { conversations: 0, of: 0, images: 0, saved: 0 };
   const run = { conversations: 0, images: 0, saved: 0, skipped: 0, failed: 0, failedChats: 0, failedImages: 0, firstError: null, at: Date.now(), reason };
+  let ledger = null;
   try {
     const b = await launch();
     const page = await openPage(b);
@@ -290,12 +376,18 @@ async function scan({ reason = 'manual' } = {}) {
     state.linked = true;
 
     const convs = await listConversations(page, token);
-    state.progress = { phase: 'reading', conversations: 0, of: convs.length, images: 0, saved: 0 };
-    const parts = []; const seenFiles = new Set();
+    const want = settings.read();
+    const takeUploads = want.chatgptUploads !== false, takeGenerated = want.chatgptGenerated !== false;
+    ledger = openLedger(takeUploads, takeGenerated);
+    const todo = convs.filter((c) => !ledger.isDone(c));
+    run.total = convs.length; run.unchanged = convs.length - todo.length;
+    state.progress = { phase: 'importing', conversations: 0, of: todo.length, total: convs.length, unchanged: run.unchanged, images: 0, saved: 0 };
+    fs.mkdirSync(cfg.IMAGES_DIR, { recursive: true });
+    const seenFiles = new Set();
     // Read at a walking pace. Two thousand conversations at full speed is what
     // a rate limiter is for, and it answered accordingly: 2,081 of 2,098 refused.
     let pause = READ_PAUSE_MS;
-    for (const c of convs) {
+    for (const c of todo) {
       let got = null;
       for (let attempt = 0; attempt < 4 && !got; attempt++) {
         let res = null;
@@ -307,67 +399,40 @@ async function scan({ reason = 'manual' } = {}) {
           // Backed off: what the server asked for, or doubling, up to a minute.
           const wait = Math.min(60000, Math.max((res && res.retryAfter || 0) * 1000, pause * 2 * (attempt + 1)));
           pause = Math.min(10000, pause * 2);
+          // A counter that stands still reads as broken; this is ChatGPT
+          // asking for a slower pace, and the card says so.
+          if (state.progress) { state.progress.waitingUntil = Date.now() + wait; state.progress.waitReason = status === 429 ? 'ChatGPT asked for a slower pace' : 'ChatGPT did not answer'; }
           await new Promise((r) => setTimeout(r, wait));
+          if (state.progress) { state.progress.waitingUntil = null; state.progress.waitReason = null; }
           continue;
         }
         break;                                   // a 404 or similar: not worth retrying
       }
-      if (!got) { run.failed++; run.failedChats++; if (!run.firstError) run.firstError = run.lastReadError; }
-      for (const x of (got || [])) { if (!seenFiles.has(x.fileId)) { seenFiles.add(x.fileId); parts.push(x); } }
       run.conversations++;
-      await new Promise((r) => setTimeout(r, pause));
-      state.progress.conversations = run.conversations; state.progress.images = parts.length;
-    }
-    run.images = parts.length;
-    state.progress.phase = 'downloading';
-
-    fs.mkdirSync(cfg.IMAGES_DIR, { recursive: true });
-    const want = settings.read();
-    const takeUploads = want.chatgptUploads !== false, takeGenerated = want.chatgptGenerated !== false;
-    for (const part of parts) {
-      // What to import is a choice: the photos you sent in, the ones it made, or both.
-      if (part.role === 'user' ? !takeUploads : !takeGenerated) { run.skipped++; continue; }
-      const id = 'chatgpt_' + part.fileId;
-      if (store.has(id)) { run.skipped++; continue; }
-      let got;
-      try { got = await fetchImage(page, token, part.fileId); }
-      catch (e) { got = { error: e.message }; }
-      if (!got || got.error) { run.failed++; run.failedImages++; if (!run.firstError) run.firstError = got && got.error || 'Image download failed'; continue; }
-      const ts = part.createTime ? Math.round(part.createTime * 1000) : Date.now();
-      const ext = extFor(got.mime || part.mime, got.name);
-      const filename = `${stamp(ts)}__chatgpt__${safe(part.title)}__${part.fileId.slice(-10)}.${ext}`;
-      const bytes = Buffer.from(got.b64, 'base64');
-      try { fs.writeFileSync(path.join(cfg.IMAGES_DIR, filename), bytes); }
-      catch (e) { run.failed++; run.failedImages++; if (!run.firstError) run.firstError = e.message; continue; }
-      const rec = {
-        id, ts,
-        // What you sent in is "out", what came back is "in" — the same reading
-        // the gallery already gives the two directions of a chat.
-        dir: part.role === 'user' ? 'out' : 'in',
-        kind: 'image',
-        source: 'chatgpt',
-        chat: part.title || 'ChatGPT',
-        number: '',
-        mimetype: got.mime || part.mime || ('image/' + (ext === 'jpg' ? 'jpeg' : ext)),
-        filename,
-        serve: '/media/images/' + encodeURIComponent(filename),
-        size: bytes.length,
-        caption: part.prompt || '',
-        generated: !!part.generated,
-        cloud: false,
-      };
-      if (store.addRecord(rec)) {
-        run.saved++;
-        if (state.progress) state.progress.saved = run.saved;
-        try { require('../ai').noteNewMedia(rec); } catch (_) {}
+      if (!got) {
+        run.failed++; run.failedChats++; if (!run.firstError) run.firstError = run.lastReadError;
+      } else {
+        // Its pictures, now — so whatever stops this scan, they are kept.
+        let complete = true;
+        for (const part of got) {
+          if (seenFiles.has(part.fileId)) continue;
+          seenFiles.add(part.fileId);
+          run.images++;
+          if ((await savePart(page, token, part, takeUploads, takeGenerated, run)) === 'retry') complete = false;
+        }
+        if (complete) ledger.markDone(c);
       }
+      state.progress.conversations = run.conversations; state.progress.images = run.images; state.progress.saved = run.saved;
+      await new Promise((r) => setTimeout(r, pause));
     }
+    ledger.flush();
+
     state.lastScanAt = Date.now();
     state.lastRun = run;
     history.write('chatgpt', run);
     state.status = 'linked';
     if (run.saved) { try { require('../backup').nudge(); } catch (_) {} }
-    log(`scan (${reason}): ${run.conversations} conversations, ${run.images} images, ${run.saved} new, ${run.skipped} already had, ${run.failed} failed${run.lastReadError ? ' (last: ' + run.lastReadError + ')' : ''}`);
+    log(`scan (${reason}): ${run.conversations} of ${run.total} conversations read (${run.unchanged} unchanged since last time), ${run.images} images, ${run.saved} new, ${run.skipped} already had, ${run.failed} failed${run.gone ? ' (' + run.gone + ' no longer on ChatGPT)' : ''}${run.lastReadError ? ' (last: ' + run.lastReadError + ')' : ''}`);
     if (run.failed > run.conversations / 2) state.lastError = run.failed + ' of ' + run.conversations + ' chats could not be read' + (run.lastReadError ? ' — ' + run.lastReadError : '') + '. It will try again on the next look.';
     return { ok: true, ...run };
   } catch (e) {
@@ -376,6 +441,7 @@ async function scan({ reason = 'manual' } = {}) {
     log('scan failed:', e.message);
     return { ok: false, error: e.message };
   } finally {
+    if (ledger) ledger.flush();
     await closeBrowser();
     state.busy = false; state.progress = null;
     schedule();

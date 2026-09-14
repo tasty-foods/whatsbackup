@@ -455,8 +455,10 @@ function makeSourceCard(prefix, api, label) {
       const pr = s.progress || {};
       const bits = [];
       if (pr.of) bits.push(pr.conversations + " of " + pr.of + " conversations checked for photos");
+      if (pr.unchanged) bits.push(pr.unchanged + " unchanged since last time");
       if (pr.images) bits.push(pr.images + " photos found");
       if (pr.saved) bits.push(pr.saved + " saved");
+      if (pr.waitingUntil && pr.waitingUntil > Date.now()) bits.push("paused " + Math.max(1, Math.round((pr.waitingUntil - Date.now()) / 1000)) + "s — " + escapeHtml(pr.waitReason || "waiting"));
       line = span("warn-text", "● Importing…" + (bits.length ? " " + bits.join(" · ") : ""));
     }
     else if (s.status === "error") line = span("bad-text", "● " + escapeHtml(s.lastError || "Something went wrong"));
@@ -468,7 +470,7 @@ function makeSourceCard(prefix, api, label) {
     const bits = [];
     if (s.lastRun) bits.push((s.lastRun.saved ? s.lastRun.saved + " new" : "nothing new") + " of " + s.lastRun.images + " photos" + (s.lastRun.conversations ? " in " + s.lastRun.conversations + " chats" : "") + ", " + ago(s.lastRun.at));
     else if (s.linked) bits.push("No completed import recorded on this installation");
-    if (s.status === 'scanning' && s.progress && s.progress.phase === 'reading') bits.push('Reading chats first; downloads follow. You can keep browsing.');
+    if (s.status === 'scanning' && s.progress && s.progress.phase === 'importing') bits.push('Each chat’s photos are kept as soon as it is read, so stopping loses nothing. You can keep browsing.');
     if (s.lastRun && s.lastRun.failed) bits.push(s.lastRun.failed + ' failed — import again to retry missing items');
     if (s.lastRun && s.lastRun.firstError) bits.push(escapeHtml(s.lastRun.firstError));
     if (s.enabled && s.nextScanAt && !busy) bits.push("next look " + inWhen(s.nextScanAt));
