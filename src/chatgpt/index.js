@@ -201,6 +201,58 @@ async function listConversations(page, token) {
   }, token, REQ_TIMEOUT_MS);
 }
 
+// The images ChatGPT made, from the list its own Library page reads. It holds
+// every generated image since image generation moved into the Library (spring
+// 2025 on this account), a hundred to a request, paged with `after` — so the
+// whole set arrives in seconds without a single conversation being opened.
+// Checked 2026-09-16: 442 images in four requests.
+async function listMadeImages(page, token) {
+  return page.evaluate(async (tok, reqMs) => {
+    const h = { Authorization: 'Bearer ' + tok };
+    const out = []; const seen = new Set();
+    let after = null;
+    for (let pageNo = 0; pageNo < 500; pageNo++) {
+      const url = '/backend-api/my/recent/image_gen?limit=100' + (after ? '&after=' + encodeURIComponent(after) : '');
+      const r = await fetch(url, { headers: h, credentials: 'include', signal: AbortSignal.timeout(reqMs) });
+      if (!r.ok) { if (!out.length) throw new Error('image list http ' + r.status); break; }
+      const j = await r.json();
+      const items = (j && j.items) || [];
+      let fresh = 0;
+      for (const it of items) {
+        const fid = String(it.asset_pointer || '').split('://')[1];
+        if (!fid || seen.has(fid) || it.output_blocked) continue;
+        seen.add(fid); fresh++;
+        out.push({
+          fileId: fid, role: 'assistant', title: it.title || 'ChatGPT',
+          createTime: typeof it.created_at === 'number' ? it.created_at : 0,
+          width: it.width || 0, height: it.height || 0, mime: '', generated: true,
+        });
+      }
+      after = j && j.cursor;
+      if (!after || !items.length || !fresh) break;
+      await new Promise((res) => setTimeout(res, 400));
+    }
+    return out;
+  }, token, REQ_TIMEOUT_MS);
+}
+
+// The photos you sent most recently, from the Library page's other list. It
+// holds the latest 25 and cannot be paged further back (limit, before, after,
+// cursor and offset all tried): older uploads are reachable only in the chats.
+async function listRecentUploads(page, token) {
+  return page.evaluate(async (tok, reqMs) => {
+    const h = { Authorization: 'Bearer ' + tok };
+    const r = await fetch('/backend-api/my/recent/uploaded_images?limit=25', { headers: h, credentials: 'include', signal: AbortSignal.timeout(reqMs) });
+    if (!r.ok) return [];
+    const j = await r.json();
+    return ((j && j.items) || []).filter((it) => it && it.file_id).map((it) => ({
+      fileId: String(it.file_id), role: 'user', title: 'ChatGPT',
+      createTime: typeof it.timestamp === 'number' ? it.timestamp : 0,
+      mime: '', generated: false,
+    }));
+  }, token, REQ_TIMEOUT_MS);
+}
+
 // One conversation per call, so a stall costs one chat and the rest go on.
 async function readConversation(page, token, conv) {
   return page.evaluate(async (tok, c, reqMs) => {
@@ -215,16 +267,12 @@ async function readConversation(page, token, conv) {
     finally { clearTimeout(t); }
     const parts = [];
     const nodes = Object.values(d.mapping || {});
-    // The prompt that produced a picture is the last user text before it.
     const byTime = nodes.filter((n) => n && n.message).sort((a, b) => (a.message.create_time || 0) - (b.message.create_time || 0));
-    let lastUserText = '';
     for (const n of byTime) {
       const m = n.message;
       const ps = m.content && m.content.parts;
       if (!Array.isArray(ps)) continue;
-      const texts = ps.filter((x) => typeof x === 'string' && x.trim());
       const role = (m.author && m.author.role) || '';
-      if (role === 'user' && texts.length) lastUserText = texts.join(' ').slice(0, 300);
       for (const x of ps) {
         if (!(x && typeof x === 'object' && x.asset_pointer)) continue;
         const fid = String(x.asset_pointer).split('://')[1];
@@ -234,7 +282,6 @@ async function readConversation(page, token, conv) {
           createTime: m.create_time || c.createTime || 0,
           width: x.width || 0, height: x.height || 0, size: x.size_bytes || 0, mime: x.mime_type || '',
           generated: !!(m.metadata && m.metadata.dalle) || role === 'tool',
-          prompt: role === 'user' ? '' : lastUserText,
         });
       }
     }
@@ -350,7 +397,9 @@ async function savePart(page, token, part, takeUploads, takeGenerated, run) {
     filename,
     serve: '/media/images/' + encodeURIComponent(filename),
     size: bytes.length,
-    caption: part.prompt || '',
+    // Nothing written in the conversation comes with the photo — not even the
+    // prompt behind it. The card promises only photos, and so does this.
+    caption: '',
     generated: !!part.generated,
     cloud: false,
   };
@@ -375,15 +424,50 @@ async function scan({ reason = 'manual' } = {}) {
     if (!token) { markLinked(false); state.linked = false; throw new Error('signed out — connect again'); }
     state.linked = true;
 
-    const convs = await listConversations(page, token);
     const want = settings.read();
     const takeUploads = want.chatgptUploads !== false, takeGenerated = want.chatgptGenerated !== false;
-    ledger = openLedger(takeUploads, takeGenerated);
-    const todo = convs.filter((c) => !ledger.isDone(c));
-    run.total = convs.length; run.unchanged = convs.length - todo.length;
-    state.progress = { phase: 'importing', conversations: 0, of: todo.length, total: convs.length, unchanged: run.unchanged, images: 0, saved: 0 };
+    const searchChats = want.chatgptSearchChats !== false;
     fs.mkdirSync(cfg.IMAGES_DIR, { recursive: true });
     const seenFiles = new Set();
+
+    // 1. The images ChatGPT made, and your latest uploads — straight from the
+    //    lists ChatGPT's Library page reads. Seconds, and no chat is opened.
+    if (takeGenerated) {
+      state.progress = { phase: 'made', images: 0, saved: 0 };
+      const made = await listMadeImages(page, token);
+      state.progress.of = made.length;
+      for (const part of made) {
+        seenFiles.add(part.fileId); run.images++;
+        await savePart(page, token, part, takeUploads, takeGenerated, run);
+        state.progress.images = run.images; state.progress.saved = run.saved;
+      }
+    }
+    if (takeUploads) {
+      state.progress = { phase: 'sent', images: run.images, saved: run.saved };
+      for (const part of await listRecentUploads(page, token)) {
+        if (seenFiles.has(part.fileId)) continue;
+        seenFiles.add(part.fileId); run.images++;
+        await savePart(page, token, part, takeUploads, takeGenerated, run);
+        state.progress.images = run.images; state.progress.saved = run.saved;
+      }
+    }
+    // What the lists brought in counts as an import already; the card says so
+    // while the slower search below carries on.
+    state.lastScanAt = Date.now();
+    state.lastRun = { ...run, searching: searchChats };
+    history.write('chatgpt', state.lastRun);
+    if (run.saved) { try { require('../backup').nudge(); } catch (_) {} }
+
+    // 2. Older photos: the lists stop at spring 2025 for images ChatGPT made
+    //    and at 25 for uploads, so anything earlier is only inside the chats.
+    //    Opening them is what ChatGPT throttles to a crawl, so it is a choice.
+    //    Nothing written in a chat is kept; only the photos in it.
+    if (searchChats) state.progress = { phase: 'listing', images: run.images, saved: run.saved };
+    const convs = searchChats ? await listConversations(page, token) : [];
+    ledger = searchChats ? openLedger(takeUploads, takeGenerated) : null;
+    const todo = searchChats ? convs.filter((c) => !ledger.isDone(c)) : [];
+    run.total = convs.length; run.unchanged = convs.length - todo.length;
+    if (searchChats) state.progress = { phase: 'chats', conversations: 0, of: todo.length, total: convs.length, unchanged: run.unchanged, images: run.images, saved: run.saved };
     // Read at a walking pace. Two thousand conversations at full speed is what
     // a rate limiter is for, and it answered accordingly: 2,081 of 2,098 refused.
     let pause = READ_PAUSE_MS;
@@ -425,15 +509,15 @@ async function scan({ reason = 'manual' } = {}) {
       state.progress.conversations = run.conversations; state.progress.images = run.images; state.progress.saved = run.saved;
       await new Promise((r) => setTimeout(r, pause));
     }
-    ledger.flush();
+    if (ledger) ledger.flush();
 
     state.lastScanAt = Date.now();
     state.lastRun = run;
     history.write('chatgpt', run);
     state.status = 'linked';
     if (run.saved) { try { require('../backup').nudge(); } catch (_) {} }
-    log(`scan (${reason}): ${run.conversations} of ${run.total} conversations read (${run.unchanged} unchanged since last time), ${run.images} images, ${run.saved} new, ${run.skipped} already had, ${run.failed} failed${run.gone ? ' (' + run.gone + ' no longer on ChatGPT)' : ''}${run.lastReadError ? ' (last: ' + run.lastReadError + ')' : ''}`);
-    if (run.failed > run.conversations / 2) state.lastError = run.failed + ' of ' + run.conversations + ' chats could not be read' + (run.lastReadError ? ' — ' + run.lastReadError : '') + '. It will try again on the next look.';
+    log(`scan (${reason}): ${searchChats ? run.conversations + ' of ' + run.total + ' chats searched (' + run.unchanged + ' unchanged since last time)' : 'chats not searched'}, ${run.images} images, ${run.saved} new, ${run.skipped} already had, ${run.failed} failed${run.gone ? ' (' + run.gone + ' no longer on ChatGPT)' : ''}${run.lastReadError ? ' (last: ' + run.lastReadError + ')' : ''}`);
+    if (run.conversations && run.failedChats > run.conversations / 2) state.lastError = run.failed + ' of ' + run.conversations + ' chats could not be read' + (run.lastReadError ? ' — ' + run.lastReadError : '') + '. It will try again on the next look.';
     return { ok: true, ...run };
   } catch (e) {
     state.lastError = e.message;

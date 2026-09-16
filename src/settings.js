@@ -60,6 +60,7 @@ const DEFAULTS = {
   chatgptScanHours: 6,
   chatgptUploads: true,      // photos you sent to ChatGPT
   chatgptGenerated: true,    // photos ChatGPT made
+  chatgptSearchChats: true,  // also look inside older chats for photos the lists do not reach
   geminiEnabled: false,
   geminiScanHours: 6,
   aiChainEnabled: false,

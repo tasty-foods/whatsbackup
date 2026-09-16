@@ -115,4 +115,19 @@ function removeRecords(ids) {
   return before - records.length;
 }
 
-module.exports = { renameChat, ensureDirs, loadAll, has, get, addRecord, removeRecords, listRecords, counts, hide, unhide, hiddenIds };
+// Captions taken off every record from one source, the index rewritten once.
+// For text a source should never have carried in (the ChatGPT prompt behind a
+// picture); a backup of the index is the caller's to make first.
+function clearCaptions(source) {
+  let changed = 0;
+  for (const r of records) {
+    if ((r.source || 'whatsapp') === source && r.caption) { r.caption = ''; changed++; }
+  }
+  if (!changed) return 0;
+  const tmp = cfg.INDEX_FILE + '.tmp';
+  fs.writeFileSync(tmp, records.slice().sort((a, b) => a.ts - b.ts).map((r) => JSON.stringify(r)).join('\n') + '\n');
+  fs.renameSync(tmp, cfg.INDEX_FILE);
+  return changed;
+}
+
+module.exports = { renameChat, ensureDirs, loadAll, has, get, addRecord, removeRecords, clearCaptions, listRecords, counts, hide, unhide, hiddenIds };

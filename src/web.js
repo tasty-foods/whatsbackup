@@ -105,6 +105,7 @@ const SETTING_SPEC = {
   chatgptScanHours: { type: 'int', min: 1, max: 168 },
   chatgptUploads: { type: 'bool' },
   chatgptGenerated: { type: 'bool' },
+  chatgptSearchChats: { type: 'bool' },
   geminiEnabled: { type: 'bool' },
   geminiScanHours: { type: 'int', min: 1, max: 168 },
 };
@@ -780,6 +781,19 @@ function createApp() {
       out.removed = store.removeRecords(doomed.map((r) => r.id));
     } catch (e) { out.errors.push(e.message); }
     res.json(out);
+  });
+
+  // ChatGPT photos were saved with the prompt behind them as their caption:
+  // conversation text, which the import promises not to keep. Taken off here.
+  app.post('/api/maintenance/clear-captions', sameOrigin, (req, res) => {
+    const fsx = require('fs');
+    const source = String((req.body && req.body.source) || '');
+    if (source !== 'chatgpt') return res.status(400).json({ error: 'only chatgpt captions are cleared this way' });
+    const affected = store.listRecords({}).filter((r) => r.source === source && r.caption).length;
+    if (req.body && req.body.dryRun) return res.json({ dryRun: true, source, affected });
+    const backup = path.join(cfg.DATA_DIR, 'index.before-captions-' + Date.now() + '.ndjson');
+    fsx.copyFileSync(cfg.INDEX_FILE, backup);
+    res.json({ dryRun: false, source, cleared: store.clearCaptions(source), backup });
   });
 
   app.get('/healthz', (req, res) => res.json({ ok: true }));

@@ -454,9 +454,14 @@ function makeSourceCard(prefix, api, label) {
     else if (s.status === "scanning") {
       const pr = s.progress || {};
       const bits = [];
-      if (pr.of) bits.push(pr.conversations + " of " + pr.of + " conversations checked for photos");
-      if (pr.unchanged) bits.push(pr.unchanged + " unchanged since last time");
-      if (pr.images) bits.push(pr.images + " photos found");
+      if (pr.phase === 'made') bits.push("images ChatGPT made" + (pr.of ? ": " + (pr.images || 0) + " of " + pr.of : ""));
+      else if (pr.phase === 'sent') bits.push("your latest uploads");
+      else if (pr.phase === 'listing') bits.push("getting your list of chats to look for older photos");
+      else if (pr.phase === 'chats') {
+        bits.push("looking for older photos: " + pr.conversations + " of " + pr.of + " chats");
+        if (pr.unchanged) bits.push(pr.unchanged + " already searched");
+      } else if (pr.of) bits.push(pr.conversations + " of " + pr.of);
+      if (pr.phase !== 'made' && pr.images) bits.push(pr.images + " photos found");
       if (pr.saved) bits.push(pr.saved + " saved");
       if (pr.waitingUntil && pr.waitingUntil > Date.now()) bits.push("paused " + Math.max(1, Math.round((pr.waitingUntil - Date.now()) / 1000)) + "s — " + escapeHtml(pr.waitReason || "waiting"));
       line = span("warn-text", "● Importing…" + (bits.length ? " " + bits.join(" · ") : ""));
@@ -470,7 +475,7 @@ function makeSourceCard(prefix, api, label) {
     const bits = [];
     if (s.lastRun) bits.push((s.lastRun.saved ? s.lastRun.saved + " new" : "nothing new") + " of " + s.lastRun.images + " photos" + (s.lastRun.conversations ? " in " + s.lastRun.conversations + " chats" : "") + ", " + ago(s.lastRun.at));
     else if (s.linked) bits.push("No completed import recorded on this installation");
-    if (s.status === 'scanning' && s.progress && s.progress.phase === 'importing') bits.push('Each chat’s photos are kept as soon as it is read, so stopping loses nothing. You can keep browsing.');
+    if (s.status === 'scanning' && s.progress && s.progress.phase === 'chats') bits.push('Only photos are kept. Stopping loses nothing; it picks up where it left off.');
     if (s.lastRun && s.lastRun.failed) bits.push(s.lastRun.failed + ' failed — import again to retry missing items');
     if (s.lastRun && s.lastRun.firstError) bits.push(escapeHtml(s.lastRun.firstError));
     if (s.enabled && s.nextScanAt && !busy) bits.push("next look " + inWhen(s.nextScanAt));
@@ -707,7 +712,7 @@ const FIELDS = {
   autoImportHours: 'int',
   aiEnabled: 'bool', aiConsent: 'bool', aiAnalyseImages: 'bool', aiAnalyseChats: 'bool',
   aiProvider: 'text', aiModel: 'text', aiBaseUrl: 'text', aiMode: 'text', aiMonthlyBudget: 'int',
-  chatgptEnabled: 'bool', chatgptScanHours: 'int', chatgptUploads: 'bool', chatgptGenerated: 'bool',
+  chatgptEnabled: 'bool', chatgptScanHours: 'int', chatgptUploads: 'bool', chatgptGenerated: 'bool', chatgptSearchChats: 'bool',
   geminiEnabled: 'bool', geminiScanHours: 'int',
 };
 
