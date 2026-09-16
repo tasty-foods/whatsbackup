@@ -545,7 +545,32 @@ function schedule() {
   if (timer.unref) timer.unref();
 }
 
+// Before 1.4.8 the prompt behind a ChatGPT image was saved as its caption:
+// conversation text, which the import promises not to keep. Taken off once, on
+// the first start after the update, with the index backed up first.
+function clearOldPromptCaptions() {
+  const marker = path.join(cfg.DATA_DIR, 'chatgpt-prompts-cleared');
+  if (fs.existsSync(marker)) return;
+  try {
+    let needed = false;
+    try {
+      for (const line of fs.readFileSync(cfg.INDEX_FILE, 'utf8').split(String.fromCharCode(10))) {
+        if (!line.includes('"chatgpt"')) continue;
+        let r; try { r = JSON.parse(line); } catch (_) { continue; }
+        if (r.source === 'chatgpt' && r.caption) { needed = true; break; }
+      }
+    } catch (_) {}
+    if (needed) {
+      fs.copyFileSync(cfg.INDEX_FILE, path.join(cfg.DATA_DIR, 'index.before-captions-' + Date.now() + '.ndjson'));
+      const n = store.clearCaptions('chatgpt');
+      log(`took the saved prompt off ${n} ChatGPT photo${n === 1 ? '' : 's'}`);
+    }
+    fs.writeFileSync(marker, new Date().toISOString());
+  } catch (e) { log('could not clear old prompts:', e.message); }
+}
+
 function init() {
+  clearOldPromptCaptions();
   const s = settings.read();
   state.lastRun = history.read('chatgpt');
   state.lastScanAt = state.lastRun ? state.lastRun.at : null;
