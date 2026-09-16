@@ -6,7 +6,7 @@
 
 Site: https://whatsbackup.cc/
 Source: https://github.com/tasty-foods/whatsbackup
-Current application version: 1.4.7
+Current application version: 1.4.8
 Website updated: 9 September 2026
 Primary audience: small businesses that use WhatsApp for daily work, with dedicated
 paths for personal memories and creators collecting AI images. The homepage uses
@@ -42,15 +42,15 @@ Price: the app is free. Optional AI provider charges and limits apply.
   consent and initially in dry run, with quiet hours and posting limits.
 - Search saved conversations and export readable HTML transcripts.
 
-## Latest improvements in 1.4.7
+## Latest improvements in 1.4.8
 
-- The ChatGPT import saves each conversation's photos as soon as it is read and
-  records finished conversations, so an interrupted import resumes and later
-  imports read only conversations that changed. Newest conversations first.
-- The source card shows when ChatGPT has asked for a slower pace.
-- Groq's preset defaults to a model that reads images (qwen/qwen3.8-27b).
-- From 1.4.6: Gemini imports recognise a picture by its content and no longer
-  re-import the library; duplicates are judged within a conversation.
+- The ChatGPT import reads ChatGPT's own image library: every image ChatGPT made
+  since spring 2025 and the latest 25 uploads, in about a minute, without
+  opening conversations.
+- Looking inside older chats for photos is a separate, optional switch; it is
+  slow because ChatGPT throttles it, and it resumes where it stopped.
+- No conversation text is stored: the prompt behind an image is no longer kept,
+  and prompts saved by earlier versions are cleared on the first start.
 
 ## Limits and privacy
 
