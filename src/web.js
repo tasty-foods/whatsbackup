@@ -48,6 +48,13 @@ function safeName(name) {
 // One place that says what each setting is, so the POST handler can validate
 // generically instead of growing an if-branch per field.
 const SETTING_SPEC = {
+  uiTheme: { type: 'enum', values: ['system', 'light', 'dark'] },
+  uiLayout: { type: 'enum', values: ['grid', 'masonry', 'list'] },
+  uiDensity: { type: 'enum', values: ['comfortable', 'compact'] },
+  uiStartView: { type: 'enum', values: ['overview', 'media', 'convo'] },
+  uiReduceMotion: { type: 'bool' },
+  uiVideoPreview: { type: 'bool' },
+  uiShowCaptions: { type: 'bool' },
   port: { type: 'int', min: 1, max: 65535, restart: true },
   mediaRoot: { type: 'path', restart: true },
   cloudRoot: { type: 'path', restart: true },
@@ -111,6 +118,7 @@ const SETTING_SPEC = {
 };
 
 function coerce(spec, value) {
+  if (spec.type === 'enum') return spec.values.includes(value) ? value : undefined;
   if (spec.type === 'bool') return typeof value === 'boolean' ? value : undefined;
   if (spec.type === 'int') {
     const n = typeof value === 'number' ? Math.floor(value) : parseInt(value, 10);
@@ -159,6 +167,7 @@ function createApp() {
   const app = express();
   app.disable('x-powered-by');
   app.use(localHostOnly);
+  app.use(['/api/export/prepare', '/api/library/favorites'], express.json({ limit: '6mb' }));
   app.use(express.json());
 
   // Images: static (fast, safe). Videos and files: dynamic so we always serve
@@ -197,6 +206,30 @@ function createApp() {
     res.json(store.listRecords({ kind: kind || undefined, direction: dir || undefined, chat: chat || undefined, since: since || undefined }));
   });
 
+  const library = require('./library');
+  const libraryAction = (fn) => (req, res) => {
+    try { res.json({ ok: true, ...fn(req) }); }
+    catch (error) { res.status(400).json({ error: error.message }); }
+  };
+  app.get('/api/library', libraryAction(() => library.read()));
+  app.post('/api/library/favorites', sameOrigin, libraryAction(req => {
+    const ids = req.body && req.body.ids;
+    if (!Array.isArray(ids) || ids.some(id => !store.get(id))) throw new Error('One or more items are no longer in the archive.');
+    return library.favorite(ids, req.body.favorite);
+  }));
+  app.post('/api/library/views', sameOrigin, libraryAction(req => library.saveView(req.body.name, req.body.filters)));
+  app.post('/api/library/views/delete', sameOrigin, libraryAction(req => library.deleteView(req.body.id)));
+
+  require('./media-export').register(app, {
+    sameOrigin,
+    getRecord: id => store.get(id),
+    hiddenIds: () => store.hiddenIds(),
+    pathsFor: record => {
+      const backup = require('./backup');
+      return [backup.localPathFor(record), backup.cloudPathFor(record)];
+    },
+  });
+
   // Download every image as a single zip. (Videos may live on a cloud drive.)
   app.get('/api/zip', (req, res) => {
     const recs = store.listRecords({ kind: 'image' });
@@ -218,6 +251,7 @@ function createApp() {
     const s = { ...settings.read() };
     s.aiKeyStored = !!s.aiKeyEnc;
     delete s.aiKeyEnc;
+    delete s.aiKeysEnc;
     return s;
   };
 

@@ -4,7 +4,7 @@ WhatsBackUp saves WhatsApp messages and media on Windows. It can also import ima
 
 ## Install
 
-1. Download **WhatsBackUp-Setup-1.4.9.exe** from [GitHub Releases](https://github.com/tasty-foods/whatsbackup/releases/latest).
+1. Download the **Windows installer** from [GitHub Releases](https://github.com/tasty-foods/whatsbackup/releases/latest).
 2. Run the installer on Windows 10 or 11. Node and Chrome are included; administrator access is not required. The installer is unsigned, so Windows may show a publisher warning. Verify that your download came from the release above before deciding to run it.
 3. Read the unofficial-client notice, choose a media folder, optionally choose a cloud folder, and decide whether to start with Windows.
 
@@ -19,7 +19,11 @@ The app depends on these services' web clients. A completed import may still inc
 
 ## Find and organise
 
-**Gallery** searches chats, captions and filenames. Source, type, date and other filters narrow the results; **Clear all** removes the filters. The photo download contains all archived photos, regardless of the current filter. **Conversations** reads and searches saved WhatsApp message text.
+In the 1.5.0 workspace, **Library** searches chats, captions and filenames. Source, type, date and other filters narrow the results; **Clear all** removes the filters. Expand **Albums & tags** to explore groups. **Conversations** reads and searches saved WhatsApp message text.
+
+Use the star on a file to add it to **Favourites**. **Save view** keeps your current search, filters and sort order in the sidebar. Choose **Select files**, mark the files you need and use **Export selected** for a ZIP of that selection. **Export view** includes all matching files, including videos and documents. If a selected file is unavailable, the app explains the problem before starting the download.
+
+Open **Settings → Appearance** for light, dark or system colour, comfortable or compact density, grid/masonry/list layouts and your starting screen. Switch off hover video previews or reduce motion there. These changes save immediately. **Ctrl K** focuses search; **Ctrl ,** opens appearance settings; **Esc** closes a dialog or preview.
 
 AI sorting is optional. In **Settings → Albums & projects**, enable it, choose a provider, enter your own API key, test the connection and review what will be sent before accepting the notice. Review the estimate and monthly budget before starting. Sorting creates albums and conversation projects and adds image descriptions to search. Your edits to names and assignments are retained. Providers may charge for usage; free tiers have limits. Spare providers can keep sorting going when one reaches a limit.
 

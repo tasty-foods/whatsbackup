@@ -13,7 +13,7 @@ test('a throttled read retries and failed chats persist alongside successful ima
     require: name => {
       if (name === 'fs') return { existsSync: () => true, mkdirSync() {}, writeFileSync() {} };
       if (name === '../paths') return { CHATGPT_DIR: 'profile' };
-      if (name === '../config') return { IMAGES_DIR: 'images' };
+      if (name === '../config') return { IMAGES_DIR: 'images', DATA_DIR: 'data' };
       if (name === '../settings') return { read: () => ({ chatgptEnabled: false }) };
       if (name === '../store') return { has: () => false, addRecord: rec => { records.push(rec); return true; } };
       if (name === '../source-history') return { write: (name, run) => histories.push({ ...run }) };
@@ -29,7 +29,7 @@ test('a throttled read retries and failed chats persist alongside successful ima
   };
   vm.createContext(ctx);
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/chatgpt/index.js'), 'utf8'), ctx);
-  vm.runInContext("launch = async () => ({}); openPage = async () => ({}); closeBrowser = async () => {}; sessionToken = async () => 'fixture'; listConversations = async () => [{id:'good'}, {id:'bad'}]; readConversation = fakeRead; fetchImage = async () => ({b64:'aW1hZ2U=',mime:'image/png'});", ctx);
+  vm.runInContext("launch = async () => ({}); openPage = async () => ({}); closeBrowser = async () => {}; sessionToken = async () => 'fixture'; listMadeImages = async () => []; listRecentUploads = async () => []; listConversations = async () => [{id:'good'}, {id:'bad'}]; readConversation = fakeRead; fetchImage = async () => ({b64:'aW1hZ2U=',mime:'image/png'});", ctx);
   const result = await ctx.module.exports.scan();
   assert.equal(result.ok, true);
   assert.equal(attempts, 2);
@@ -38,7 +38,7 @@ test('a throttled read retries and failed chats persist alongside successful ima
   assert.equal(result.failedChats, 1);
   assert.equal(result.failedImages, 0);
   assert.equal(result.firstError, 'http 404');
-  assert.equal(histories[0].failed, 1);
+  assert.equal(histories.at(-1).failed, 1);
   assert.equal(records.length, 1);
   assert.ok(waits.includes(2000));
   assert.equal(ctx.module.exports.getState().busy, false);

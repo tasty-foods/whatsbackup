@@ -34,7 +34,7 @@ let allItems = [];         // full list, newest first
 // this and re-renders from it; none keeps a private copy. If two controls
 // could disagree, one of them would be wrong.
 const F = {
-  q: '', source: '', kind: '', exact: '', dir: '', album: '', project: '', tag: '', backup: '', from: '', to: '', sort: 'new',
+  q: '', source: '', kind: '', exact: '', dir: '', album: '', project: '', tag: '', backup: '', from: '', to: '', sort: 'new', favorite: false,
 };
 const fEl = (id) => document.getElementById(id);
 
@@ -66,10 +66,11 @@ const KIND_ICON = { voice: '🎤', audio: '🎵', document: '📄', sticker: '�
 const KIND_LABEL = { voice: 'Voice note', audio: 'Audio', document: 'Document', sticker: 'Sticker' };
 
 function matchesFilter(r) {
+  if (F.favorite && window.Workspace && !window.Workspace.isFavorite(r.id)) return false;
   // Search reads the chat, the caption, a file name and — once labelled —
   // what is actually in the picture.
   if (F.q) {
-    const hay = [r.chat, r.caption, r.docName].filter(Boolean).join(' ').toLowerCase();
+    const hay = [r.chat, r.caption, r.docName, r.filename].filter(Boolean).join(' ').toLowerCase();
     if (!hay.includes(F.q) && !(typeof AI !== 'undefined' && AI.matchesText(r, F.q))) return false;
   }
   return typeof matchesAdvanced === 'function' ? matchesAdvanced(r) : true;
@@ -119,7 +120,8 @@ function tile(r) {
         <div class="filename">${escapeHtml(name)}</div>
         <div class="filekind">${escapeHtml(KIND_LABEL[r.kind] || r.kind)}</div></div>${badge}${cap}`;
   }
-  el.addEventListener('click', () => openLightbox(r));
+  el.addEventListener('click', (event) => { if (event.target.closest('.tile-favorite,.tile-select')) return; event.preventDefault(); openLightbox(r); });
+  if (window.Workspace) window.Workspace.decorateTile(el, r);
   if (r.kind === 'video') wireVideoPreview(el);
   return el;
 }
@@ -168,6 +170,7 @@ function wireVideoPreview(el) {
     // A beat before starting, so sweeping the pointer across the grid doesn't
     // kick off a dozen downloads that are all abandoned immediately.
     hold = setTimeout(() => {
+      if (window.Workspace && !window.Workspace.videoPreview()) return;
       try { v.currentTime = 0; } catch (_) {}
       v.play().then(() => el.classList.add('previewing')).catch(() => {});
     }, 180);
@@ -200,6 +203,8 @@ function appendChunk() {
   ensureSentinel();
 }
 function fillViewport() {
+  // A hidden gallery has a zero-height sentinel; filling it would build the entire archive.
+  if (!els.gallery.getClientRects().length) return;
   let guard = 0;
   while (renderedCount < filteredCache.length && guard++ < 40) {
     const rect = sentinel ? sentinel.getBoundingClientRect() : null;
@@ -229,10 +234,12 @@ function render(all) {
   }, { rootMargin: '900px' });
   appendChunk();
   fillViewport();
+  if (window.Workspace) window.Workspace.onRender();
 }
 
 // Prepend genuinely new (newest) items without rebuilding the whole gallery.
 function prependNew(items) {
+  if (F.sort !== 'new') { render(allItems); return; }
   const matching = items.filter(matchesFilter);
   if (!matching.length) return;
   filteredCache = matching.concat(filteredCache);
@@ -249,12 +256,14 @@ function prependNew(items) {
   if (oldFirstLabel && oldFirstLabel.dataset.day === lastNewDay) oldFirstLabel.remove();
   renderedCount += matching.length;
   els.empty.classList.add('hidden');
+  if (window.Workspace) window.Workspace.onRender();
 }
 
 /* ---------- Lightbox (tracked by id so it survives live updates) ---------- */
 function currentIndex() { return filteredCache.findIndex((r) => r.id === lbId); }
-function openLightbox(r) { lbId = r.id; els.lightbox.classList.remove('hidden'); showCurrent(); }
-function closeLightbox() { els.lightbox.classList.add('hidden'); els.lbStage.innerHTML = ''; lbId = null; }
+let lightboxOpener = null;
+function openLightbox(r) { lightboxOpener = document.activeElement; lbId = r.id; els.lightbox.classList.remove('hidden'); showCurrent(); els.lbClose.focus(); }
+function closeLightbox() { els.lightbox.classList.add('hidden'); els.lbStage.innerHTML = ''; lbId = null; const opener = lightboxOpener; requestAnimationFrame(() => { if (opener?.isConnected && document.activeElement === document.body) opener.focus(); }); }
 function showCurrent() {
   const i = currentIndex();
   if (i < 0) return;
@@ -297,6 +306,7 @@ function showCurrent() {
     <span id="lb-where" class="m-where"></span>`;
   if (typeof AI !== 'undefined') AI.bindAlbumPicker(r);
   bindShowInFolder(r);
+  if (window.Workspace) window.Workspace.viewer(r);
   const qs = document.getElementById('lb-queue-status');
   if (qs) qs.addEventListener('click', async (e) => {
     e.preventDefault();
@@ -345,9 +355,15 @@ els.lbNext.addEventListener('click', () => step(1));
 els.lightbox.addEventListener('click', (e) => { if (e.target === els.lightbox) closeLightbox(); });
 document.addEventListener('keydown', (e) => {
   if (els.lightbox.classList.contains('hidden')) return;
-  if (e.key === 'Escape') closeLightbox();
-  if (e.key === 'ArrowLeft') step(-1);
-  if (e.key === 'ArrowRight') step(1);
+  if (e.key === 'Escape') { e.preventDefault(); closeLightbox(); return; }
+  if (e.key === 'Tab') {
+    const items = [...els.lightbox.querySelectorAll('button,a[href],input,select,video[controls],audio[controls]')].filter(el => !el.disabled && el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden');
+    if (e.shiftKey && document.activeElement === items[0]) { e.preventDefault(); items.at(-1)?.focus(); }
+    else if (!e.shiftKey && document.activeElement === items.at(-1)) { e.preventDefault(); items[0]?.focus(); }
+  }
+  if (e.target.closest('input,select,textarea,video,audio')) return;
+  if (e.key === 'ArrowLeft') { e.preventDefault(); step(-1); }
+  if (e.key === 'ArrowRight') { e.preventDefault(); step(1); }
 });
 
 /* ---------- Controls ---------- */
@@ -731,6 +747,8 @@ const $ = (id) => document.getElementById(id);
 
 // Every simple setting is <input id="set-<key>">; the type says how to read it.
 const FIELDS = {
+  uiTheme: 'enum', uiLayout: 'enum', uiDensity: 'enum', uiStartView: 'enum',
+  uiReduceMotion: 'bool', uiVideoPreview: 'bool', uiShowCaptions: 'bool',
   captureImages: 'bool', captureVideos: 'bool', captureVoice: 'bool', captureAudio: 'bool',
   captureDocuments: 'bool', captureStickers: 'bool',
   captureSent: 'bool', captureReceived: 'bool', captureGroups: 'bool', captureConversations: 'bool',
@@ -781,8 +799,8 @@ function writeField(key, type, value) {
 }
 
 let settingsOpener = null;
-function openSettings() { settingsOpener = document.activeElement; S.modal.classList.remove('hidden'); S.close.focus(); loadSettings(); if (typeof SourceCards !== 'undefined') SourceCards.forEach((c) => c.start()); if (typeof fillSourceWhere === 'function') fillSourceWhere(); }
-function closeSettings() { S.modal.classList.add('hidden'); if (typeof SourceCards !== 'undefined') SourceCards.forEach((c) => c.stop()); if (settingsOpener && settingsOpener.isConnected) settingsOpener.focus(); }
+function openSettings() { if (!S.modal.classList.contains('hidden')) return; settingsOpener = document.activeElement; S.modal.classList.remove('hidden'); S.close.focus(); loadSettings(); if (typeof SourceCards !== 'undefined') SourceCards.forEach((c) => c.start()); if (typeof fillSourceWhere === 'function') fillSourceWhere(); }
+function closeSettings() { S.modal.classList.add('hidden'); if (typeof SourceCards !== 'undefined') SourceCards.forEach((c) => c.stop()); const opener = settingsOpener; requestAnimationFrame(() => { if (opener?.isConnected && document.activeElement === document.body) opener.focus(); }); }
 function openSettingsTab(name) {
   openSettings();
   const button = document.querySelector('#settabs [data-t="' + name + '"]');
@@ -821,8 +839,9 @@ S.modal.addEventListener('change', async (e) => {
   try {
     if (key === 'startWithWindows' && bridge) await bridge.setStartup(v);
     const r = await requestJson('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ [key]: v }) });
+    if (window.Workspace) window.Workspace.applyPreferences(r.settings);
     flashSaved(r && r.restartRequired ? 'Saved ✓ — applies after a restart' : 'Saved ✓');
-  } catch (err) { flashSaved('Could not save: ' + err.message, true); }
+  } catch (err) { if (key.startsWith('ui') && window.Workspace) window.Workspace.applyPreferences({}); flashSaved('Could not save: ' + err.message, true); }
 });
 S.modal.addEventListener('click', (e) => { if (e.target === S.modal) closeSettings(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !S.modal.classList.contains('hidden')) closeSettings(); });
@@ -831,6 +850,8 @@ S.tabs.addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b) return;
   [...S.tabs.children].forEach((c) => c.classList.toggle('active', c === b));
   document.querySelectorAll('.pane').forEach((p) => p.classList.toggle('hidden', p.dataset.pane !== b.dataset.t));
+  S.save.classList.toggle('hidden', b.dataset.t === 'appearance');
+  document.getElementById('appearance-save-hint').classList.toggle('hidden', b.dataset.t !== 'appearance');
   if (b.dataset.t === 'storage') loadStorage();
   if (b.dataset.t === 'ai') { AI.loadSettingsTab(); if (typeof Chain !== 'undefined') Chain.refresh(); }
 });
@@ -846,6 +867,7 @@ async function loadSettings() {
   try {
     const d = await (await fetch('/api/settings')).json();
     for (const [key, type] of Object.entries(FIELDS)) writeField(key, type, d.settings[key]);
+    if (window.Workspace) window.Workspace.applyPreferences(d.settings);
     S.limit.value = d.settings.backfillLimit;
 
     S.pathStatus.innerHTML = !d.cloudConfigured
@@ -1169,6 +1191,7 @@ async function saveWizard(patch) {
 }
 /* ---------- Open one media item in the lightbox (from a message bubble) ---------- */
 function openSingleMedia(serve, kind) {
+  lightboxOpener = document.activeElement;
   lbId = null;
   els.lightbox.classList.remove('hidden');
   els.lbStage.innerHTML = '';
@@ -1190,6 +1213,7 @@ function openSingleMedia(serve, kind) {
   els.lbMeta.innerHTML = `<a href="${serve}" download>⭳ Download</a>`;
   els.lbPrev.style.visibility = 'hidden';
   els.lbNext.style.visibility = 'hidden';
+  els.lbClose.focus();
 }
 
 /* ---------- View switching (Media / Conversations) ---------- */
@@ -1199,7 +1223,7 @@ const V = {
   toggle: document.getElementById('viewtoggle'),
 };
 let currentView = 'media';
-V.toggle.addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) setView(b.dataset.v); });
+V.toggle.addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) { if (b.dataset.v === 'media' && F.favorite) { F.favorite = false; render(allItems); } setView(b.dataset.v); } });
 function setView(v) {
   currentView = v;
   [...V.toggle.children].forEach((c) => { c.classList.toggle('active', c.dataset.v === v); c.setAttribute('aria-pressed', String(c.dataset.v === v)); });
@@ -1209,6 +1233,7 @@ function setView(v) {
   if (clEl) clEl.classList.toggle('hidden', v !== 'cleanup');
   V.media.classList.toggle('hidden', v !== 'media');
   V.convo.classList.toggle('hidden', v !== 'convo');
+  if (v === 'media') fillViewport();
   const statusEl = document.getElementById('view-status');
   if (statusEl) statusEl.classList.toggle('hidden', v !== 'status');
   if (v === 'convo') Convo.enter();
@@ -1216,6 +1241,7 @@ function setView(v) {
   if (v === 'overview' && typeof Overview !== 'undefined') Overview.enter();
   if (v === 'overview' && typeof SourceOverview !== 'undefined') SourceOverview.refresh();
   if (v === 'cleanup' && typeof Cleanup !== 'undefined') Cleanup.enter();
+  if (window.Workspace) window.Workspace.onView(v);
 }
 
 /* ---------- Conversations ---------- */
@@ -1325,6 +1351,8 @@ const Convo = (function () {
       el.innerHTML = `<div class="ci-top"><span class="ci-name">${escapeHtml(c.chatName || c.chatId)}</span><span class="ci-time">${c.lastTs ? shortDay(c.lastTs) : ''}</span></div>
         <div class="ci-last">${c.lastFromMe ? 'You: ' : ''}${escapeHtml(last).slice(0, 90)}</div>`;
       el.addEventListener('click', () => openChat(c));
+      el.tabIndex = 0; el.setAttribute('role', 'button');
+      el.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); el.click(); } });
       chatsEl.appendChild(el);
     }
   }
@@ -1453,6 +1481,8 @@ const Convo = (function () {
           + '</div><div class="ci-last">' + escapeHtml(String(l.summary || '').slice(0, 130)) + '</div>'
           + (topics ? '<div class="ci-last" style="opacity:.65">' + escapeHtml(topics) + '</div>' : '');
         el.addEventListener('click', () => { searchEl.value = ''; searchMode = false; openChat({ chatId: c.chatId, chatName: c.chatName }); loadChats(); });
+        el.tabIndex = 0; el.setAttribute('role', 'button');
+        el.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); el.click(); } });
         chatsEl.appendChild(el);
       }
     }
@@ -1469,6 +1499,8 @@ const Convo = (function () {
           + '<span class="ci-time">' + shortDay(m.ts) + '</span></div>'
           + '<div class="ci-last">' + escapeHtml((m.body || '').slice(0, 100)) + '</div>';
         el.addEventListener('click', () => { searchEl.value = ''; searchMode = false; openChat({ chatId: m.chatId, chatName: m.chatName }); loadChats(); });
+        el.tabIndex = 0; el.setAttribute('role', 'button');
+        el.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); el.click(); } });
         chatsEl.appendChild(el);
       }
     }
@@ -2143,12 +2175,13 @@ document.addEventListener('click', (e) => {
 
 // Sort is never a filter: it changes the order, not what is shown.
 function filtersActive() {
-  return !!(F.q || F.source || F.kind || F.exact || F.dir || F.album || F.project || F.tag || F.backup || F.from || F.to);
+  return !!(F.favorite || F.q || F.source || F.kind || F.exact || F.dir || F.album || F.project || F.tag || F.backup || F.from || F.to);
 }
 
 // Everything the gallery can be narrowed by, one line each, so the bar above
 // the gallery can say exactly what is in force and take any one of them off.
 const ACTIVE_LABELS = {
+  favorite: () => 'Favourites',
   q: (v) => '“' + v + '”',
   source: (v) => (SOURCES.find((s) => s.id === v) || { label: v }).label,
   kind: (v) => ({ photos: 'Photos', videos: 'Videos', files: 'Files' })[v] || v,
@@ -2175,7 +2208,7 @@ function renderActiveBar() {
     + '<span class="count">showing ' + filteredCache.length + ' of ' + allItems.length + '</span>';
 }
 function clearAll() {
-  Object.assign(F, { q: '', source: '', kind: '', exact: '', dir: '', album: '', project: '', tag: '', backup: '', from: '', to: '' });
+  Object.assign(F, { q: '', source: '', kind: '', exact: '', dir: '', album: '', project: '', tag: '', backup: '', from: '', to: '', favorite: false });
   if (els.search) els.search.value = '';
   for (const id of ['f-exact', 'f-dir', 'f-album', 'f-project', 'f-tag', 'f-backup', 'f-from', 'f-to']) { const e = fEl(id); if (e) e.value = ''; }
   syncKindUi();
@@ -2537,7 +2570,7 @@ const StatusView = (function () {
   const TPLS = [['gradient', 'Green'], ['night', 'Night'], ['paper', 'Paper'], ['bold', 'Bold'], ['native', 'Plain text']];
   function renderTemplates() {
     els2.templates.innerHTML = TPLS.map(([id, label]) =>
-      `<div class="st-tpl${template === id ? ' sel' : ''}" data-t="${id}" title="${label}">${label}</div>`).join('');
+      `<button type="button" class="st-tpl${template === id ? ' sel' : ''}" data-t="${id}" title="${label}" aria-pressed="${template === id}">${label}</button>`).join('');
   }
   els2.templates.addEventListener('click', (e) => {
     const el = e.target.closest('.st-tpl');
@@ -2562,11 +2595,11 @@ const StatusView = (function () {
       const row = document.createElement('div');
       row.className = 'st-slot';
       const albumNote = s.source === 'album' && s.config && s.config.albumName ? ` · ${escapeHtml(s.config.albumName)}` : '';
-      row.innerHTML = `<label class="row toggle" style="margin:0"><input type="checkbox" ${s.enabled ? 'checked' : ''}><span class="switch"></span></label>
+      row.innerHTML = `<label class="row toggle" style="margin:0"><input type="checkbox" aria-label="Enable ${escapeHtml(slotWhen(s))} schedule" ${s.enabled ? 'checked' : ''}><span class="switch"></span></label>
         <span class="when">${slotWhen(s)}</span>
         <span class="src">${SRC[s.source] || s.source}${albumNote}</span>
         <span class="next">${s.enabled && s.next_run_at ? new Date(s.next_run_at).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' }) : ''}</span>
-        <button title="Remove">✕</button>`;
+        <button title="Remove" aria-label="Remove ${escapeHtml(slotWhen(s))} schedule">✕</button>`;
       row.querySelector('input').addEventListener('change', async (e) => {
         await jpost('/api/status/slots', { ...s, enabled: e.target.checked, config: s.config });
         refresh();

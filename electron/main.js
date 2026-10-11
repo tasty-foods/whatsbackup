@@ -223,7 +223,7 @@ function openWindow() {
   win = new BrowserWindow({
     width: 1280, height: 860, minWidth: 900, minHeight: 600,
     show: false,
-    backgroundColor: '#0b141a',
+    backgroundColor: '#f7f8f5',
     title: APP_NAME,
     icon: icon('app.ico'),
     autoHideMenuBar: true,

@@ -1,3 +1,19 @@
+# Desktop workspace redesign — 1.5.0
+
+The desktop app now separates navigation from the archive: a persistent sidebar, global media search, a dedicated Library toolbar and expandable albums/tags. Overview, Conversations, Status Studio, Clean up, setup and Settings use the same light/dark workspace styles. Settings has a vertical task list and a dedicated Appearance pane.
+
+New functions:
+
+- Favourites and named saved views persist beside the archive, independently of AI labels.
+- File selection supports all matching items, bulk favourites, and selected or filtered ZIP export. Downloads stream from disk; missing or quarantined items reject the selection before a ZIP starts. Names are flattened and deduplicated. Download tickets expire after two minutes and are single use.
+- Persistent theme, density, layout, starting screen, reduced motion, captions and muted hover-preview preferences.
+- Search includes actual archive filenames. Hidden galleries no longer materialise thousands of tiles. Conversation rows and status templates support the keyboard. Dialogs trap focus and restore it on close.
+- Public settings omit both legacy and provider-specific encrypted API keys.
+
+Verification covers persistence, invalid settings, corrupt preference files, export names, missing files, single-use downloads, expired tickets and large selection request bodies. Browser checks use an isolated preference store while reading the existing archive. Live posting, paid AI calls, source unlinking and media deletion are outside this UI test. The capture engines and pinned Chrome remain unchanged.
+
+---
+
 # Usability audit — 1.4.1
 
 Reviewed as a new user: setup, overview, source connections and imports, gallery filtering, conversations, AI sorting, cloud copies, cleanup, status posting, settings, installation instructions and the download site.

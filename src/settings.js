@@ -10,6 +10,13 @@ const FILE = path.join(paths.DATA_DIR, 'settings.json');
 const DEFAULTS = {
   // Dashboard
   port: 8788,
+  uiTheme: 'system',
+  uiLayout: 'grid',
+  uiDensity: 'comfortable',
+  uiStartView: 'overview',
+  uiReduceMotion: false,
+  uiVideoPreview: true,
+  uiShowCaptions: true,
 
   // Where things are kept. Empty mediaRoot means "<appHome>\media"; empty
   // cloudRoot means no cloud copy at all — a fresh PC has no pCloud drive.

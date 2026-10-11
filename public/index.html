@@ -5,30 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>WhatsBackUp</title>
   <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/workspace.css" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💬</text></svg>" />
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand">
-      <span class="logo">💬</span>
-      <div>
-        <div class="title">WhatsBackUp <button id="ver-badge" class="verbadge" title="Version"></button> <button id="update-btn" class="btn small update-btn" title="Check whether a newer version is available and install it from here">Check for updates</button></div>
-        <div class="sub" id="sub">Loading…</div>
-      </div>
-    </div>
-    <div class="controls">
-      <div class="tabs viewtoggle" id="viewtoggle">
-        <button data-v="overview" class="active">Overview</button>
-        <button data-v="media">Gallery</button>
-        <button data-v="convo">Conversations</button>
-        <button data-v="status">Status Studio</button>
-        <button data-v="cleanup">Clean up</button>
-      </div>
-      <button id="cloud-pill" class="pill cloud" hidden title="Where your backup stands — click for the Overview"></button>
-      <button id="open-settings" class="btn icon" title="Settings" aria-label="Settings">⚙︎</button>
-      <button id="app-exit" class="btn icon danger" aria-label="Quit WhatsBackUp" title="Close WhatsBackUp completely - it stops capturing until you open it again">&#9211;</button>
-    </div>
-  </header>
+  <a class="app-skip" href="#workspace-content">Skip to workspace</a><aside class="app-sidebar" aria-label="App sidebar"><a class="workspace-brand" href="#" data-home><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="6" rx="2"/><path d="M5 9v12h14V9M9 13h6"/></svg><span>WhatsBackUp<small>Your personal archive</small></span></a><div class="sidebar-section-label">WORKSPACE</div><nav class="workspace-nav" id="viewtoggle" aria-label="Workspace"><button data-v="overview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span>Overview</span></button><button data-v="media"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1"/><path d="m3 16 5-5 5 5 4-4 4 4"/></svg><span>Library</span><span id="nav-media-count" class="nav-count"></span></button><button data-v="convo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11a9 9 0 0 1-13 8l-5 2 1-5A9 9 0 1 1 21 11Z"/><path d="M8 9h8M8 13h5"/></svg><span>Conversations</span></button><button data-v="status"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a9 9 0 1 1-9 9M3 6V3h3M12 7v5l3 2"/></svg><span>Status Studio</span></button><button data-v="cleanup"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 3 6 6-9 9-6-6Z M6 12l-3 7 2 2 7-3M3 21h18"/></svg><span>Clean up</span></button></nav><div class="sidebar-section-label">QUICK ACCESS</div><div class="sidebar-links"><button id="nav-favorites"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 2.8 5.7L21 9.6 16.5 14l1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9Z"/></svg><span>Favourites</span><span id="favorites-count" class="nav-count">0</span></button><button data-settings-tab="connection"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="7" height="7" rx="2"/><rect x="14" y="13" width="7" height="7" rx="2"/><path d="M7 11v6h7M14 7h3v6"/></svg><span>Sources &amp; imports</span></button><button data-settings-tab="storage"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18H6a4 4 0 0 1-1-8 7 7 0 0 1 13-1 4.5 4.5 0 0 1 0 9h-1M12 21V11m-3 3 3-3 3 3"/></svg><span>Storage &amp; copies</span></button></div><div class="sidebar-section-label saved-heading"><span>SAVED VIEWS</span><button id="save-view-shortcut" aria-label="Save current library view" title="Save current library view">+</button></div><div id="saved-views" class="saved-views"><p>Your useful searches,<br>one click away.</p></div><div class="sidebar-bottom"><div class="sidebar-links"><button id="open-settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 3-1 3-3 1v4l2 2-1 3 3 3 3-1 2 2h4l1-3 3-1V9l-3-1-1-3h-4l-2 2-3-1Z"/><circle cx="12" cy="12" r="3"/></svg><span>Settings</span><kbd>Ctrl ,</kbd></button></div><div class="sidebar-version"><button id="ver-badge" class="verbadge" title="App version"></button><span>Saved on your PC</span><button id="app-exit" class="quit-button" aria-label="Quit WhatsBackUp" title="Quit WhatsBackUp completely">⏻</button></div></div></aside><div class="app-workspace" id="workspace-content" tabindex="-1"><header class="workspace-topbar"><div class="workspace-location"><span class="workspace-eyebrow">YOUR WORKSPACE</span><h1 id="workspace-title">Overview</h1></div><div class="workspace-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></svg><input id="search" aria-label="Search media in your archive" type="search" placeholder="Search your media, chats, file names…" autocomplete="off"><kbd>Ctrl K</kbd></div><div class="workspace-top-actions"><button id="cloud-pill" class="pill cloud" hidden title="Media copy status"></button><button id="update-btn" class="btn small update-btn" title="Check for app updates">Updates</button><button class="btn primary" data-settings-tab="history"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4"/></svg><span>Import</span></button></div></header><div class="workspace-status"><div id="sub" class="sub">Connecting to your archive…</div><span id="workspace-date"></span></div>
 
   <!-- Shown when downloads keep failing: the failure mode that used to be silent -->
   <div id="health-banner" class="banner hidden">
@@ -48,8 +29,8 @@
   <!-- ===== Media view ===== -->
   <div id="view-media">
     <!-- Everything that narrows or orders the gallery lives here, on the gallery. -->
-    <div class="toolbar" id="media-toolbar">
-      <span class="muted small">Show</span>
+    <div class="library-heading"><div><span class="workspace-eyebrow">EVERYTHING YOU KEEP</span><h2 id="library-title">Your library <span id="library-count"></span></h2><p>Find the photo, file or idea you came back for.</p></div><div class="library-actions"><button class="btn" id="save-view">Save view</button><button class="btn" id="select-mode" aria-pressed="false">Select files</button></div></div><div class="toolbar" id="media-toolbar">
+
       <div class="seg" id="source" title="Which source to show"></div>
       <div class="seg" id="kind" title="What kind of item to show">
         <button data-kind="" class="active">All</button>
@@ -57,7 +38,7 @@
         <button data-kind="videos">Videos</button>
         <button data-kind="files">Files</button>
       </div>
-      <input id="search" aria-label="Search your gallery" class="grow" type="search" placeholder="Search chats, captions, file names and what is in the photos…" autocomplete="off" />
+
       <div class="right">
         <select id="f-sort" class="sort" title="Sort by">
           <option value="new">Newest first</option>
@@ -68,7 +49,7 @@
         </select>
         <button id="filters-open" class="btn" title="More ways to narrow: sent or received, exact type, album, project, tag, dates, backup">⚙ Filters</button>
         <button id="reels-open" class="btn" title="Play your videos one after another">▶ Quick play</button>
-        <a id="zip" class="btn" href="/api/zip" title="Videos stay in your video folder">⭳ Download all photos</a>
+        <button class="btn" id="export-matching">Export view</button><a id="zip" class="btn hidden" href="/api/zip">Download all photos</a><div class="layout-switch" role="group" aria-label="Library layout"><button data-layout="grid" aria-label="Grid layout" title="Grid layout">▦</button><button data-layout="masonry" aria-label="Masonry layout" title="Masonry layout">▥</button><button data-layout="list" aria-label="List layout" title="List layout">☰</button></div>
       </div>
     </div>
     <div class="activebar" id="activebar"></div>
@@ -84,8 +65,7 @@
         <p class="hint">You only do this once. After linking, every image and video you send or receive shows up here automatically.</p>
       </div>
     </section>
-    <div id="albumbar" class="albumbar hidden"></div>
-    <div id="tagbar" class="tagbar hidden"></div>
+    <details class="collection-browser"><summary>Albums &amp; tags <span>Explore your organisation</span></summary><div id="albumbar" class="albumbar hidden"></div><div id="tagbar" class="tagbar hidden"></div></details>
     <div id="filterbar" class="filterbar hidden">
       <div class="fb-row">
         <label>Sent or received
@@ -126,7 +106,7 @@
         </label>
       </div>
     </div>
-    <main id="gallery" class="gallery"></main>
+    <div id="selection-bar" class="selection-bar hidden"><b id="selection-count">0 selected</b><button class="btn small" id="select-all">Select all in view</button><button class="btn small" id="selection-favorite">Add to favourites</button><button class="btn small primary" id="selection-export">Export selected</button><button class="btn small" id="selection-clear">Done</button></div><main id="gallery" class="gallery" aria-label="Archive media"></main>
     <div id="empty" class="empty hidden">No photos or videos yet. New ones appear here the moment they arrive — or open <b>⚙︎ Settings → Import older</b> to pull in what came before.</div>
   </div>
 
@@ -156,12 +136,12 @@
 
   <!-- ===== Status Studio ===== -->
   <div id="view-overview" class="overview hidden">
-    <div class="overview-intro"><h1>Your archive, at a glance</h1><p class="muted">Save from your accounts, find what you need, and keep a second copy in your cloud folder.</p></div>
+    <div class="overview-intro"><span class="workspace-eyebrow">A LITTLE LESS TO KEEP TRACK OF</span><h2>Your archive. Under control.</h2><p class="muted">A clear view of what’s saved, what’s connected and what needs your attention.</p></div>
     <section id="ov-next" class="next-step" aria-label="Next step"></section>
     <section class="ov-backup" id="ov-backup" data-state="none"></section>
     <section class="ov-sec" aria-labelledby="sources-title"><h2 id="sources-title" class="section-title">Your sources</h2><div id="ov-connections" class="source-cards"></div></section>
-    <div class="ov-sources"><span class="muted small">Show</span><div class="seg" id="ov-sources"></div></div>
-    <div class="ov-stats" id="ov-stats"></div>
+    <details class="overview-scope"><summary>Filter overview by source</summary><div class="ov-sources"><span class="muted small">Show</span><div class="seg" id="ov-sources"></div></div>
+    </details><div class="ov-stats" id="ov-stats"></div>
     <div class="ov-sec">
       <h2 class="section-title">Keep it up to date</h2>
       <div class="ov-upkeep" id="ov-upkeep"></div>
@@ -181,7 +161,7 @@
   <div id="view-cleanup" class="cleanup hidden">
     <div class="cl-head">
       <div>
-        <h2 class="section-title">Clean up</h2>
+        <h2 class="section-title">A little room to breathe.</h2>
         <p class="muted small" id="cl-summary">Looking&hellip;</p>
       </div>
       <div class="cl-actions">
@@ -332,11 +312,12 @@
   </div>
 
   <!-- Lightbox -->
-  <div id="lightbox" class="lightbox hidden">
-    <button class="lb-close" id="lb-close">✕</button>
-    <button class="lb-nav lb-prev" id="lb-prev">‹</button>
+  </div>
+<div id="lightbox" class="lightbox hidden" role="dialog" aria-modal="true" aria-label="Media preview">
+    <button class="lb-close" id="lb-close" aria-label="Close preview">✕</button>
+    <button class="lb-nav lb-prev" id="lb-prev" aria-label="Previous item">‹</button>
     <div class="lb-stage" id="lb-stage"></div>
-    <button class="lb-nav lb-next" id="lb-next">›</button>
+    <button class="lb-nav lb-next" id="lb-next" aria-label="Next item">›</button>
     <div class="lb-meta" id="lb-meta"></div>
   </div>
 
@@ -459,6 +440,7 @@
       </div>
 
       <div class="tabs settabs" id="settabs">
+        <button data-t="appearance">Appearance</button>
         <button data-t="connection" class="active">Sources</button>
         <button data-t="capture">What to save</button>
         <button data-t="storage">Where</button>
@@ -797,7 +779,8 @@
           </div>
         </div>
 
-        <!-- Advanced -->
+        <div class="pane hidden" data-pane="appearance"><div class="settings-intro"><span class="workspace-eyebrow">MAKE YOURSELF AT HOME</span><h3>A workspace that fits you.</h3><p>These choices apply immediately and stay with this archive.</p></div><div class="sec"><div class="sec-title">Colour &amp; comfort</div><label class="preference-row"><span><b>Colour theme</b><small>Follow Windows, or choose your own.</small></span><select id="set-uiTheme" class="txt"><option value="system">Match system</option><option value="light">Light</option><option value="dark">Dark</option></select></label><label class="preference-row"><span><b>Interface density</b><small>More breathing room, or more files on screen.</small></span><select id="set-uiDensity" class="txt"><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></label><label class="row toggle"><input type="checkbox" id="set-uiReduceMotion"><span class="switch"></span><span>Reduce interface motion</span></label></div><div class="sec"><div class="sec-title">Your library</div><label class="preference-row"><span><b>Default layout</b><small>A tidy grid, original proportions or a detailed list.</small></span><select id="set-uiLayout" class="txt"><option value="grid">Grid</option><option value="masonry">Masonry</option><option value="list">List</option></select></label><label class="row toggle"><input type="checkbox" id="set-uiShowCaptions"><span class="switch"></span><span>Show file names and details below thumbnails</span></label><label class="row toggle"><input type="checkbox" id="set-uiVideoPreview"><span class="switch"></span><span>Play muted video previews on hover</span></label><label class="preference-row"><span><b>Open the app on</b><small>Choose your starting point.</small></span><select id="set-uiStartView" class="txt"><option value="overview">Overview</option><option value="media">Library</option><option value="convo">Conversations</option></select></label></div><div class="sec"><div class="sec-title">Keyboard shortcuts</div><dl class="shortcut-list"><div><dt>Search your media</dt><dd>Ctrl K</dd></div><div><dt>Open settings</dt><dd>Ctrl ,</dd></div><div><dt>Close a preview or dialog</dt><dd>Esc</dd></div><div><dt>Previous / next media</dt><dd>← / →</dd></div></dl></div></div>
+<!-- Advanced -->
         <div class="pane hidden" data-pane="advanced">
           <div class="sec">
             <div class="sec-title">Dashboard</div>
@@ -830,12 +813,15 @@
 
       </div>
       <div class="modal-foot">
+        <span id="appearance-save-hint" class="muted small hidden">Changes save automatically.</span>
         <span id="save-status" role="status" aria-live="polite" class="muted small"></span>
         <button id="settings-save" class="btn primary">Save settings</button>
       </div>
     </div>
   </div>
 
-  <script src="/app.js"></script>
+  <div id="workspace-toast" class="workspace-toast hidden" role="status" aria-live="polite"></div><div id="save-view-dialog" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="save-view-title"><form class="modal-card save-view-card" id="save-view-form"><div class="modal-head"><h2 id="save-view-title">Keep this view handy.</h2><button type="button" class="btn icon" id="save-view-cancel" aria-label="Close saved view dialog">×</button></div><p>Your search, filters and sort order will be saved in the sidebar.</p><label for="save-view-name">Name this view</label><input id="save-view-name" class="txt" maxlength="60" required placeholder="e.g. Supplier documents"><p id="save-view-error" class="bad-text" role="status"></p><div class="modal-foot"><button class="btn primary" type="submit">Save view</button></div></form></div>
+<script src="/app.js"></script>
+<script src="/workspace.js"></script>
 </body>
 </html>

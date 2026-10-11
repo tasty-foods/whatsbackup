@@ -2,6 +2,8 @@
 
 A Windows desktop app that saves every photo, video and message from your WhatsApp — to a local folder, and to a cloud folder if you point it at one.
 
+The 1.5.0 desktop workspace adds a sidebar, a searchable Library, favourites, saved filter views, selected-file ZIP exports and persistent appearance preferences. Personal organisation lives in `data/library.json`; display choices live in `data/settings.json`. Capture, cloud copying and source sessions keep their existing configuration.
+
 For installing and using it, see **[INSTALL.md](INSTALL.md)**. This file is about how it's built.
 
 The [1.4.9 usability audit](AUDIT.md) records the reviewed flows, shipped changes and remaining product limits. Current additions include ChatGPT and Gemini image imports (`src/chatgpt/`, `src/gemini/`), media copy verification (`src/backup.js`), reversible cleanup (`src/cleanup/`), and opt-in status scheduling (`src/status/`). Import summaries are persisted in `data/*-import.json`. Run `npm test` for backup regression checks.
@@ -42,7 +44,7 @@ Nothing writable lives next to the program. Installed, everything is under
 
 | Folder | Contents |
 |---|---|
-| `data\` | `messages.db` (SQLite, incl. the `ai_*` tables), `index.ndjson` (media index), `settings.json` |
+| `data\` | `messages.db` (SQLite, incl. the `ai_*` tables), `index.ndjson` (media index), `settings.json`, `library.json` (favourites and saved views) |
 | `session\` | the Chromium profile that *is* the WhatsApp link |
 | `logs\` | rotating log, capped by the `logMaxMB` setting |
 | `media\` | images / videos / files, unless the user chose another folder |
