@@ -98,6 +98,10 @@ const SETTING_SPEC = {
   aiOcrPages: { type: 'int', min: 0, max: 12 },
   aiPaused: { type: 'bool' },
   aiResumeOnLaunch: { type: 'bool' },
+  aiTranscribeAudio: { type: 'bool' },
+  aiTopics: { type: 'bool' },
+  aiEmbeddings: { type: 'bool' },
+  aiFinals: { type: 'bool' },
   aiMonthlyBudget: { type: 'int', min: 0, max: 10000 },
   aiJsonSchema: { type: 'bool' },
   aiChain: { type: 'list' },
@@ -193,11 +197,19 @@ function createApp() {
     res.sendFile(candidate, (err) => { if (err && !res.headersSent) res.status(404).end(); });
   };
   app.get('/media/videos/:name', (req, res) => serveFrom([cfg.LOCAL_VIDEO_DIR, cfg.VIDEO_DIR])(req, res));
-  app.get('/api/thumbnail/:id', async (req, res) => {
+  // A video gets its poster when it is indexed; before that, a frame is pulled
+  // by the desktop shell (or sharp, from source), so the grid never shows a
+  // placeholder for a clip that can be decoded.
+  const imaging = require('./imaging');
+  app.get(['/api/thumbnail/:id', '/thumb/:id'], async (req, res) => {
     const rec = store.get(req.params.id);
     if (!rec || !['image', 'sticker', 'video'].includes(rec.kind)) return res.status(404).end();
     try {
-      const file = await require('./content/files').thumbnail(rec);
+      let file = await require('./content/files').thumbnail(rec);
+      if (!file && rec.kind === 'video') {
+        const local = await require('./backup').localPathFor(rec);
+        if (local) { try { file = await imaging.thumbnail(rec, local); } catch (_) { file = null; } }
+      }
       if (!file) return res.type('svg').set('Cache-Control', 'no-cache').send('<svg xmlns="http://www.w3.org/2000/svg" width="440" height="300"><rect width="440" height="300" fill="#20392e"/><path d="m202 117 53 33-53 33z" fill="#acc5b5"/></svg>');
       res.set('Cache-Control', 'private, max-age=86400').sendFile(file);
     }
@@ -595,7 +607,7 @@ function createApp() {
   });
   app.post('/api/ai/group/assign', sameOrigin, (req, res) => {
     const { kind, refId, groupId } = req.body || {};
-    if (!['image', 'video', 'document', 'chat'].includes(kind)) return res.status(400).json({ ok: false, message: 'unknown kind' });
+    if (!['image', 'video', 'document', 'audio', 'chat'].includes(kind)) return res.status(400).json({ ok: false, message: 'unknown kind' });
     if (!refId) return res.status(400).json({ ok: false });
     const groups = ai.store.listGroups(kind === 'chat' ? 'chat' : 'media');
     const g = groupId ? groups.find((x) => x.id === groupId) : null;
@@ -617,35 +629,84 @@ function createApp() {
     res.json({ ok: true });
   });
 
-  // The labels themselves, for the gallery and the chat list.
+  // The labels themselves, for the gallery and the chat list — one query,
+  // album included, rather than one lookup per label.
   app.get('/api/ai/labels', (req, res) => {
     const kind = req.query.kind;
-    const kinds = kind === 'chat' ? ['chat'] : ['image', 'video', 'document'];
-    const groups = new Map(ai.store.listGroups(kind === 'chat' ? 'chat' : 'media').map((g) => [g.id, g]));
+    const kinds = kind === 'chat' ? ['chat'] : ['image', 'video', 'document', 'audio'];
     // Chat labels are keyed by chat id, but a media record only knows the chat's
     // display name — so send the name too and the two can be matched up.
     let names = null;
     if (kind === 'chat') {
       try { names = new Map(messages.listChats().map((c) => [c.chatId, c.chatName])); } catch (_) {}
     }
-    res.json(ai.store.labelsOfKinds(kinds).map((e) => {
-      const m = ai.store.groupOf(e.kind, e.refId);
-      const g = m && groups.get(m.group_id);
-      return {
-        kind: e.kind, refId: e.refId, label: e.kind === 'document' ? { ...e.label, chunks: undefined } : e.label,
-        ...(names ? { chatName: names.get(e.refId) || null } : {}),
-        groupId: g ? g.id : null, groupName: g ? g.name : null, groupEmoji: g ? g.emoji : null,
-        placedBy: m ? m.source : null,
-      };
-    }));
+    const rows = ai.store.labelsWithGroups(kinds, kind === 'chat' ? 'chat' : 'media');
+    // The transcript and the document text are long; the gallery needs the
+    // short facts. The lightbox asks for one item in full.
+    for (const r of rows) {
+      if (r.label && r.kind === 'document') r.label = { ...r.label, chunks: undefined, text_excerpt: undefined };
+      if (r.label && r.label.transcript && r.label.transcript.length > 200) r.label = { ...r.label, transcript: r.label.transcript.slice(0, 200) + '…', transcriptLong: true };
+      if (names) r.chatName = names.get(r.refId) || null;
+    }
+    res.json(rows);
   });
 
   // ---- Conversations ----
-  // Resolve any group-author ids to contact names at read time (belt & suspenders).
-  const withNames = (rows) => { for (const r of rows) { if (r.author && r.author !== 'me') { const n = contacts.resolve(r.author); if (n) r.author = n; } } return rows; };
+  // The name beside a group message: the one saved with it, else the address
+  // book's answer for the raw id, else the id with its server stripped.
+  const prettyId = (a) => String(a || '').replace(/@.*$/, '');
+  const withNames = (rows) => {
+    for (const r of rows) {
+      if (!r.author || r.author === 'me') continue;
+      const n = r.authorName || contacts.resolve(r.author);
+      r.author = n || (/@(c\.us|lid|s\.whatsapp\.net)$/.test(r.author) ? '+' + prettyId(r.author) : r.author);
+    }
+    return rows;
+  };
 
-  app.get('/api/chats', (req, res) => { try { res.json(messages.listChats()); } catch (e) { res.json([]); } });
+  // The chat list is two lists folded together: what has text saved (with its
+  // last line), and what WhatsApp reports exists (so a chat whose messages
+  // were never captured is still there to open, name and sync).
+  app.get('/api/chats', (req, res) => {
+    try {
+      const withText = messages.listChats();
+      const seen = new Set(withText.map((c) => c.chatId));
+      let known = [];
+      try { known = messages.allChats(); } catch (_) {}
+      const byId = new Map(known.map((c) => [c.id, c]));
+      const out = withText.map((c) => {
+        const k = byId.get(c.chatId);
+        const name = (c.chatName && c.chatName !== 'unknown') ? c.chatName : ((k && k.name) || contacts.resolve(c.chatId) || c.chatName);
+        return { ...c, chatName: name, isGroup: k ? !!k.is_group : /@g\.us$/.test(c.chatId), waLastTs: k ? k.last_ts : 0, syncedTs: k ? k.synced_ts : 0, behind: !!(k && k.last_ts > (k.synced_ts || 0) && k.last_ts > (c.lastTs || 0) + 60000) };
+      });
+      if (req.query.all !== '0') {
+        for (const k of known) {
+          if (seen.has(k.id) || k.id === 'status@broadcast') continue;
+          out.push({ chatId: k.id, chatName: k.name || contacts.resolve(k.id) || prettyId(k.id), lastTs: k.last_ts || 0, lastBody: '', lastType: null, lastFromMe: 0, cnt: 0,
+            isGroup: !!k.is_group, waLastTs: k.last_ts, syncedTs: k.synced_ts, behind: k.last_ts > (k.synced_ts || 0), empty: true });
+        }
+      }
+      out.sort((a, b) => (b.lastTs || 0) - (a.lastTs || 0));
+      res.json(out);
+    } catch (e) { res.json([]); }
+  });
   app.post('/api/chats/repair-names', sameOrigin, async (req, res) => { try { res.json(await require('./whatsapp').repairNames()); } catch (e) { res.status(500).json({ error: e.message }); } });
+  // Pull one chat's recent messages and media now, or every chat that moved.
+  app.post('/api/chats/sync', sameOrigin, async (req, res) => {
+    const { chatId, limit } = req.body || {};
+    try {
+      const wa = require('./whatsapp');
+      res.json(chatId ? await wa.syncChat(String(chatId), parseInt(limit, 10) || 200) : await wa.catchUp());
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  app.post('/api/contacts/sync', sameOrigin, async (req, res) => {
+    try { res.json(await require('./whatsapp').syncContacts()); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  app.get('/api/contacts', (req, res) => {
+    const q = String(req.query.q || '').trim();
+    try { res.json(q ? messages.searchContacts(q, 30) : { count: messages.contactCount(), loaded: contacts.size() }); } catch (e) { res.json([]); }
+  });
+  app.get('/api/sync/state', (req, res) => res.json(require('./whatsapp').getSyncState()));
   app.get('/api/thread', (req, res) => {
     const chat = req.query.chat;
     if (!chat) return res.status(400).json({ error: 'chat required' });
@@ -659,7 +720,93 @@ function createApp() {
   app.get('/api/search', (req, res) => {
     const q = (req.query.q || '').trim();
     if (q.length < 2) return res.json([]);
-    try { res.json(messages.search(q, 200)); } catch (e) { res.json([]); }
+    try { res.json(withNames(messages.search(q, 200, { chatId: req.query.chat || undefined }))); } catch (e) { res.json([]); }
+  });
+
+  // ---- Search, every angle ----
+  app.get('/api/search/all', async (req, res) => {
+    const q = String(req.query.q || '').trim();
+    if (q.length < 2) return res.json({ query: q, media: [], messages: [], chats: [], topics: [], contacts: [], counts: {} });
+    try {
+      const semantic = req.query.semantic === '0' ? null : ai.embedConfig();
+      res.json(await require('./search').searchAll(q, { limit: Math.min(100, parseInt(req.query.limit || '30', 10) || 30), semanticCfg: semantic }));
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+  app.get('/api/search/parse', (req, res) => res.json(require('./search').parseQuery(String(req.query.q || ''))));
+
+  // A question answered from what the search finds, with the sources named.
+  app.post('/api/ai/ask', sameOrigin, async (req, res) => {
+    const st = settings.read();
+    if (!st.aiEnabled || !st.aiConsent) return res.status(403).json({ error: 'Switch on AI sorting and accept the notice first.' });
+    const cfg = ai.pickProvider({});
+    if (!cfg) return res.status(503).json({ error: 'No AI provider is available right now.' });
+    try { res.json(await require('./ai/ask').ask(cfg, (req.body || {}).question, { semanticCfg: ai.embedConfig() })); }
+    catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ---- Topics ----
+  app.get('/api/topics', (req, res) => {
+    const chat = req.query.chat ? String(req.query.chat) : null;
+    const names = new Map(messages.listChats().map((c) => [c.chatId, c.chatName]));
+    const themes = new Map();
+    for (const g of ai.store.listGroups('topic')) for (const m of ai.store.membersOf(g.id)) themes.set(m.ref_id, { id: g.id, name: g.name, emoji: g.emoji });
+    const rows = (chat ? ai.store.topicsOf(chat) : ai.store.allTopics()).map((t) => ({ ...t, chatName: names.get(t.chatId) || t.chatId, theme: themes.get(t.id) || null }));
+    res.json({ topics: rows, themes: ai.store.listGroups('topic').map((g) => ({ id: g.id, name: g.name, emoji: g.emoji, description: g.description, members: g.members })) });
+  });
+  app.get('/api/topics/:id', (req, res) => {
+    const t = ai.store.getTopic(String(req.params.id));
+    if (!t) return res.status(404).json({ error: 'not found' });
+    const rows = messages.getNewer(t.chatId, t.fromTs, 400).filter((m) => m.ts <= t.toTs);
+    res.json({ ...t, chatName: (messages.listChats().find((c) => c.chatId === t.chatId) || {}).chatName || t.chatId, messages: withNames(rows) });
+  });
+
+  // ---- Finals: versions of one thing, and which to keep ----
+  const finalsMod = require('./ai/finals');
+  app.get('/api/finals/sets', (req, res) => {
+    try { res.json({ sets: finalsMod.listSets(req.query.status ? String(req.query.status) : undefined), dirs: finalsMod.finalsDirs() }); }
+    catch (e) { res.status(500).json({ error: e.message }); }
+  });
+  app.get('/api/finals/marks', (req, res) => {
+    try { res.json(ai.store.allFinalMarks().map((m) => ({ id: m.ref_id, setId: m.set_id, localPath: m.local_path, cloudPath: m.cloud_path, at: m.marked_at }))); }
+    catch (e) { res.status(500).json({ error: e.message }); }
+  });
+  app.post('/api/finals/keep', sameOrigin, (req, res) => {
+    const { refId, setId } = req.body || {};
+    if (!refId) return res.status(400).json({ ok: false, error: 'refId required' });
+    try { res.json(finalsMod.keep(String(refId), { setId: setId ? String(setId) : null })); }
+    catch (e) { res.status(400).json({ ok: false, error: e.message }); }
+  });
+  app.post('/api/finals/unkeep', sameOrigin, (req, res) => {
+    const { refId } = req.body || {};
+    if (!refId) return res.status(400).json({ ok: false, error: 'refId required' });
+    try { res.json(finalsMod.unkeep(String(refId))); } catch (e) { res.status(400).json({ ok: false, error: e.message }); }
+  });
+  app.post('/api/finals/dismiss', sameOrigin, (req, res) => { try { res.json(finalsMod.dismiss(String((req.body || {}).setId))); } catch (e) { res.status(400).json({ ok: false, error: e.message }); } });
+  app.post('/api/finals/reopen', sameOrigin, (req, res) => { try { res.json(finalsMod.reopen(String((req.body || {}).setId))); } catch (e) { res.status(400).json({ ok: false, error: e.message }); } });
+  // Look for new sets now and have them judged (a background pass).
+  app.post('/api/finals/detect', sameOrigin, async (req, res) => {
+    try {
+      const n = await ai.queueSecondPass();
+      ai.kick();
+      res.json({ ok: true, queued: n });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+
+  // One item in full: the label, the transcript, the document text, whether
+  // it is kept as a final and what set it belongs to.
+  app.get('/api/media/:id/label', (req, res) => {
+    const rec = store.get(String(req.params.id || ''));
+    if (!rec) return res.status(404).json({ error: 'not found' });
+    const kind = rec.kind === 'video' ? 'video' : rec.kind === 'document' ? 'document' : (rec.kind === 'voice' || rec.kind === 'audio') ? 'audio' : 'image';
+    const row = ai.store.getLabel(kind, rec.id);
+    const m = ai.store.groupOf(kind, rec.id);
+    const g = m && ai.store.listGroups('media').find((x) => x.id === m.group_id);
+    const mark = ai.store.finalMark(rec.id);
+    const set = ai.store.listFinalSets().find((s) => s.members.includes(rec.id) && s.status !== 'not_versions');
+    const label = row && row.label ? { ...row.label, chunks: undefined } : null;
+    res.json({ id: rec.id, kind, label, model: row && row.model, groupId: g ? g.id : null, groupName: g ? g.name : null,
+      final: mark ? { localPath: mark.local_path, cloudPath: mark.cloud_path, markedAt: mark.marked_at } : null,
+      set: set ? { id: set.id, status: set.status, suggestedId: set.suggestedId, members: set.members.length, reason: set.reason } : null });
   });
   app.post('/api/export', sameOrigin, (req, res) => {
     try { res.json({ ok: true, ...exporter.exportTranscript() }); }

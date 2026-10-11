@@ -212,6 +212,102 @@ async function completeOpenAi(cfg, req) {
   };
 }
 
+/* ---------------- speech to text ----------------
+   OpenAI's /audio/transcriptions shape, which Groq copies. Multipart, one
+   file, the text back. Billed by the minute, so the duration is reported
+   rather than tokens. */
+async function transcribeOpenAi(cfg, req) {
+  const base = (cfg.baseUrl || '').replace(/\/+$/, '');
+  if (!base) throw new AiError('No server address is configured for this provider.', { kind: 'error' });
+  const label = new URL(base).host;
+  const form = new FormData();
+  form.append('model', cfg.audioModel);
+  form.append('response_format', 'verbose_json');
+  if (req.language) form.append('language', req.language);
+  if (req.prompt) form.append('prompt', String(req.prompt).slice(0, 600));
+  form.append('file', new Blob([req.bytes], { type: req.mimetype || 'application/octet-stream' }), req.filename || 'audio.ogg');
+
+  const headers = {};
+  if (cfg.apiKey && !cfg.local) headers.authorization = `Bearer ${cfg.apiKey}`;
+  const timer = new AbortController();
+  const to = setTimeout(() => timer.abort(), TIMEOUT_MS * 2);
+  let res, raw;
+  try {
+    res = await fetch(`${base}/audio/transcriptions`, { method: 'POST', headers, body: form, signal: timer.signal });
+    raw = await res.text();
+  } catch (e) {
+    throw wrapNetworkError(e, label);
+  } finally { clearTimeout(to); }
+  if (!res.ok) throw statusToError(res.status, raw, label);
+  let payload;
+  try { payload = JSON.parse(raw); } catch (_) { payload = { text: raw }; }
+  const text = String(payload.text || '').trim();
+  const seconds = Number(payload.duration) || (req.seconds || 0);
+  return { text, language: payload.language || null, seconds, segments: Array.isArray(payload.segments) ? payload.segments.length : 0 };
+}
+
+// cfg: { provider, audioModel, apiKey, baseUrl }; req: { bytes, mimetype, filename, language?, prompt?, seconds? }
+async function transcribe(cfg, req) {
+  const preset = PRESETS[cfg.provider] || PRESETS.custom;
+  const started = Date.now();
+  let out;
+  if (preset.api === 'demo') out = await require('./demo').transcribe(cfg, req);
+  else if (preset.api === 'openai') out = await transcribeOpenAi({ ...preset, ...cfg, local: !!preset.local }, req);
+  else throw new AiError(`${preset.label} does not transcribe audio.`, { kind: 'model' });
+  out.ms = Date.now() - started;
+  const { audioCostOf, audioCapCostOf } = require('./presets');
+  out.cost = audioCostOf(cfg.provider, cfg.audioModel, out.seconds || 0);
+  out.costCap = audioCapCostOf(cfg.provider, cfg.audioModel, out.seconds || 0);
+  if (cfg.onUsage) cfg.onUsage(out);
+  return out;
+}
+
+/* ---------------- embeddings ----------------
+   Vectors for "find me the thing that means this", over the same
+   OpenAI-compatible shape. Gemini's shim and NVIDIA's gateway both answer
+   it; NVIDIA additionally insists on being told query or passage. */
+async function embedOpenAi(cfg, texts, { inputType } = {}) {
+  const base = (cfg.baseUrl || '').replace(/\/+$/, '');
+  if (!base) throw new AiError('No server address is configured for this provider.', { kind: 'error' });
+  const label = new URL(base).host;
+  const body = { model: cfg.embedModel, input: texts };
+  if (cfg.embedDims && !/nvidia|openrouter/i.test(label)) body.dimensions = cfg.embedDims;
+  if (cfg.embedInputType) { body.input_type = inputType || 'passage'; body.truncate = 'END'; }
+  const headers = { 'content-type': 'application/json' };
+  if (cfg.apiKey && !cfg.local) headers.authorization = `Bearer ${cfg.apiKey}`;
+  const timer = new AbortController();
+  const to = setTimeout(() => timer.abort(), TIMEOUT_MS);
+  let res, raw;
+  try {
+    res = await fetch(`${base}/embeddings`, { method: 'POST', headers, body: JSON.stringify(body), signal: timer.signal });
+    raw = await res.text();
+  } catch (e) {
+    throw wrapNetworkError(e, label);
+  } finally { clearTimeout(to); }
+  if (!res.ok) throw statusToError(res.status, raw, label);
+  let payload;
+  try { payload = JSON.parse(raw); } catch (_) { throw new AiError(`${label} returned something that isn't an API response.`, { kind: 'error' }); }
+  const rows = Array.isArray(payload.data) ? payload.data.slice().sort((a, b) => (a.index || 0) - (b.index || 0)) : [];
+  if (rows.length !== texts.length) throw new AiError(`${label} returned ${rows.length} vectors for ${texts.length} texts.`, { kind: 'schema', retryable: true });
+  const usage = payload.usage || {};
+  return { vectors: rows.map((r) => Float32Array.from(r.embedding || [])), usage: { in: usage.prompt_tokens || usage.total_tokens || 0, out: 0 } };
+}
+
+// cfg: { provider, embedModel, embedDims, embedInputType, apiKey, baseUrl }
+async function embed(cfg, texts, opts) {
+  const preset = PRESETS[cfg.provider] || PRESETS.custom;
+  const started = Date.now();
+  let out;
+  if (preset.api === 'demo') out = await require('./demo').embed(cfg, texts);
+  else if (preset.api === 'openai') out = await embedOpenAi({ ...preset, ...cfg, local: !!preset.local }, texts, opts);
+  else throw new AiError(`${preset.label} does not make embeddings.`, { kind: 'model' });
+  out.ms = Date.now() - started;
+  out.cost = costOf(cfg.provider, cfg.embedModel, out.usage.in, 0);
+  out.costCap = capCostOf(cfg.provider, cfg.embedModel, out.usage.in, 0);
+  if (cfg.onUsage) cfg.onUsage(out);
+  return out;
+}
+
 /* ---------------- public ---------------- */
 // cfg: { provider, model, apiKey, baseUrl, jsonSchema }
 async function complete(cfg, req) {
@@ -228,8 +324,10 @@ async function complete(cfg, req) {
   out.ms = Date.now() - started;
   out.cost = costOf(cfg.provider, cfg.model, out.usage.in, out.usage.out);
   out.costCap = capCostOf(cfg.provider, cfg.model, out.usage.in, out.usage.out);
+  // Each paid answer is booked as it arrives, so a document whose third page
+  // fails still has its first two on the ledger.
   if (cfg.onUsage) cfg.onUsage(out);
   return out;
 }
 
-module.exports = { complete, AiError, parseJson };
+module.exports = { complete, transcribe, embed, AiError, parseJson };

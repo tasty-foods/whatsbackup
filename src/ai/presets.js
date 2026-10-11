@@ -7,6 +7,11 @@
 // `vision` and `jsonSchema` here are only defaults for the UI. What a given
 // model actually honours is decided by probing it (see probe.js) — every
 // OpenAI-compatible endpoint lies about at least one of them.
+//
+// `audio` names the speech-to-text model a provider offers on its
+// /audio/transcriptions endpoint; `embeddings` the model on /embeddings.
+// Neither is a chat model, so each is its own field, and a provider without
+// one simply never gets that kind of job — the chain hands it to one that has.
 
 const PRESETS = {
   anthropic: {
@@ -29,6 +34,8 @@ const PRESETS = {
     defaultModel: 'gpt-5-mini',
     vision: true,
     jsonSchema: true,
+    audio: { model: 'whisper-1' },
+    embeddings: { model: 'text-embedding-3-small', dims: 1536 },
   },
   gemini: {
     label: 'Google Gemini',
@@ -40,6 +47,7 @@ const PRESETS = {
     defaultModel: 'gemini-2.5-flash',
     vision: true,
     jsonSchema: true,
+    embeddings: { model: 'gemini-embedding-001', dims: 768 },
   },
   nvidia: {
     label: 'NVIDIA (build.nvidia.com)',
@@ -55,6 +63,7 @@ const PRESETS = {
     defaultModel: 'deepseek-ai/deepseek-v4-flash-0731',
     vision: false,
     jsonSchema: true,
+    embeddings: { model: 'nvidia/nv-embedqa-e5-v5', dims: 1024, inputType: true },
   },
   openrouter: {
     label: 'OpenRouter',
@@ -85,6 +94,9 @@ const PRESETS = {
     defaultModel: 'qwen/qwen3.8-27b',
     vision: true,
     jsonSchema: true,
+    // Whisper on Groq is on the free tier: the one place in the chain that
+    // turns a voice note into words at no cost.
+    audio: { model: 'whisper-large-v3-turbo' },
   },
   ollama: {
     label: 'Ollama (on this PC)',
@@ -120,6 +132,8 @@ const PRESETS = {
     vision: true,
     jsonSchema: true,
     local: true,
+    audio: { model: 'demo' },
+    embeddings: { model: 'demo', dims: 64 },
   },
   custom: {
     label: 'Anything OpenAI-compatible…',
@@ -144,6 +158,16 @@ const PRICES = {
   'gemini-2.5-pro': { in: 1.25, out: 10 },     // the ≤200k-prompt tier; our calls never exceed it
   'gpt-5-mini': { in: 0.25, out: 2 },
   'gpt-5': { in: 1.25, out: 10 },
+  'text-embedding-3-small': { in: 0.02, out: 0 },
+  'gemini-embedding-001': { in: 0.15, out: 0 },
+};
+
+// Speech to text is billed by the minute, not the token.
+const AUDIO_PRICES_PER_MIN = {
+  'whisper-1': 0.006,
+  'gpt-4o-mini-transcribe': 0.003,
+  'whisper-large-v3-turbo': 0.000667,    // Groq: $0.04 per hour on the paid tier, free below the daily cap
+  'whisper-large-v3': 0.00185,
 };
 
 function priceFor(provider, model) {
@@ -170,4 +194,16 @@ function capCostOf(provider, model, tokensIn, tokensOut) {
   return (tokensIn / 1e6) * p.in + (tokensOut / 1e6) * p.out;
 }
 
-module.exports = { PRESETS, PRICES, priceFor, costOf, capCostOf };
+function audioCostOf(provider, model, seconds) {
+  if (PRESETS[provider] && PRESETS[provider].local) return 0;
+  const perMin = AUDIO_PRICES_PER_MIN[model];
+  if (perMin == null) return null;
+  return (seconds / 60) * perMin;
+}
+const AUDIO_CAP_PER_MIN = 0.006;
+function audioCapCostOf(provider, model, seconds) {
+  if (PRESETS[provider] && PRESETS[provider].local) return 0;
+  return (seconds / 60) * (AUDIO_PRICES_PER_MIN[model] != null ? AUDIO_PRICES_PER_MIN[model] : AUDIO_CAP_PER_MIN);
+}
+
+module.exports = { PRESETS, PRICES, AUDIO_PRICES_PER_MIN, priceFor, costOf, capCostOf, audioCostOf, audioCapCostOf };

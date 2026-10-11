@@ -4,7 +4,7 @@ window.Workspace = (() => {
   let preferences = { ...defaults }, library = { favorites:[], views:[] }, favoriteIds = new Set(), selected = new Set();
   let selecting = false, toastTimer, dialogOpener = null, ready = false;
   const node = id => document.getElementById(id);
-  const title = { overview:'Overview', media:'Library', convo:'Conversations', status:'Status Studio', cleanup:'Clean up' };
+  const title = { overview:'Overview', media:'Library', convo:'Conversations', search:'Search & ask', topics:'Topics', finals:'Finals', status:'Status Studio', cleanup:'Clean up' };
   function toast(message) {
     const box = node('workspace-toast'); box.textContent = message; box.classList.remove('hidden');
     clearTimeout(toastTimer); toastTimer = setTimeout(() => box.classList.add('hidden'), 5500);

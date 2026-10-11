@@ -82,6 +82,10 @@ const DEFAULTS = {
   aiOcrPages: 4,
   aiPaused: false,
   aiResumeOnLaunch: true,
+  aiTranscribeAudio: false,  // voice notes and audio, through a speech model — off until asked for
+  aiTopics: true,            // read conversations stretch by stretch into topics
+  aiEmbeddings: true,        // vectors for search by meaning, when a provider in the chain can make them
+  aiFinals: true,            // find versions of one thing and suggest which to keep
   aiMonthlyBudget: 5,        // USD; 0 = no cap
   aiJsonSchema: true,        // set from the connection probe
 

@@ -6,10 +6,11 @@
   <title>WhatsBackUp</title>
   <link rel="stylesheet" href="/styles.css" />
   <link rel="stylesheet" href="/workspace.css" />
+  <link rel="stylesheet" href="/styles-2.css" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💬</text></svg>" />
 </head>
 <body>
-  <a class="app-skip" href="#workspace-content">Skip to workspace</a><aside class="app-sidebar" aria-label="App sidebar"><a class="workspace-brand" href="#" data-home><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="6" rx="2"/><path d="M5 9v12h14V9M9 13h6"/></svg><span>WhatsBackUp<small>Your personal archive</small></span></a><div class="sidebar-section-label">WORKSPACE</div><nav class="workspace-nav" id="viewtoggle" aria-label="Workspace"><button data-v="overview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span>Overview</span></button><button data-v="media"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1"/><path d="m3 16 5-5 5 5 4-4 4 4"/></svg><span>Library</span><span id="nav-media-count" class="nav-count"></span></button><button data-v="convo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11a9 9 0 0 1-13 8l-5 2 1-5A9 9 0 1 1 21 11Z"/><path d="M8 9h8M8 13h5"/></svg><span>Conversations</span></button><button data-v="status"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a9 9 0 1 1-9 9M3 6V3h3M12 7v5l3 2"/></svg><span>Status Studio</span></button><button data-v="cleanup"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 3 6 6-9 9-6-6Z M6 12l-3 7 2 2 7-3M3 21h18"/></svg><span>Clean up</span></button></nav><div class="sidebar-section-label">QUICK ACCESS</div><div class="sidebar-links"><button id="nav-favorites"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 2.8 5.7L21 9.6 16.5 14l1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9Z"/></svg><span>Favourites</span><span id="favorites-count" class="nav-count">0</span></button><button data-settings-tab="connection"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="7" height="7" rx="2"/><rect x="14" y="13" width="7" height="7" rx="2"/><path d="M7 11v6h7M14 7h3v6"/></svg><span>Sources &amp; imports</span></button><button data-settings-tab="storage"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18H6a4 4 0 0 1-1-8 7 7 0 0 1 13-1 4.5 4.5 0 0 1 0 9h-1M12 21V11m-3 3 3-3 3 3"/></svg><span>Storage &amp; copies</span></button></div><div class="sidebar-section-label saved-heading"><span>SAVED VIEWS</span><button id="save-view-shortcut" aria-label="Save current library view" title="Save current library view">+</button></div><div id="saved-views" class="saved-views"><p>Your useful searches,<br>one click away.</p></div><div class="sidebar-bottom"><div class="sidebar-links"><button id="open-settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 3-1 3-3 1v4l2 2-1 3 3 3 3-1 2 2h4l1-3 3-1V9l-3-1-1-3h-4l-2 2-3-1Z"/><circle cx="12" cy="12" r="3"/></svg><span>Settings</span><kbd>Ctrl ,</kbd></button></div><div class="sidebar-version"><button id="ver-badge" class="verbadge" title="App version"></button><span>Saved on your PC</span><button id="app-exit" class="quit-button" aria-label="Quit WhatsBackUp" title="Quit WhatsBackUp completely">⏻</button></div></div></aside><div class="app-workspace" id="workspace-content" tabindex="-1"><header class="workspace-topbar"><div class="workspace-location"><span class="workspace-eyebrow">YOUR WORKSPACE</span><h1 id="workspace-title">Overview</h1></div><div class="workspace-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></svg><input id="search" aria-label="Search media in your archive" type="search" placeholder="Search your media, chats, file names…" autocomplete="off"><kbd>Ctrl K</kbd></div><div class="workspace-top-actions"><button id="cloud-pill" class="pill cloud" hidden title="Media copy status"></button><button id="update-btn" class="btn small update-btn" title="Check for app updates">Updates</button><button class="btn primary" data-settings-tab="history"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4"/></svg><span>Import</span></button></div></header><div class="workspace-status"><div id="sub" class="sub">Connecting to your archive…</div><span id="workspace-date"></span></div>
+  <a class="app-skip" href="#workspace-content">Skip to workspace</a><aside class="app-sidebar" aria-label="App sidebar"><a class="workspace-brand" href="#" data-home><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="6" rx="2"/><path d="M5 9v12h14V9M9 13h6"/></svg><span>WhatsBackUp<small>Your personal archive</small></span></a><div class="sidebar-section-label">WORKSPACE</div><nav class="workspace-nav" id="viewtoggle" aria-label="Workspace"><button data-v="overview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span>Overview</span></button><button data-v="media"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1"/><path d="m3 16 5-5 5 5 4-4 4 4"/></svg><span>Library</span><span id="nav-media-count" class="nav-count"></span></button><button data-v="convo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11a9 9 0 0 1-13 8l-5 2 1-5A9 9 0 1 1 21 11Z"/><path d="M8 9h8M8 13h5"/></svg><span>Conversations</span></button><button data-v="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5M8 10h4"/></svg><span>Search &amp; ask</span></button><button data-v="topics"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h10M4 18h7"/><circle cx="18" cy="16" r="3"/></svg><span>Topics</span></button><button data-v="finals"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 2.8 5.7L21 9.6 16.5 14l1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9Z"/></svg><span>Finals</span><span id="nav-finals-count" class="nav-count"></span></button><button data-v="status"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a9 9 0 1 1-9 9M3 6V3h3M12 7v5l3 2"/></svg><span>Status Studio</span></button><button data-v="cleanup"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 3 6 6-9 9-6-6Z M6 12l-3 7 2 2 7-3M3 21h18"/></svg><span>Clean up</span></button></nav><div class="sidebar-section-label">QUICK ACCESS</div><div class="sidebar-links"><button id="nav-favorites"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 2.8 5.7L21 9.6 16.5 14l1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9Z"/></svg><span>Favourites</span><span id="favorites-count" class="nav-count">0</span></button><button data-settings-tab="connection"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="7" height="7" rx="2"/><rect x="14" y="13" width="7" height="7" rx="2"/><path d="M7 11v6h7M14 7h3v6"/></svg><span>Sources &amp; imports</span></button><button data-settings-tab="storage"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18H6a4 4 0 0 1-1-8 7 7 0 0 1 13-1 4.5 4.5 0 0 1 0 9h-1M12 21V11m-3 3 3-3 3 3"/></svg><span>Storage &amp; copies</span></button></div><div class="sidebar-section-label saved-heading"><span>SAVED VIEWS</span><button id="save-view-shortcut" aria-label="Save current library view" title="Save current library view">+</button></div><div id="saved-views" class="saved-views"><p>Your useful searches,<br>one click away.</p></div><div class="sidebar-bottom"><div class="sidebar-links"><button id="open-settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 3-1 3-3 1v4l2 2-1 3 3 3 3-1 2 2h4l1-3 3-1V9l-3-1-1-3h-4l-2 2-3-1Z"/><circle cx="12" cy="12" r="3"/></svg><span>Settings</span><kbd>Ctrl ,</kbd></button></div><div class="sidebar-version"><button id="ver-badge" class="verbadge" title="App version"></button><span>Saved on your PC</span><button id="app-exit" class="quit-button" aria-label="Quit WhatsBackUp" title="Quit WhatsBackUp completely">⏻</button></div></div></aside><div class="app-workspace" id="workspace-content" tabindex="-1"><header class="workspace-topbar"><div class="workspace-location"><span class="workspace-eyebrow">YOUR WORKSPACE</span><h1 id="workspace-title">Overview</h1></div><div class="workspace-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></svg><input id="search" aria-label="Search media in your archive" type="search" placeholder="Search your media, chats, file names…" autocomplete="off"><kbd>Ctrl K</kbd></div><div class="workspace-top-actions"><button id="cloud-pill" class="pill cloud" hidden title="Media copy status"></button><button id="update-btn" class="btn small update-btn" title="Check for app updates">Updates</button><button class="btn primary" data-settings-tab="history"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4"/></svg><span>Import</span></button></div></header><div class="workspace-status"><div id="sub" class="sub">Connecting to your archive…</div><span id="workspace-date"></span></div>
 
   <!-- Shown when downloads keep failing: the failure mode that used to be silent -->
   <div id="health-banner" class="banner hidden">
@@ -104,6 +105,13 @@
             <option value="local">On this PC only</option>
           </select>
         </label>
+        <label>Finals
+          <select id="f-final">
+            <option value="">Any</option>
+            <option value="kept">Kept as final</option>
+            <option value="suggested">Has a suggestion</option>
+          </select>
+        </label>
       </div>
     </div>
     <div id="selection-bar" class="selection-bar hidden"><b id="selection-count">0 selected</b><button class="btn small" id="select-all">Select all in view</button><button class="btn small" id="selection-favorite">Add to favourites</button><button class="btn small primary" id="selection-export">Export selected</button><button class="btn small" id="selection-clear">Done</button></div><main id="gallery" class="gallery" aria-label="Archive media"></main>
@@ -128,13 +136,70 @@
     </aside>
     <section class="thread">
       <div class="thread-head" id="thread-head"><span class="th-name">Select a conversation</span></div>
+      <div class="thread-topics hidden" id="thread-topics"></div>
       <div class="thread-body" id="thread-body">
         <div class="thread-placeholder">Pick a chat on the left to read the conversation. Text stays on this PC; media opens from your gallery.</div>
       </div>
     </section>
   </div>
 
-  <!-- ===== Status Studio ===== -->
+  <!-- ===== Search & ask: every angle at once ===== -->
+  <div id="view-search" class="searchview hidden">
+    <div class="sv-head">
+      <form class="gsearch" id="gsearch-form" role="search">
+        <input id="gsearch" type="search" placeholder="Search everything: words, what is in a photo, what a voice note says, a month, a kind of file…" aria-label="Search everything" autocomplete="off" />
+      </form>
+      <h2 class="section-title" id="sv-title">Search everything</h2>
+      <p class="muted small" id="sv-sub">Messages, photos, documents, voice notes, chats, topics and people, all at once. Try “invoices from March”, “photos sent last week” or “oven”.</p>
+      <div class="sv-filters" id="sv-filters"></div>
+    </div>
+    <section class="sv-ask" id="sv-ask">
+      <div class="sv-ask-row">
+        <input id="ask-q" type="text" placeholder="Or ask a question: “what did the supplier say about the delivery date?”" aria-label="Ask a question" />
+        <button class="btn primary" id="ask-go">Ask</button>
+      </div>
+      <div id="ask-out" class="ask-out hidden"></div>
+    </section>
+    <div id="sv-results"></div>
+  </div>
+
+  <!-- ===== Topics: what the conversations were about, stretch by stretch ===== -->
+  <div id="view-topics" class="topicsview hidden">
+    <div class="tp-head">
+      <div>
+        <h2 class="section-title">Topics</h2>
+        <p class="muted small" id="tp-sub">Every matter your conversations covered, with where it was said. Click one to open the chat at that point.</p>
+      </div>
+      <div class="tp-actions">
+        <input id="tp-search" type="search" placeholder="Filter topics…" aria-label="Filter topics" autocomplete="off" />
+        <select id="tp-chat" aria-label="Chat"><option value="">Every chat</option></select>
+      </div>
+    </div>
+    <div class="chipsrow" id="tp-themes"></div>
+    <div id="tp-list" class="tp-list"></div>
+  </div>
+
+  <!-- ===== Finals: versions of one thing, and which to keep ===== -->
+  <div id="view-finals" class="finalsview hidden">
+    <div class="fn-head">
+      <div>
+        <h2 class="section-title">Finals</h2>
+        <p class="muted small" id="fn-sub">When several versions of one thing were sent — an advert, a quote, a retaken photo — the AI suggests which is the final. Keeping one copies it to your Finals folder; nothing is deleted.</p>
+      </div>
+      <div class="fn-actions">
+        <button class="btn" id="fn-detect">Look for new sets</button>
+      </div>
+    </div>
+    <div class="chipsrow" id="fn-tabs">
+      <button class="chip active" data-status="suggested">Suggested</button>
+      <button class="chip" data-status="kept">Decided</button>
+      <button class="chip" data-status="dismissed">Dismissed</button>
+      <button class="chip" data-status="marks">Finals folder</button>
+    </div>
+    <div id="fn-list" class="fn-list"></div>
+  </div>
+
+  <!-- ===== Overview ===== -->
   <div id="view-overview" class="overview hidden">
     <div class="overview-intro"><span class="workspace-eyebrow">A LITTLE LESS TO KEEP TRACK OF</span><h2>Your archive. Under control.</h2><p class="muted">A clear view of what’s saved, what’s connected and what needs your attention.</p></div>
     <section id="ov-next" class="next-step" aria-label="Next step"></section>
@@ -142,9 +207,26 @@
     <section class="ov-sec" aria-labelledby="sources-title"><h2 id="sources-title" class="section-title">Your sources</h2><div id="ov-connections" class="source-cards"></div></section>
     <details class="overview-scope"><summary>Filter overview by source</summary><div class="ov-sources"><span class="muted small">Show</span><div class="seg" id="ov-sources"></div></div>
     </details><div class="ov-stats" id="ov-stats"></div>
+    <section class="ov-ask" id="ov-ask">
+      <div class="sv-ask-row">
+        <input id="ov-ask-q" type="text" placeholder="Ask your archive anything: “when is the invoice from Van Dam due?”" aria-label="Ask your archive" />
+        <button class="btn primary" id="ov-ask-go">Ask</button>
+      </div>
+      <p class="muted small">Answered from your messages, documents, voice notes and photos, with the sources named.</p>
+    </section>
     <div class="ov-sec">
       <h2 class="section-title">Keep it up to date</h2>
       <div class="ov-upkeep" id="ov-upkeep"></div>
+    </div>
+    <div class="ov-sec" id="ov-finals-sec">
+      <h2>Finals to decide <span class="muted small" id="ov-fin-count"></span></h2>
+      <p class="muted small">Versions of one thing where the AI has a suggestion. Click to decide.</p>
+      <div class="ov-grid" id="ov-finals"></div>
+    </div>
+    <div class="ov-sec" id="ov-topics-sec">
+      <h2>Recent topics <span class="muted small" id="ov-top-count"></span></h2>
+      <p class="muted small">What your conversations were about lately. Click one to read that stretch.</p>
+      <div class="ov-grid" id="ov-topics"></div>
     </div>
     <div class="ov-sec">
       <h2>Projects <span class="muted small" id="ov-proj-count"></span></h2>
@@ -572,6 +654,12 @@
             <label class="row toggle"><input type="checkbox" id="set-captureConversations" /><span class="switch"></span>
               <span>Store message text so you can read and search conversations</span></label>
             <p class="muted small">Message text is kept <b>only on this PC</b> — never copied to your cloud folder.</p>
+            <p class="muted small">Messages that arrive while this PC is off are caught up on every connect and every twenty minutes after.</p>
+            <div class="row wrap">
+              <button id="btn-catchup" class="btn">Catch up now</button>
+              <button id="btn-sync-contacts" class="btn">Refresh names from the phone</button>
+              <span id="sync-status" class="muted small"></span>
+            </div>
             <div class="row wrap">
               <button id="btn-export" class="btn">Export full transcript (local HTML)</button>
               <span id="export-status" class="muted small"></span>
@@ -711,7 +799,13 @@
             <label class="row toggle"><input type="checkbox" id="set-aiAnalyseImages" /><span class="switch"></span><span>Photos: objects, colours, details and visible text</span></label>
             <label class="row toggle"><input type="checkbox" id="set-aiAnalyseVideos" /><span class="switch"></span><span>Videos: sampled scenes with timestamps</span></label>
             <label class="row toggle"><input type="checkbox" id="set-aiAnalyseDocuments" /><span class="switch"></span><span>Documents: PDF, Office and text files</span></label>
-            <label class="row toggle"><input type="checkbox" id="set-aiAnalyseChats" /><span class="switch"></span><span>Conversations → projects</span></label>
+            <label class="row toggle"><input type="checkbox" id="set-aiTranscribeAudio" /><span class="switch"></span><span>Voice notes and audio → transcripts you can read and search</span></label>
+            <p class="muted small" id="ai-audio-note"></p>
+            <label class="row toggle"><input type="checkbox" id="set-aiAnalyseChats" /><span class="switch"></span><span>Conversations → what each chat is for, projects</span></label>
+            <label class="row toggle"><input type="checkbox" id="set-aiTopics" /><span class="switch"></span><span>Conversations → topics: every matter discussed, with where it was said</span></label>
+            <label class="row toggle"><input type="checkbox" id="set-aiEmbeddings" /><span class="switch"></span><span>Search by meaning, not only by words</span></label>
+            <p class="muted small" id="ai-embed-note"></p>
+            <label class="row toggle"><input type="checkbox" id="set-aiFinals" /><span class="switch"></span><span>Find versions of one thing and suggest which to keep as final</span></label>
             <div class="row">
               <label class="lbl">Run</label>
               <select id="set-aiMode" class="txt">

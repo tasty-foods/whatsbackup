@@ -40,9 +40,9 @@ const ARRANGE_SCHEMA = {
 };
 
 const SYSTEM = [
-  'You organise a personal archive into groups that a human would recognise.',
-  'You are given numbered items, each with a few facts about it.',
-  'Group items that belong to the same real thing: the same project, job, supplier, event, household matter or recurring kind of paperwork.',
+  'You organise a personal and small-business archive into groups that a human would recognise.',
+  'You are given numbered items, each with a few facts about it: photos, videos, documents, voice notes, conversations or conversation topics.',
+  'Group items that belong to the same real thing: the same project, job, supplier, campaign, event, household matter or recurring kind of paperwork.',
   'Do not group by superficial similarity like colour or file type, and never create a group called "Other" or "Miscellaneous" — leave those items unsorted instead.',
   'Aim for between 3 and 20 groups. Every group needs at least 3 items; anything thinner belongs in unsorted.',
   'Name each group in the language the items themselves use.',
@@ -53,8 +53,11 @@ const SYSTEM = [
 function factLine(n, entry) {
   const l = entry.label || {};
   const bits = [];
+  if (entry.kind && entry.kind !== 'image' && entry.kind !== 'chat') bits.push(`[${entry.kind}]`);
+  if (l.title) bits.push(l.title);
   if (l.caption) bits.push(l.caption);
   if (l.summary && l.summary !== l.caption) bits.push(l.summary);
+  if (l.doc_type) bits.push(l.doc_type);
   const tags = [...(l.tags || []), ...(l.topics || [])].filter(Boolean);
   if (tags.length) bits.push(tags.slice(0, 6).join(', '));
   if (l.text_in_image) bits.push(`text: "${String(l.text_in_image).replace(/\s+/g, ' ').slice(0, 80)}"`);
@@ -174,8 +177,7 @@ async function arrange(cfg, kind, entries, { signal } = {}) {
   // Existing user placements are re-applied after the AI's, so a correction is
   // never undone by a later re-arrange.
   const userPlaced = ai.db().prepare(`SELECT kind, ref_id, group_id FROM ai_group_members WHERE source = 'user' AND kind IN (${kindFilter(kind)})`).all();
-  ai.clearAiMembers(kind === 'media' ? 'image' : 'chat');
-  if (kind === 'media') ai.clearAiMembers('video');
+  for (const k of memberKinds(kind)) ai.clearAiMembers(k);
 
   const existing = ai.listGroups(kind);
   const byId = new Map(existing.map((g) => [g.id, g]));
@@ -220,7 +222,9 @@ async function arrange(cfg, kind, entries, { signal } = {}) {
   };
 }
 
-const kindFilter = (kind) => (kind === 'media' ? `'image','video'` : `'chat'`);
+// Albums hold every kind of file; projects hold chats; themes hold topics.
+const memberKinds = (kind) => (kind === 'media' ? ['image', 'video', 'document', 'audio'] : kind === 'topic' ? ['topic'] : ['chat']);
+const kindFilter = (kind) => memberKinds(kind).map((k) => `'${k}'`).join(',');
 
 // Placing one new item without re-arranging the world.
 const ASSIGN_SCHEMA = {
@@ -266,4 +270,4 @@ async function assignOne(cfg, kind, entry) {
   return { assigned: null, confidence: conf, usage: res.usage, cost: res.cost };
 }
 
-module.exports = { arrange, assignOne, validate, factLine, ARRANGE_SCHEMA };
+module.exports = { arrange, assignOne, validate, factLine, memberKinds, ARRANGE_SCHEMA };

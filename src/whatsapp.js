@@ -27,6 +27,19 @@ const backfill = {
   startedAt: null, finishedAt: null, error: null,
 };
 
+// Catching up: messages that arrived while this PC was off never fire a live
+// event, so on every connect (and every twenty minutes after) the chats that
+// moved since we last looked are read back and anything missing is saved.
+const sync = {
+  running: false, reason: null, chats: 0, done: 0, newMessages: 0, newMedia: 0,
+  startedAt: null, finishedAt: null, lastError: null, lastAt: null,
+};
+const CATCHUP_DELAY_MS = 20 * 1000;
+const CATCHUP_EVERY_MS = 20 * 60 * 1000;
+const CATCHUP_CHATS = 60;
+const CATCHUP_MESSAGES = 80;
+let catchUpTimer = null;
+
 // Capture health. WhatsApp changes its internals without warning, and when that
 // happens every download starts failing while everything else still looks fine —
 // that is exactly how this app lost a month of capture. Fresh media should
@@ -108,6 +121,7 @@ function getState() {
     qr: qrDataUrl,
     backfill: { ...backfill, lastImportAt: settings.read().lastImportAt || backfill.finishedAt || 0 },
     health: { ...health, ok: !captureBroken() },
+    sync: { ...sync, contacts: contacts.size() },
   };
 }
 
@@ -224,17 +238,122 @@ async function repairUnknownChats(c, { reason = 'startup' } = {}) {
   } catch (_) {}
   let ids = [];
   try { ids = messages.unknownChatIds(); } catch (_) {}
+  // The @lid ids WhatsApp now uses carry no number. The client can be asked
+  // which phone each one belongs to, and the phone's contact has the name.
+  try {
+    const lids = ids.filter((id) => /@lid$/.test(id));
+    if (lids.length && typeof c.getContactLidAndPhone === 'function') {
+      const pairs = await withTimeout(c.getContactLidAndPhone(lids), 30000, 'lid lookup');
+      const n = contacts.addLidMappings(pairs || []);
+      if (n) console.log(`[names] ${n} lid ids mapped to phone numbers`);
+    }
+  } catch (_) {}
   let fixed = healed;
   for (const id of ids) {
-    let chat = null;
-    try { chat = await c.getChatById(id); } catch (_) {}
-    if (!chat) continue;
-    const name = await chatDisplayName(chat, null);
+    let name = contacts.resolve(id) || '';
+    if (!name) {
+      let chat = null;
+      try { chat = await c.getChatById(id); } catch (_) {}
+      if (!chat) continue;
+      name = await chatDisplayName(chat, null);
+    }
     if (!name || name === 'unknown') continue;
     try { messages.renameChat(id, name); store.renameChat(id, name); fixed++; } catch (_) {}
   }
+  // Group authors stored as raw ids get their names now that the book is in.
+  try { const n = messages.fillAuthorNames((a) => contacts.resolve(a)); if (n) console.log(`[names] ${n} group messages given their author's name`); } catch (_) {}
   if (ids.length) console.log(`[names] ${reason}: ${fixed} of ${ids.length} unnamed chats given their name`);
   return { checked: ids.length, fixed };
+}
+
+// The address book, read from the phone and written down.
+async function syncContacts(c, { reason = 'startup' } = {}) {
+  const cs = await withTimeout(c.getContacts(), 120000, 'getContacts');
+  const n = contacts.load(cs);
+  console.log(`[contacts] ${reason}: ${n} names (${cs.length} contacts read)`);
+  return n;
+}
+
+// The chat list as WhatsApp reports it, written down with each chat's own
+// last-activity time — which is how a catch-up knows where to look.
+async function syncChatList(c) {
+  const rows = await listChatsTolerant(c);
+  const flat = rows.map((ch) => ({
+    id: ch.id && ch.id._serialized,
+    name: (ch.formattedTitle && !/^\d+$/.test(ch.formattedTitle) ? ch.formattedTitle : '') || contacts.resolve(ch.id && ch.id._serialized) || '',
+    isGroup: !!ch.isGroup,
+    lastTs: (ch.t || 0) * 1000,
+    archived: !!ch._wbArchived,
+  })).filter((x) => x.id && x.id !== 'status@broadcast');
+  messages.upsertChats(flat);
+  return flat.length;
+}
+
+// Reads back the recent messages of every chat that moved since we last
+// looked, saving media and text that live capture never saw. Idempotent:
+// everything is keyed by message id and inserted with OR IGNORE.
+async function catchUp(c, { reason = 'startup', chatIds = null, limit = CATCHUP_MESSAGES } = {}) {
+  if (sync.running) return { ok: false, error: 'already running' };
+  if (!c || state.status !== 'ready') return { ok: false, error: 'not linked' };
+  if (backfill.running) return { ok: false, error: 'history import is running' };
+  Object.assign(sync, { running: true, reason, chats: 0, done: 0, newMessages: 0, newMedia: 0, startedAt: Date.now(), finishedAt: null, lastError: null });
+  try {
+    if (!chatIds) await syncChatList(c);
+    const targets = chatIds
+      ? chatIds.map((id) => ({ id, synced_ts: 0 }))
+      : messages.chatsNeedingSync(CATCHUP_CHATS);
+    sync.chats = targets.length;
+    const wantConvo = captureConversations();
+    for (const t of targets) {
+      if (state.status !== 'ready') break;
+      let chat = null;
+      try { chat = await withTimeout(c.getChatById(t.id), 30000, 'getChatById'); } catch (e) { sync.lastError = describeError(e); }
+      if (!chat) { sync.done++; continue; }
+      try { chat._wbName = await chatDisplayName(chat, null); } catch (_) {}
+      let msgs = [];
+      try { msgs = await withTimeout(chat.fetchMessages({ limit }), 45000, 'fetch ' + (chat._wbName || t.id)); }
+      catch (e) { sync.lastError = describeError(e); sync.done++; continue; }
+      const rows = [];
+      let newest = t.synced_ts || 0;
+      for (const msg of msgs) {
+        const ts = msg.timestamp ? msg.timestamp * 1000 : 0;
+        if (ts > newest) newest = ts;
+        // Already held: nothing to download, nothing to insert.
+        const key = msgKey(msg);
+        if (key && messages.getById(key) && (!msg.hasMedia || store.has(key))) continue;
+        let mediaRec = null;
+        try { mediaRec = await withTimeout(saveMediaMessage(msg, chat), cfg.DOWNLOAD_TIMEOUT_MS, 'download'); if (mediaRec) { sync.newMedia++; try { require('./ai').noteNewMedia(mediaRec); } catch (_) {} } }
+        catch (e) { /* media gone or expired — the text is still worth keeping */ }
+        if (wantConvo && keepInTranscript(msg)) {
+          const row = buildMsgRow(msg, chat, mediaRec);
+          if (row) rows.push(row);
+        }
+      }
+      if (rows.length) sync.newMessages += messages.addMany(rows);
+      messages.noteSynced(t.id, newest);
+      sync.done++;
+    }
+    if (sync.newMedia) { try { require('./backup').nudge(); } catch (_) {} }
+    if (sync.newMessages || sync.newMedia) console.log(`[sync] ${reason}: ${sync.done} chats checked, ${sync.newMessages} messages and ${sync.newMedia} files that were missing`);
+    else console.log(`[sync] ${reason}: ${sync.done} chats checked, nothing was missing`);
+    return { ok: true, chats: sync.done, newMessages: sync.newMessages, newMedia: sync.newMedia };
+  } catch (e) {
+    sync.lastError = describeError(e);
+    console.error('[sync] failed:', describeError(e));
+    return { ok: false, error: describeError(e) };
+  } finally {
+    sync.running = false; sync.finishedAt = Date.now(); sync.lastAt = Date.now();
+  }
+}
+
+function scheduleCatchUp(c, delay) {
+  clearTimeout(catchUpTimer);
+  catchUpTimer = setTimeout(async () => {
+    if (c !== client || state.status !== 'ready') return;
+    try { await catchUp(c, { reason: 'periodic' }); } catch (_) {}
+    scheduleCatchUp(c, CATCHUP_EVERY_MS);
+  }, delay);
+  if (catchUpTimer.unref) catchUpTimer.unref();
 }
 
 // Build a conversation row from a message (+ optional saved-media record).
@@ -246,13 +365,18 @@ function buildMsgRow(msg, chat, mediaRec) {
   const chatName = (chat && (chat._wbName || chat.name)) || cachedChatName(chat) || 'unknown';
   // Link to the saved media file: the fresh record, or an already-captured one.
   const existing = mediaRec || store.get(id);
+  const rawAuthor = msg.fromMe ? 'me' : (chat && chat.isGroup ? (msg.author ? String(msg.author) : '') : null);
   return {
     id, chatId, chatName, ts, fromMe: !!msg.fromMe,
-    author: authorName(msg, chat),
+    // The raw id is kept so a name learned later can be filled in; the
+    // resolved name travels beside it for the thread to show.
+    author: rawAuthor === null ? null : (rawAuthor || authorName(msg, chat)),
+    authorName: msg.fromMe ? 'me' : (chat && chat.isGroup ? (contacts.resolve(msg.author) || (msg._data && msg._data.notifyName) || null) : null),
     type: msg.type || 'chat',
     body: require('./content/message-text')(msg.body),
-    mediaKind: existing ? existing.kind : (msg.type === 'image' ? 'image' : msg.type === 'video' ? 'video' : null),
+    mediaKind: existing ? existing.kind : (KIND_BY_TYPE[msg.type] || null),
     mediaServe: existing ? existing.serve : null,
+    mediaId: existing ? existing.id : null,
   };
 }
 
@@ -401,9 +525,21 @@ async function handleMessage(msg) {
   try {
     if (captureConversations() && keepInTranscript(msg)) {
       const row = buildMsgRow(msg, chat, null);
-      if (row) messages.addMessage(row);
+      if (row) {
+        messages.addMessage(row);
+        try { require('./ai').noteNewMessages(row.chatId); } catch (_) {}
+      }
     }
   } catch (e) { console.error('[capture] transcript error:', describeError(e)); }
+}
+
+// Edits and deletions after the fact. The archive keeps what was said; it only
+// notes that WhatsApp's copy changed.
+function handleEdit(msg, newBody) {
+  try { const id = msgKey(msg); if (id) messages.updateBody(id, newBody != null ? String(newBody) : (msg.body || '')); } catch (_) {}
+}
+function handleRevoke(after, before) {
+  try { const id = msgKey(before || after); if (id) messages.markRevoked(id); } catch (_) {}
 }
 
 let client = null;
@@ -423,11 +559,14 @@ async function listChatsTolerant(c) {
         try { title = chat.formattedTitle || chat.name || ''; } catch (_) {}
         let isGroup = false;
         try { isGroup = !!chat.groupMetadata || chat.id.server === 'g.us'; } catch (_) {}
+        let archived = false;
+        try { archived = !!chat.archive; } catch (_) {}
         out.push({
           id: { _serialized: id, user: chat.id.user || '', server: chat.id.server || '' },
           formattedTitle: title || chat.id.user || '',
           isGroup,
           t: chat.t || 0,
+          _wbArchived: archived,
         });
       } catch (_) {}
     }
@@ -474,9 +613,12 @@ async function runBackfill(limitPerChat) {
       catch (e) { noteSkip(e); console.warn(`[history] skip chat "${name}" (${describeError(e)})`); backfill.doneChats++; continue; }
       const wantConvo = captureConversations();
       const convoRows = [];
+      let newest = 0;
       for (const msg of msgs) {
+        const ts = msg.timestamp ? msg.timestamp * 1000 : 0;
+        if (ts > newest) newest = ts;
         let mediaRec = null;
-        try { mediaRec = await withTimeout(saveMediaMessage(msg, chat), cfg.DOWNLOAD_TIMEOUT_MS, 'download'); if (mediaRec) backfill.saved++; }
+        try { mediaRec = await withTimeout(saveMediaMessage(msg, chat), cfg.DOWNLOAD_TIMEOUT_MS, 'download'); if (mediaRec) { backfill.saved++; try { require('./ai').noteNewMedia(mediaRec); } catch (_) {} } }
         catch (e) { noteSkip(e); }
         if (wantConvo && keepInTranscript(msg)) {
           const row = buildMsgRow(msg, chat, mediaRec);
@@ -484,6 +626,8 @@ async function runBackfill(limitPerChat) {
         }
       }
       if (convoRows.length) backfill.messages += messages.addMany(convoRows);
+      const chatId = chat && chat.id && chat.id._serialized;
+      if (chatId) { try { messages.noteSynced(chatId, newest); } catch (_) {} }
       backfill.doneChats++;
       if (backfill.doneChats % 10 === 0) console.log(`[history] ${backfill.doneChats}/${backfill.totalChats} chats · ${backfill.saved} saved · ${backfill.skipped} skipped`);
     }
@@ -591,11 +735,21 @@ function buildClient() {
     reconnectAttempts = 0;
     try { const i = c.info; state.me = (i && (i.pushname || (i.wid && i.wid.user))) || 'linked'; } catch (_) { state.me = 'linked'; }
     console.log(`[link] Ready. Linked as ${state.me}. Capturing images & videos now.`);
-    // Load the address book so group authors resolve to names.
+    // The address book first, so names resolve; then the chat list; then the
+    // chats that moved while we were away.
     readyClient = c;
-    c.getContacts().then((cs) => { console.log('[contacts] loaded', contacts.load(cs), 'names'); return repairUnknownChats(c); })
-      .catch((e) => console.warn('[contacts] load failed:', e.message));
+    (async () => {
+      try { await syncContacts(c, { reason: 'connected' }); } catch (e) { console.warn('[contacts] load failed:', e.message); }
+      try { await syncChatList(c); } catch (e) { console.warn('[chats] list failed:', e.message); }
+      try { await repairUnknownChats(c); } catch (_) {}
+      scheduleCatchUp(c, CATCHUP_DELAY_MS);
+    })();
   });
+  // Edits, deletions and renames after the fact.
+  c.on('message_edit', (msg, newBody) => handleEdit(msg, newBody));
+  c.on('message_revoke_everyone', (after, before) => handleRevoke(after, before));
+  c.on('group_update', () => { chatNames.clear(); if (c === client) syncChatList(c).catch(() => {}); });
+  c.on('contact_changed', () => { chatNames.clear(); });
   c.on('auth_failure', (m) => { state.status = 'error'; state.lastError = 'auth_failure: ' + m; });
   c.on('disconnected', (reason) => {
     // Terminal reasons mean the phone unlinked this device — retrying is futile;
@@ -655,7 +809,7 @@ function watchStart() {
     clearTimeout(reconnectTimer); reconnectTimer = null;
     const old = client; client = null;                  // nothing may reconnect the old one now
     try { if (old) await withTimeout(old.destroy(), 15000, 'closing stalled WhatsApp'); }
-    catch (_) { try { old?.pupBrowser?.process()?.kill(); } catch (_) {} }
+    catch (_) { try { old && old.pupBrowser && old.pupBrowser.process() && old.pupBrowser.process().kill(); } catch (_) {} }
     if (!again) { state.status = 'error'; state.lastError = 'WhatsApp did not start after several tries. Restart the app.'; return; }
     setTimeout(() => startClient({ retry: true }), Math.min(60000, 5000 * startAttempts));
   }, START_WATCHDOG_MS);
@@ -666,6 +820,15 @@ function startClient({ retry = false } = {}) {
   if (!retry) {
     store.loadAll();
     try { messages.init(); } catch (e) { console.error('[messages] init failed:', e.message); }
+    // Names known from the last session, before the link is even up.
+    try { const n = contacts.loadFromDb(); if (n) console.log('[contacts] ' + n + ' names loaded from the database'); } catch (_) {}
+  }
+  // For tests and for working on the dashboard: everything but the phone link.
+  if (process.env.WB_NO_WHATSAPP === '1') {
+    state.status = 'disconnected';
+    state.lastError = 'WhatsApp link disabled (WB_NO_WHATSAPP=1)';
+    console.log('[link] disabled by WB_NO_WHATSAPP — dashboard and archive only');
+    return null;
   }
   state.status = 'starting';
   client = buildClient();
@@ -707,4 +870,14 @@ function reconnectNow() {
   return { ok: true };
 }
 
-module.exports = { repairNames: () => readyClient ? repairUnknownChats(readyClient, { reason: 'manual' }) : Promise.resolve({ checked: 0, fixed: 0, error: 'not linked' }), startClient, getState, runBackfill, unlink, reconnectNow, sendStatus, getBrowser };
+const whenLinked = (fn) => (readyClient && state.status === 'ready' && readyClient === client)
+  ? fn(readyClient) : Promise.resolve({ ok: false, error: 'not linked' });
+
+module.exports = {
+  repairNames: () => readyClient ? repairUnknownChats(readyClient, { reason: 'manual' }) : Promise.resolve({ checked: 0, fixed: 0, error: 'not linked' }),
+  syncContacts: () => whenLinked(async (c) => { const n = await syncContacts(c, { reason: 'manual' }); await repairUnknownChats(c, { reason: 'manual' }); return { ok: true, names: n }; }),
+  catchUp: (opts) => whenLinked((c) => catchUp(c, { reason: 'manual', ...(opts || {}) })),
+  syncChat: (chatId, limit) => whenLinked((c) => catchUp(c, { reason: 'chat', chatIds: [chatId], limit: Math.min(1000, Math.max(20, limit || 200)) })),
+  getSyncState: () => ({ ...sync }),
+  startClient, getState, runBackfill, unlink, reconnectNow, sendStatus, getBrowser,
+};

@@ -168,6 +168,35 @@ function startEngine() {
       } catch (_) {}
       try { child.postMessage(reply); } catch (_) {}
     }
+    // A perceptual fingerprint of a picture (difference hash over a 9x8
+    // grey version), so the engine can tell "the same design, edited" from
+    // "a different picture" without sending anything anywhere.
+    if (msg.type === 'fingerprint') {
+      let reply = { type: 'fingerprint-done', id: msg.id, ok: false };
+      try {
+        const img = nativeImage.createFromBuffer(Buffer.from(msg.data));
+        const size = img.getSize();
+        if (!img.isEmpty()) {
+          const small = img.resize({ width: 9, height: 8, quality: 'good' });
+          const bmp = small.toBitmap();                       // BGRA, 9x8
+          const gray = new Uint8Array(72);
+          for (let i = 0; i < 72; i++) gray[i] = Math.round(0.114 * bmp[i * 4] + 0.587 * bmp[i * 4 + 1] + 0.299 * bmp[i * 4 + 2]);
+          let bits = '';
+          for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) bits += gray[y * 9 + x] > gray[y * 9 + x + 1] ? '1' : '0';
+          let hex = '';
+          for (let i = 0; i < 64; i += 4) hex += parseInt(bits.slice(i, i + 4), 2).toString(16);
+          reply = { type: 'fingerprint-done', id: msg.id, ok: true, hash: hex, width: size.width, height: size.height };
+        }
+      } catch (_) {}
+      try { child.postMessage(reply); } catch (_) {}
+    }
+    // Frames out of a video, drawn by a hidden window — the fallback for a
+    // clip the engine's own ffmpeg could not read. One at a time, with a deadline.
+    if (msg.type === 'frames') {
+      extractFrames(msg.file, msg.count || 3, msg.max || 768)
+        .then((frames) => { try { child.postMessage({ type: 'frames-done', id: msg.id, ok: !!(frames && frames.length), frames: frames || [] }); } catch (_) {} })
+        .catch(() => { try { child.postMessage({ type: 'frames-done', id: msg.id, ok: false }); } catch (_) {} });
+    }
     if (msg.type === 'restart-requested') restartEngine();
     if (msg.type === 'port-in-use') {
       if (!portConflict) {
@@ -215,6 +244,74 @@ function stopEngine() {
     try { c.kill(); } catch (_) { done(); }
     setTimeout(() => resolve(), 15000);     // never hang the UI on a stuck child
   });
+}
+
+// ---------- video frames for the engine ----------
+// A hidden window that loads nothing remote: it is handed a local file path,
+// seeks a <video> to a few moments and hands back JPEG frames. Kept open once
+// made (creating a window costs more than the frames do) and serialised, so
+// a burst of requests decodes one video at a time.
+let framesWin = null;
+let framesQueue = Promise.resolve();
+const FRAMES_TIMEOUT_MS = 40000;
+
+function framesWindow() {
+  if (framesWin && !framesWin.isDestroyed()) return framesWin;
+  framesWin = new BrowserWindow({
+    show: false, width: 800, height: 600,
+    webPreferences: {
+      offscreen: true, backgroundThrottling: false,
+      contextIsolation: true, nodeIntegration: false, sandbox: true,
+      // The page is our own data: URL and the only thing it loads is the
+      // local file it is asked for; file:// from a data: page needs this.
+      webSecurity: false,
+    },
+  });
+  framesWin.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  framesWin.webContents.setFrameRate(5);
+  framesWin.loadURL('data:text/html,<!doctype html><title>frames</title>');
+  return framesWin;
+}
+
+function extractFrames(file, count, max) {
+  const run = async () => {
+    if (!file || !fs.existsSync(file)) return null;
+    const w = framesWindow();
+    if (w.webContents.isLoading()) await new Promise((r) => w.webContents.once('did-finish-load', r));
+    const url = 'file:///' + file.replace(/\\/g, '/').split('/').map(encodeURIComponent).join('/');
+    const script = `(async () => {
+      const v = document.createElement('video');
+      v.muted = true; v.playsInline = true; v.preload = 'auto';
+      v.src = ${JSON.stringify(url)};
+      await new Promise((res, rej) => { v.onloadedmetadata = res; v.onerror = () => rej(new Error('cannot decode')); setTimeout(() => rej(new Error('metadata timeout')), 15000); });
+      let d = isFinite(v.duration) && v.duration > 0 ? v.duration : 0;
+      // A clip recorded without a length header reports Infinity until it is
+      // seeked past its end; then it knows.
+      if (!d) { v.currentTime = 1e9; await new Promise((r) => { v.onseeked = r; setTimeout(r, 3000); }); d = isFinite(v.duration) ? v.duration : 0; }
+      const want = ${Math.max(1, Math.min(6, count))};
+      let times = d <= 1.5 ? [Math.min(0.3, d / 2)] : want === 1 ? [Math.min(1.0, d * 0.1)] : Array.from({ length: want }, (_, i) => Math.min(d - 0.2, 0.6 + (d - 1.2) * i / (want - 1)));
+      const scale = Math.min(1, ${max} / Math.max(v.videoWidth || 1, v.videoHeight || 1));
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round((v.videoWidth || 320) * scale)); c.height = Math.max(1, Math.round((v.videoHeight || 240) * scale));
+      const ctx = c.getContext('2d');
+      const out = [];
+      for (const t of times) {
+        await new Promise((res, rej) => { v.onseeked = res; v.onerror = () => rej(new Error('seek failed')); v.currentTime = t; setTimeout(res, 6000); });
+        ctx.drawImage(v, 0, 0, c.width, c.height);
+        out.push(c.toDataURL('image/jpeg', 0.8).split(',')[1]);
+      }
+      v.removeAttribute('src'); v.load();
+      return out;
+    })()`;
+    const result = await Promise.race([
+      w.webContents.executeJavaScript(script, true),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('frames timeout')), FRAMES_TIMEOUT_MS)),
+    ]);
+    return (result || []).map((b64) => new Uint8Array(Buffer.from(b64, 'base64')));
+  };
+  const job = framesQueue.then(run, run);
+  framesQueue = job.catch(() => {});
+  return job;
 }
 
 // ---------- window ----------

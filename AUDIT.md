@@ -1,3 +1,41 @@
+# Understanding, search from every angle and finals — 2.0
+
+Reviewed Overview, Library, Conversations, Search & ask, Topics, Finals and the
+AI settings pane in the built-in browser against a seeded archive
+(`tools/seed-dev.js`, served by `tools/dev-server.js` on port 8799, WhatsApp
+link disabled) with the demo provider, and the Electron engine process for
+frame extraction, fingerprinting, FTS5 and pdfjs loading. Live providers,
+posting, destructive cleanup and installation over the user's running app were
+not exercised.
+
+- Every kind is read: photos and video frames as before, documents with their
+  extracted facts (title, type, parties, dates, amounts, references), voice
+  notes and audio through a speech model when **Transcribe voice notes** is on.
+  Every paid reply is booked the moment it arrives, so a crash cannot lose
+  spend against the monthly cap.
+- Conversations are read stretch by stretch into topics with a cursor per
+  chat, so a second run only reads what is new. Topics carry a summary,
+  decisions, people and keywords; they appear on the Overview, in the thread
+  header, in search and as cited sources for answers.
+- Versions of one thing are found by near fingerprint, alike captions or
+  labels, within three days, and judged with the chat around them. The
+  suggestion is shown; the person decides. Keeping copies the file to
+  `Finals` under the media folder and the cloud folder; un-keeping removes the
+  copy. Nothing in the archive is deleted or moved.
+- One search box asks everything at once: stemmed full-text over messages
+  (AND, falling back to any word for questions), AI labels, vectors when a
+  provider in the chain can make them, topics, chats and contacts, with
+  "last month", "invoices", "sent" and "with Lotte" understood in the query.
+  Answers cite their sources; a demo provider says it cannot answer rather
+  than inventing one.
+- Contacts and chats are persisted; a catch-up pass on connect and every
+  twenty minutes fills gaps, edits and revocations are recorded, and a chat
+  can be synced by hand. Chats WhatsApp knows but the archive has nothing for
+  are listed as such rather than hidden.
+- Known limits: themes over topics need at least four topics; finals only
+  cluster items of the same kind inside one chat; semantic search needs an
+  embedding-capable provider and is skipped silently without one.
+
 # Content search and responsiveness — 1.6.0
 
 Reviewed Overview, Library, Conversations, Status Studio, Clean up and all eight

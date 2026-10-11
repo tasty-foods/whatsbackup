@@ -33,7 +33,17 @@ Use the star on a file to add it to **Favourites**. **Save view** keeps your cur
 
 Open **Settings → Appearance** for light, dark or system colour, comfortable or compact density, grid/masonry/list layouts and your starting screen. Switch off hover video previews or reduce motion there. These changes save immediately. **Ctrl K** focuses search; **Ctrl ,** opens appearance settings; **Esc** closes a dialog or preview.
 
-AI sorting is optional. In **Settings → Albums & projects**, enable it, choose a provider, enter your own API key, test the connection and review what will be sent before accepting the notice. Review the estimate and monthly budget before starting. Sorting creates albums and conversation projects and adds image descriptions to search. Your edits to names and assignments are retained. Providers may charge for usage; free tiers have limits. Spare providers can keep sorting going when one reaches a limit.
+AI sorting is optional. In **Settings → AI & search**, enable it, choose a provider, enter your own API key, test the connection and review what will be sent before accepting the notice. Review the estimate and monthly budget before starting. Sorting creates albums and conversation projects and adds image descriptions to search. Your edits to names and assignments are retained. Providers may charge for usage; free tiers have limits. Spare providers can keep sorting going when one reaches a limit.
+
+With sorting on, the AI also understands the rest of the archive. Each option has its own switch in **Settings → AI & search**:
+
+- **Search & ask** searches everything at once — messages, photo descriptions, document text, voice-note transcripts, topics, chats and people — and understands words like "invoices last month", "photos sent" or "with Lotte". Type a question in **Ask** and the answer cites the messages and files it came from; click a source to open it.
+- **Topics** lists what each conversation was about, stretch by stretch, with the decisions made and the people involved. Click a topic to read the chat at that point. The latest topics also sit on the Overview and above each conversation.
+- **Finals** shows the places where several versions of one thing were sent — an advert, a quote, a retaken photo — with the AI's suggestion for the one to keep. **Keep this one** copies that file into a `Finals` folder next to your media (and in your cloud folder); nothing is deleted or moved. Any photo, video or document can also be kept from its viewer with **Keep as final**. Kept items carry a ★ in the Library, and the **Finals** filter shows them.
+- **Transcribe voice notes** is off until you turn it on. With a provider that offers speech (Groq is free), voice notes and audio files get a transcript under the message and in search.
+- **Search by meaning** uses vectors when your provider can make them, so "cake boxes" also finds "packaging for pastries".
+
+Contacts and conversations are kept in step with WhatsApp: a catch-up runs when the link connects and every twenty minutes. **Catch up now** and **Sync contacts** in Settings → Sources run it by hand, and **Sync** at the top of a conversation refreshes that one chat. Chats WhatsApp knows but nothing has been saved for are listed as such.
 
 ## Understand your backup
 

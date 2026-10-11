@@ -34,8 +34,9 @@ let allItems = [];         // full list, newest first
 // this and re-renders from it; none keeps a private copy. If two controls
 // could disagree, one of them would be wrong.
 const F = {
-  q: '', contentScope: 'all', source: '', kind: '', exact: '', dir: '', album: '', project: '', tag: '', backup: '', from: '', to: '', sort: 'new', favorite: false,
+  q: '', contentScope: 'all', source: '', kind: '', exact: '', dir: '', album: '', project: '', tag: '', backup: '', final: '', from: '', to: '', sort: 'new', favorite: false,
 };
+const thumbUrl = (r) => '/api/thumbnail/' + encodeURIComponent(r.id);
 const fEl = (id) => document.getElementById(id);
 
 let filteredCache = [];    // allItems with the current filter applied
@@ -105,24 +106,26 @@ function tile(r) {
   const local = typeof Backup !== 'undefined' && Backup.configured() && Backup.onlyHere().has(r.id);
   const bk = local ? '<span class="bk local" title="On this PC only — not yet in your cloud folder">⚠</span>' : '';
   const cap = `<div class="cap"><span class="chat">${escapeHtml(r.chat)}</span>${bk}<span class="time">${fmtTime(r.ts)}</span></div>${albumTag}`;
+  // Kept as a final, or one of a set the AI has a suggestion about.
+  const fin = typeof Finals !== 'undefined' ? (Finals.isKept(r.id) ? '<span class="fin" title="Kept as a final — a copy is in your Finals folder">★ Final</span>'
+    : Finals.isSuggested(r.id) ? '<span class="fin sug" title="One of several versions — the AI has a suggestion. See Finals.">✦ versions</span>' : '') : '';
   if (r.kind === 'image' || r.kind === 'sticker') {
-    el.innerHTML = `<img loading="lazy" decoding="async" src="/api/thumbnail/${encodeURIComponent(r.id)}" alt="${escapeHtml(lbl?.label?.caption || r.caption || 'Saved photo')}" onerror="this.classList.add('imgerr')" />${badge}${cap}`;
+    el.innerHTML = `<img loading="lazy" decoding="async" src="/api/thumbnail/${encodeURIComponent(r.id)}" alt="${escapeHtml(lbl?.label?.caption || r.caption || 'Saved photo')}" onerror="this.classList.add('imgerr')" />${fin}${badge}${cap}`;
   } else if (r.kind === 'video') {
-    // A real video rather than a placeholder glyph, so the grid shows what the
-    // clip actually is. The #t= fragment makes the browser paint that frame as
-    // the still, which saves generating and storing poster images for every
-    // video — and these sit on a cloud drive where writing thumbnails back
-    // would be slow and untidy.
+    // A real first frame as the still, made once by the engine; the clip
+    // itself is only fetched when the pointer rests on it.
     el.innerHTML = `<div class="videotile">
         <video class="tile-vid" muted playsinline loop preload="none" poster="/api/thumbnail/${encodeURIComponent(r.id)}" data-src="${r.serve}#t=${PREVIEW_AT}"></video>
         <div class="play">▶</div>
         <div class="mutehint" title="Muted while previewing — click to open it with sound">🔇</div>
-      </div>${badge}${cap}`;
+      </div>${fin}${badge}${cap}`;
   } else {
     const name = r.docName || decodeURIComponent((r.serve || '').split('/').pop() || '');
+    const l = lbl && lbl.label;
+    const title = l && (l.summary || (l.title && l.title !== name)) ? `<div class="filetitle">${escapeHtml((l.title && l.title !== name ? l.title : '') || String(l.summary || '').slice(0, 90))}</div>` : '';
     el.innerHTML = `<div class="filetile"><div class="fileicon">${KIND_ICON[r.kind] || '📎'}</div>
         <div class="filename">${escapeHtml(name)}</div>
-        <div class="filekind">${escapeHtml(KIND_LABEL[r.kind] || r.kind)}</div></div>${badge}${cap}`;
+        <div class="filekind">${escapeHtml(KIND_LABEL[r.kind] || r.kind)}${l && l.doc_type && l.doc_type !== 'other' ? ' · ' + escapeHtml(l.doc_type) : ''}${l && l.transcript ? ' · transcribed' : ''}</div>${title}</div>${fin}${badge}${cap}`;
   }
   el.addEventListener('click', (event) => { if (event.target.closest('.tile-favorite,.tile-select')) return; event.preventDefault(); openLightbox(r); });
   if (window.Workspace) window.Workspace.decorateTile(el, r);
@@ -298,15 +301,19 @@ function showCurrent() {
     : '';
   const lbl = typeof AI !== 'undefined' ? AI.labelFor(r.id) : null;
   const l = lbl && lbl.label;
-  const aiBlock = l ? `<span class="m-ai">${escapeHtml(l.caption || l.summary || '')}
+  const aiBlock = l ? `<span class="m-ai">${escapeHtml(l.title && l.title !== (r.docName || '') ? l.title + ' — ' : '')}${escapeHtml(String(l.summary || l.caption || '').slice(0, 400))}
       ${(l.tags || []).slice(0, 6).map((t) => `<em>${escapeHtml(t)}</em>`).join('')}
       ${l.text_in_image ? `<span class="m-ocr">reads: “${escapeHtml(String(l.text_in_image).slice(0, 120))}”</span>` : ''}
-      ${l.visual === false ? '<span class="m-ocr">described from its chat — videos aren\'t shown to the AI</span>' : ''}
+      ${l.visual === false ? '<span class="m-ocr">described from its chat — no frame of this video could be read</span>' : ''}
+      ${l.sampledFrames ? `<span class="m-ocr">seen as ${l.sampledFrames} frames</span>` : ''}
     </span>` : '';
+  const kept = typeof Finals !== 'undefined' && Finals.isKept(r.id);
   els.lbMeta.innerHTML = `<span class="m-chat">${escapeHtml(r.chat)}</span>
     <span class="m-sub">${r.dir === 'out' ? 'Sent' : 'Received'} · ${new Date(r.ts).toLocaleString()} · ${sizeKb}${cloudTag}</span>
     ${aiBlock}
+    <span id="lb-extra"></span>
     ${typeof AI !== 'undefined' && AI.groups().length ? AI.albumPicker(r) : ''}
+    <a href="#" id="lb-final" class="final${kept ? ' on' : ''}" title="${kept ? 'A copy is in your Finals folder. Click to take it out again.' : 'Copy this into your Finals folder and mark it as the one to keep'}">${kept ? '★ Kept as final' : '☆ Keep as final'}</a>
     <a href="${r.serve}" download>⭳ Download</a>
     <a href="#" id="lb-show-local" title="Open the folder on this PC with this file selected">📁 Show in folder</a>
     <a href="#" id="lb-show-cloud" title="Open the pCloud folder with this file selected">☁ Show in pCloud</a>
@@ -316,6 +323,19 @@ function showCurrent() {
   bindShowInFolder(r);
   if (window.Workspace) window.Workspace.viewer(r);
   if (window.ContentSearch) window.ContentSearch.viewer(r);
+  const fb = document.getElementById('lb-final');
+  if (fb && typeof Finals !== 'undefined') fb.addEventListener('click', async (e) => {
+    e.preventDefault();
+    fb.textContent = '…';
+    const now = await Finals.toggleKeep(r.id);
+    if (lbId !== r.id) return;
+    fb.classList.toggle('on', now);
+    fb.textContent = now ? '★ Kept as final' : '☆ Keep as final';
+    const t = document.querySelector('.tile[data-id="' + CSS.escape(r.id) + '"]');
+    if (t) { const old = t.querySelector('.fin'); if (old) old.remove(); if (now) t.insertAdjacentHTML('afterbegin', '<span class="fin">★ Final</span>'); }
+  });
+  // The long parts — a transcript, a document's details — come for one item at a time.
+  if (r.kind === 'document' || r.kind === 'voice' || r.kind === 'audio' || r.kind === 'video' || (l && l.kind)) fillLightboxExtra(r);
   const qs = document.getElementById('lb-queue-status');
   if (qs) qs.addEventListener('click', async (e) => {
     e.preventDefault();
@@ -325,6 +345,32 @@ function showCurrent() {
   els.lbPrev.style.visibility = i > 0 ? 'visible' : 'hidden';
   els.lbNext.style.visibility = i < filteredCache.length - 1 ? 'visible' : 'hidden';
 }
+async function fillLightboxExtra(r) {
+  let d = null;
+  try { d = await requestJson('/api/media/' + encodeURIComponent(r.id) + '/label'); } catch (_) { return; }
+  if (lbId !== r.id) return;
+  const box = document.getElementById('lb-extra');
+  if (!box || !d || !d.label) return;
+  const l = d.label;
+  const bits = [];
+  if (d.kind === 'document') {
+    const row = (k, v) => v && v.length ? `<b>${k}:</b> ${escapeHtml(Array.isArray(v) ? v.join(' · ') : v)}` : '';
+    const parts = [row('Type', l.doc_type && l.doc_type !== 'other' ? l.doc_type : ''), row('From/to', l.parties), row('Dates', l.dates), row('Amounts', l.amounts), row('References', l.reference_numbers), l.totalPages ? `<b>Pages:</b> ${l.totalPages}${l.truncated ? ' (first part read)' : ''}` : '', l.version_hint ? `<b>Version:</b> ${escapeHtml(l.version_hint)}` : ''].filter(Boolean);
+    if (parts.length) bits.push(`<span class="m-doc">${parts.join(' &nbsp; ')}</span>`);
+    if (l.unreadable) bits.push('<span class="m-doc">No readable text — a scan or a picture of a page.</span>');
+  }
+  if (d.kind === 'image' || d.kind === 'video') {
+    const facts = [l.kind && l.kind !== 'other' && l.kind !== 'photo' ? `<b>Kind:</b> ${escapeHtml(l.kind)}` : '', l.people ? `<b>People:</b> ${l.people}` : '', l.version_hint ? `<b>Version mark:</b> ${escapeHtml(l.version_hint)}` : '', l.quality ? `<b>Quality:</b> ${'★'.repeat(l.quality)}` : ''].filter(Boolean);
+    if (facts.length) bits.push(`<span class="m-doc">${facts.join(' &nbsp; ')}</span>`);
+  }
+  if (l.transcript) bits.push(`<span class="m-transcript">${escapeHtml(l.transcript)}</span>`);
+  if (Array.isArray(l.action_items) && l.action_items.length) bits.push(`<span class="m-doc"><b>To do:</b> ${escapeHtml(l.action_items.join(' · '))}</span>`);
+  if (d.set) bits.push(`<span class="m-set">One of ${d.set.members} versions${d.set.status === 'suggested' ? ' — the AI suggests ' + (d.set.suggestedId === r.id ? 'this one' : 'another one') : d.set.status === 'kept' ? ' — decided' : ''}. <a href="#" id="lb-open-set">See the set</a></span>`);
+  box.innerHTML = bits.join('');
+  const os = document.getElementById('lb-open-set');
+  if (os) os.addEventListener('click', (e) => { e.preventDefault(); closeLightbox(); setView('finals'); if (typeof Finals !== 'undefined') Finals.showSet(d.set.id); });
+}
+
 // "Show in folder": the desktop app opens Explorer with the file selected; in
 // a plain browser, which cannot, the path is shown and copied instead.
 async function bindShowInFolder(r) {
@@ -414,7 +460,8 @@ async function loadState() {
     if (status === 'ready') {
       els.link.classList.add('hidden');
       const synced = typeof syncLine === 'function' ? syncLine(s) : '';
-      els.sub.innerHTML = `<span class="dot ok"></span>Linked${s.me ? ' as ' + escapeHtml(s.me) : ''} · ${s.counts.images} photos · ${s.counts.videos} videos${synced}`;
+      const catching = s.sync && s.sync.running ? ` · <span class="warn-text">catching up ${s.sync.done}/${s.sync.chats} chats</span>` : '';
+      els.sub.innerHTML = `<span class="dot ok"></span>Linked${s.me ? ' as ' + escapeHtml(s.me) : ''} · ${s.counts.images} photos · ${s.counts.videos} videos${synced}${catching}`;
     } else if (status === 'qr') {
       els.link.classList.remove('hidden');
       els.linkTitle.textContent = 'Link your WhatsApp';
@@ -768,6 +815,7 @@ const FIELDS = {
   autoImportHours: 'int',
   aiEnabled: 'bool', aiConsent: 'bool', aiAnalyseImages: 'bool', aiAnalyseChats: 'bool',
   aiAnalyseVideos: 'bool', aiAnalyseDocuments: 'bool', aiVideoFrames: 'int', aiDocumentPages: 'int', aiOcrPages: 'int', aiResumeOnLaunch: 'bool', performanceMode: 'enum',
+  aiTranscribeAudio: 'bool', aiTopics: 'bool', aiEmbeddings: 'bool', aiFinals: 'bool',
   aiProvider: 'text', aiModel: 'text', aiBaseUrl: 'text', aiMode: 'text', aiMonthlyBudget: 'int',
   chatgptEnabled: 'bool', chatgptScanHours: 'int', chatgptUploads: 'bool', chatgptGenerated: 'bool', chatgptSearchChats: 'bool',
   geminiEnabled: 'bool', geminiScanHours: 'int',
@@ -1035,6 +1083,30 @@ function watchBackfill() {
   }, 1500);
 }
 
+/* ---------- Catching up and names ---------- */
+(function bindSyncButtons() {
+  const cu = $('btn-catchup'), sc = $('btn-sync-contacts'), out = $('sync-status');
+  if (!cu || !sc) return;
+  cu.addEventListener('click', async () => {
+    cu.disabled = true; out.textContent = 'Checking every chat that moved…';
+    try {
+      const r = await requestJson('/api/chats/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      out.textContent = r.ok ? `${r.chats} chats checked — ${r.newMessages || 0} messages and ${r.newMedia || 0} files were missing and are now saved.` : (r.error || 'Could not catch up');
+      if (r.ok && (r.newMessages || r.newMedia)) loadItems(true);
+    } catch (e) { out.textContent = e.message; }
+    cu.disabled = false;
+  });
+  sc.addEventListener('click', async () => {
+    sc.disabled = true; out.textContent = 'Reading the address book from the phone…';
+    try {
+      const r = await requestJson('/api/contacts/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      out.textContent = r.ok ? `${r.names} names on file. Chats and group messages now show them.` : (r.error || 'Could not read the address book');
+      if (r.ok && currentView === 'convo') Convo.refreshChats();
+    } catch (e) { out.textContent = e.message; }
+    sc.disabled = false;
+  });
+})();
+
 /* ---------- Export transcript ---------- */
 S.btnExport.addEventListener('click', async () => {
   S.btnExport.disabled = true; S.exportStatus.textContent = 'Exporting…';
@@ -1233,21 +1305,23 @@ V.toggle.addEventListener('click', (e) => { const b = e.target.closest('button')
 function setView(v) {
   currentView = v;
   [...V.toggle.children].forEach((c) => { c.classList.toggle('active', c.dataset.v === v); c.setAttribute('aria-pressed', String(c.dataset.v === v)); });
-  const ovEl = document.getElementById('view-overview');
-  if (ovEl) ovEl.classList.toggle('hidden', v !== 'overview');
-  const clEl = document.getElementById('view-cleanup');
-  if (clEl) clEl.classList.toggle('hidden', v !== 'cleanup');
+  for (const name of ['overview', 'cleanup', 'status', 'search', 'topics', 'finals']) {
+    const el = document.getElementById('view-' + name);
+    if (el) el.classList.toggle('hidden', v !== name);
+  }
   V.media.classList.toggle('hidden', v !== 'media');
   V.convo.classList.toggle('hidden', v !== 'convo');
   if (v === 'media') fillViewport();
-  const statusEl = document.getElementById('view-status');
-  if (statusEl) statusEl.classList.toggle('hidden', v !== 'status');
   if (v === 'convo') Convo.enter();
   if (v === 'status' && typeof StatusView !== 'undefined') StatusView.enter();
   if (v === 'overview' && typeof Overview !== 'undefined') Overview.enter();
   if (v === 'overview' && typeof SourceOverview !== 'undefined') SourceOverview.refresh();
   if (v === 'cleanup' && typeof Cleanup !== 'undefined') Cleanup.enter();
+  if (v === 'topics' && typeof Topics !== 'undefined') Topics.enter();
+  if (v === 'finals' && typeof Finals !== 'undefined') Finals.enter();
+  if (v === 'search' && typeof Search !== 'undefined') Search.enter();
   if (window.Workspace) window.Workspace.onView(v);
+  try { document.getElementById('workspace-content').scrollTo({ top: 0 }); window.scrollTo({ top: 0 }); } catch (_) {}
 }
 
 /* ---------- Conversations ---------- */
@@ -1351,11 +1425,12 @@ const Convo = (function () {
         }
       }
       const el = document.createElement('div');
-      el.className = 'chatitem' + (activeChat && activeChat.chatId === c.chatId ? ' active' : '');
+      el.className = 'chatitem' + (activeChat && activeChat.chatId === c.chatId ? ' active' : '') + (c.empty ? ' empty' : '');
       el.dataset.chat = c.chatId;
-      const last = (c.lastType && c.lastType !== 'chat' && !c.lastBody) ? '[' + c.lastType + ']' : (c.lastBody || '');
-      el.innerHTML = `<div class="ci-top"><span class="ci-name">${escapeHtml(c.chatName || c.chatId)}</span><span class="ci-time">${c.lastTs ? shortDay(c.lastTs) : ''}</span></div>
-        <div class="ci-last">${c.lastFromMe ? 'You: ' : ''}${escapeHtml(last).slice(0, 90)}</div>`;
+      const last = c.empty ? 'Known to WhatsApp — nothing saved yet. Open it and press Sync.' : (c.lastType && c.lastType !== 'chat' && !c.lastBody) ? '[' + c.lastType + ']' : (c.lastBody || '');
+      const behind = c.behind && !c.empty ? '<span class="ci-behind" title="WhatsApp has newer messages than are saved here; the next catch-up brings them in">↻</span>' : '';
+      el.innerHTML = `<div class="ci-top"><span class="ci-name">${escapeHtml(c.chatName || c.chatId)}${behind}</span><span class="ci-time">${c.lastTs ? shortDay(c.lastTs) : ''}</span></div>
+        <div class="ci-last">${c.lastFromMe && !c.empty ? 'You: ' : ''}${escapeHtml(last).slice(0, 90)}</div>`;
       el.addEventListener('click', () => openChat(c));
       el.tabIndex = 0; el.setAttribute('role', 'button');
       el.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); el.click(); } });
@@ -1370,25 +1445,86 @@ const Convo = (function () {
   }
 
   let chatRequest = 0;
+  // The head of a thread: the name, a Sync button that pulls this chat's recent
+  // messages from WhatsApp now, and the topics the AI found in it.
+  function renderHead(c, extra) {
+    headEl.innerHTML = `<span class="th-name">${escapeHtml(activeChat.chatName)}</span>
+      <span class="th-tools"><span class="th-sync" id="th-sync"></span><button class="btn small" id="th-sync-btn" title="Pull this chat's recent messages and media from WhatsApp now">↻ Sync</button></span>`;
+    if (extra) headEl.querySelector('.th-tools').prepend(extra);
+    const b = document.getElementById('th-sync-btn');
+    const out = document.getElementById('th-sync');
+    if (b) b.addEventListener('click', async () => {
+      b.disabled = true; out.textContent = 'syncing…';
+      try {
+        const r = await requestJson('/api/chats/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId: c.chatId, limit: 300 }) });
+        out.textContent = r.ok ? `${r.newMessages || 0} new messages, ${r.newMedia || 0} new files` : (r.error || 'could not sync');
+        if (r.ok && (r.newMessages || r.newMedia)) { openChat(c); loadChats(); if (typeof loadItems === 'function') loadItems(true); }
+      } catch (e) { out.textContent = e.message; }
+      b.disabled = false;
+    });
+    renderThreadTopics(c.chatId);
+  }
+
+  // The topics the AI found in this chat, as chips that jump to them.
+  async function renderThreadTopics(chatId) {
+    const bar = document.getElementById('thread-topics');
+    if (!bar) return;
+    bar.classList.add('hidden'); bar.innerHTML = '';
+    let t = null;
+    try { t = await requestJson('/api/topics?chat=' + encodeURIComponent(chatId)); } catch (_) { return; }
+    if (!activeChat || activeChat.chatId !== chatId || !t || !t.topics.length) return;
+    bar.innerHTML = '<span class="muted small" style="flex:0 0 auto;padding-top:3px">Topics:</span>' + t.topics.slice().reverse().map((x) => `<button class="chip" data-ts="${x.fromTs}" title="${escapeHtml(x.summary || '')}">${escapeHtml(x.title)}</button>`).join('');
+    bar.classList.remove('hidden');
+    bar.querySelectorAll('button[data-ts]').forEach((b) => b.addEventListener('click', () => openAt(chatId, parseInt(b.dataset.ts, 10), activeChat.chatName)));
+  }
+
   async function openChat(c, match = null) {
     const ticket = ++chatRequest;
     activeChat = { chatId: c.chatId, chatName: c.chatName || c.chatId, focused: !!match };
     [...chatsEl.children].forEach((x) => x.classList.toggle('active', x.dataset.chat === c.chatId));
-    headEl.innerHTML = `<span class="th-name">${escapeHtml(activeChat.chatName)}</span>`;
-    if (match) { const latest = document.createElement('button'); latest.className = 'btn small'; latest.textContent = 'Latest messages'; latest.onclick = () => openChat(c); headEl.append(latest); }
+    let latest = null;
+    if (match) { latest = document.createElement('button'); latest.className = 'btn small'; latest.textContent = 'Latest messages'; latest.onclick = () => openChat(c); }
+    renderHead(c, latest);
     bodyEl.innerHTML = '<div class="convo-empty">Loading…</div>';
     oldestTs = null; oldestId = null; newestTs = 0; seenIds.clear();
     const rows = await fetchThread(c.chatId, match?.ts || null, match?.id);
     if (ticket !== chatRequest) return;
     if (match) rows.push(match);
     bodyEl.innerHTML = '';
-    if (!rows.length) { bodyEl.innerHTML = '<div class="convo-empty">No messages stored for this chat.</div>'; return; }
+    if (!rows.length) { bodyEl.innerHTML = '<div class="convo-empty">No messages stored for this chat yet. Press ↻ Sync to fetch what WhatsApp still has.</div>'; return; }
     oldestTs = rows[0].ts; oldestId = rows[0].id; newestTs = rows[rows.length - 1].ts;
     for (const r of rows) seenIds.add(r.id);
     canLoadOlder = rows.length >= 200;
     bodyEl.appendChild(buildBubbles(rows));
     bodyEl.scrollTop = bodyEl.scrollHeight;
     if (match) { const found = [...bodyEl.children].find(el => el.dataset.messageId === match.id); found?.classList.add('search-hit'); found?.scrollIntoView({ block: 'center' }); }
+  }
+
+  // Open a chat at a moment in it — a topic's start, a search hit — with the
+  // messages before and after, and the one at that moment marked.
+  async function openAt(chatId, ts, chatName) {
+    const ticket = ++chatRequest;
+    const name = chatName || (lastChats.find((x) => x.chatId === chatId) || {}).chatName || chatId;
+    activeChat = { chatId, chatName: name, focused: true };
+    [...chatsEl.children].forEach((x) => x.classList.toggle('active', x.dataset.chat === chatId));
+    const latest = document.createElement('button'); latest.className = 'btn small'; latest.textContent = 'Latest messages'; latest.onclick = () => openChat({ chatId, chatName: name });
+    renderHead({ chatId, chatName: name }, latest);
+    bodyEl.innerHTML = '<div class="convo-empty">Loading…</div>';
+    oldestTs = null; oldestId = null; newestTs = 0; seenIds.clear();
+    const before = await fetchThread(chatId, ts + 1000, '￿');
+    let after = [];
+    try { after = await (await fetch('/api/thread?chat=' + encodeURIComponent(chatId) + '&after=' + ts + '&limit=120')).json(); } catch (_) {}
+    if (ticket !== chatRequest) return;
+    const ids = new Set(before.map((r) => r.id));
+    const rows = before.concat(after.filter((r) => !ids.has(r.id)));
+    bodyEl.innerHTML = '';
+    if (!rows.length) { bodyEl.innerHTML = '<div class="convo-empty">No messages stored for this chat.</div>'; return; }
+    oldestTs = rows[0].ts; oldestId = rows[0].id; newestTs = rows[rows.length - 1].ts;
+    for (const r of rows) seenIds.add(r.id);
+    canLoadOlder = before.length >= 200;
+    bodyEl.appendChild(buildBubbles(rows));
+    const target = [...bodyEl.querySelectorAll('.bubble')].find((b) => parseInt(b.dataset.ts, 10) >= ts) || bodyEl.querySelector('.bubble:last-child');
+    if (target) { target.classList.add('hl'); target.scrollIntoView({ block: 'center' }); setTimeout(() => target.classList.remove('hl'), 4000); }
   }
 
   async function loadOlder() {
@@ -1414,15 +1550,26 @@ const Convo = (function () {
       const b = document.createElement('div');
       b.className = 'bubble' + (m.fromMe ? ' out' : '');
       b.dataset.messageId = m.id;
+      b.dataset.ts = m.ts;
       let media = '';
-      if (m.mediaServe && m.mediaKind === 'image') media = `<div class="b-media"><img loading="lazy" src="${m.mediaServe}" onerror="this.classList.add('imgerr')"></div>`;
+      const mediaId = m.mediaId || m.id;
+      if (m.mediaServe && m.mediaKind === 'image') media = `<div class="b-media"><img loading="lazy" src="/api/thumbnail/${encodeURIComponent(mediaId)}" onerror="if(!this.dataset.full){this.dataset.full='1';this.src='${m.mediaServe}'}else{this.classList.add('imgerr')}"></div>`;
       else if (m.mediaServe && m.mediaKind === 'video') media = `<div class="b-mediatag">▶ video</div>`;
+      else if (m.mediaServe && (m.mediaKind === 'voice' || m.mediaKind === 'audio')) media = `<div class="b-mediatag">${m.mediaKind === 'voice' ? '🎤 voice note' : '🎵 audio'}</div>`;
+      else if (m.mediaServe && m.mediaKind === 'document') media = `<div class="b-mediatag">📄 document</div>`;
       else if (m.mediaKind === 'image' || m.mediaKind === 'video') media = `<div class="b-mediatag">[${m.mediaKind} — not saved]</div>`;
       else if (m.type && m.type !== 'chat') media = `<div class="b-mediatag">${prettyType(m.type)}</div>`;
+      // What the AI heard in a voice note, or read in a document, right under it.
+      const lab = (m.mediaServe && typeof AI !== 'undefined') ? AI.labelFor(mediaId) : null;
+      const ll = lab && lab.label;
+      let extra = '';
+      if (ll && ll.transcript) extra = `<div class="b-transcript">${escapeHtml(ll.transcript.slice(0, 400))}</div>`;
+      else if (ll && m.mediaKind === 'document' && (ll.summary || (ll.title && ll.title !== (ll.caption || '')))) extra = `<div class="b-transcript">${escapeHtml(ll.title || '')}${ll.title && ll.summary ? ' — ' : ''}${escapeHtml(String(ll.summary || '').slice(0, 200))}</div>`;
       const author = (!m.fromMe && m.author && m.author !== 'me') ? `<div class="b-author">${escapeHtml(m.author)}</div>` : '';
       const rawCard = m.type === 'vcard' || m.type === 'multi_vcard';
       const text = (m.body && !rawCard) ? `<div class="b-text">${escapeHtml(m.body)}</div>` : '';
-      b.innerHTML = `${author}${media}${text}<div class="b-meta">${fmtT(m.ts)}</div>`;
+      const flags = (m.revoked ? '<div class="b-deleted">deleted on WhatsApp — kept here</div>' : '') + (m.edited ? '<div class="b-deleted">edited</div>' : '');
+      b.innerHTML = `${author}${media}${text}${extra}${flags}<div class="b-meta">${fmtT(m.ts)}</div>`;
       if (m.mediaServe) {
         const mt = b.querySelector('.b-media, .b-mediatag');
         if (mt) mt.addEventListener('click', () => openSingleMedia(m.mediaServe, m.mediaKind));
@@ -1521,7 +1668,7 @@ const Convo = (function () {
 
   bodyEl.addEventListener('scroll', () => { if (bodyEl.scrollTop < 60) loadOlder(); });
 
-  return { enter, pollActive, refreshChats, setProject };
+  return { enter, pollActive, refreshChats, setProject, openChat, openAt };
 })();
 
 
@@ -1726,10 +1873,13 @@ const AI = (function () {
       $$('set-aiConsent').checked = !!s.aiConsent;
       $$('set-aiAnalyseImages').checked = s.aiAnalyseImages !== false;
       $$('set-aiAnalyseChats').checked = s.aiAnalyseChats !== false;
+      for (const k of ['aiTopics', 'aiEmbeddings', 'aiFinals']) { const el = $$('set-' + k); if (el) el.checked = s[k] !== false; }
+      const ta = $$('set-aiTranscribeAudio'); if (ta) ta.checked = !!s.aiTranscribeAudio;
       $$('set-aiMonthlyBudget').value = s.aiMonthlyBudget != null ? s.aiMonthlyBudget : 5;
     } catch (e) {}
     onProviderChange();
     showSpend(st);
+    showCapabilities(st);
     refreshEstimate();
     if (bridge) {
       const k = await bridge.hasAiKey();
@@ -1754,6 +1904,22 @@ const AI = (function () {
     el.textContent = line;
   }
 
+  // Which provider in the chain hears and which one makes vectors — said in
+  // words beside the switch that needs it, so a switch that cannot work yet
+  // says what would make it work.
+  function showCapabilities(st) {
+    const cap = (st && st.capabilities) || {};
+    const chain = (st && st.chain) || [];
+    const a = $$('ai-audio-note');
+    if (a) a.textContent = cap.audio
+      ? `Voice notes are transcribed by ${cap.audioBy} (${(chain.find((c) => c.provider === cap.audioBy) || {}).audioModel || 'speech model'}), then summarised. Billed by the minute; free on Groq's daily allowance.`
+      : 'No provider in your chain can transcribe. Add Groq (free) or OpenAI to the chain and this starts working.';
+    const e = $$('ai-embed-note');
+    if (e) e.textContent = cap.embeddings
+      ? `Vectors come from ${cap.embeddingsBy}. "broken machine" then finds the photo labelled "oven with a faulty thermostat". Costs next to nothing.`
+      : 'No provider in your chain makes embeddings. Add Gemini (free) or OpenAI to the chain for search by meaning; search by words works regardless.';
+  }
+
   function preset() { return state.presets.find((p) => p.id === $$('set-aiProvider').value) || {}; }
 
   function onProviderChange() {
@@ -1775,17 +1941,22 @@ const AI = (function () {
     el.textContent = 'Working out what this would cost…';
     try {
       const e = await (await fetch('/api/ai/estimate')).json();
-      const skipped = Object.entries(e.census.images.skipped || {});
+      const skipped = Object.entries(e.census.images.skipped || {}).concat(Object.entries((e.census.audio && e.census.audio.skipped) || {}));
       const parts = [];
       if (e.todo.images) parts.push(`${e.todo.images} photos`);
       if (e.todo.videos) parts.push(`${e.todo.videos} videos`);
       if (e.todo.documents) parts.push(`${e.todo.documents} documents`);
+      if (e.todo.audio) parts.push(`${e.todo.audio} voice notes (${Math.max(1, Math.round((e.audioSeconds || 0) / 60))} min)`);
       if (e.todo.chats) parts.push(`${e.todo.chats} conversations`);
-      if (!parts.length) { el.innerHTML = '<span class="ok-text">Everything is already sorted.</span>'; return; }
+      if (e.todo.topicWindows) parts.push(`${e.todo.topicWindows} stretches of conversation for topics`);
+      if (e.todo.embeddings) parts.push(`${e.todo.embeddings} items to embed`);
+      if (e.todo.finals) parts.push(`${e.todo.finals} sets of versions to judge`);
+      if (!parts.length) { el.innerHTML = '<span class="ok-text">Everything is already read and sorted.</span>'; return; }
       const cost = e.costKnown
         ? (e.cost < 0.01 ? 'under a cent' : '≈ $' + e.cost.toFixed(2))
         : 'an unknown amount (this model has no published price)';
-      el.innerHTML = `To do: ${parts.join(', ')} — ${cost} with ${escapeHtml(e.model)}.`
+      const audio = e.todo.audio ? (e.audioCost == null ? '' : e.audioCost < 0.01 ? ' Audio: under a cent.' : ` Audio: ≈ $${e.audioCost.toFixed(2)} on ${escapeHtml(e.audioBy || '')}.`) : (e.audioUnavailable ? ' <span class="warn-text">Voice notes wait for a provider that can transcribe.</span>' : '');
+      el.innerHTML = `To do: ${parts.join(', ')} — ${cost} with ${escapeHtml(e.model)}.${audio}`
         + (skipped.length ? `<br><span class="muted">Skipping ${skipped.map(([k, v]) => `${v} ${k}`).join(', ')} — no charge for those.</span>` : '');
     } catch (err) { el.textContent = 'Could not work out an estimate.'; }
   }
@@ -1829,6 +2000,7 @@ const AI = (function () {
       performanceMode: $$('set-performanceMode').value,
       aiMonthlyBudget: parseInt($$('set-aiMonthlyBudget').value, 10) || 0,
     };
+    for (const k of ['aiTranscribeAudio', 'aiTopics', 'aiEmbeddings', 'aiFinals']) { const el = $$('set-' + k); if (el) body[k] = el.checked; }
     await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   }
 
@@ -1852,8 +2024,9 @@ const AI = (function () {
       const spend = s.cost ? ` · $${s.cost.toFixed(3)} so far` : '';
       if (s.running) {
         $$('ai-run-status').textContent = s.phase === 'arranging'
-          ? 'Working out the groups…'
-          : `Looked at ${s.done} of ${total}${s.skipped ? `, skipped ${s.skipped}` : ''}${s.failed ? `, ${s.failed} failed` : ''}${spend}`;
+          ? `Working out the ${s.current || 'groups'}…`
+          : s.phase === 'finals' ? 'Looking for versions of the same thing…'
+          : `Looked at ${s.done} of ${total}${s.skipped ? `, skipped ${s.skipped}` : ''}${s.failed ? `, ${s.failed} failed` : ''}${spend}${s.current ? ' · ' + s.current : ''}`;
       } else {
         clearInterval(pollTimer); pollTimer = null;
         $$('ai-bar').style.width = '100%';
@@ -1863,6 +2036,7 @@ const AI = (function () {
         refreshEstimate();
         showSpend(s);
         loadLabels(); loadChatGroups();
+        if (typeof Finals !== 'undefined') Finals.refreshMarks();
         if (currentView === 'convo') Convo.refreshChats();
       }
     }, 1200);
@@ -2197,7 +2371,7 @@ document.addEventListener('click', (e) => {
 
 // Sort is never a filter: it changes the order, not what is shown.
 function filtersActive() {
-  return !!(F.favorite || F.q || F.source || F.kind || F.exact || F.dir || F.album || F.project || F.tag || F.backup || F.from || F.to);
+  return !!(F.favorite || F.q || F.source || F.kind || F.exact || F.dir || F.album || F.project || F.tag || F.backup || F.final || F.from || F.to);
 }
 
 // Everything the gallery can be narrowed by, one line each, so the bar above
@@ -2213,6 +2387,7 @@ const ACTIVE_LABELS = {
   project: (v) => 'Project: ' + (((typeof AI !== 'undefined' && AI.chatGroups()) || []).find((g) => g.id === v) || { name: v }).name,
   tag: (v) => '#' + v,
   backup: (v) => v === 'local' ? 'On this PC only' : 'In cloud folder',
+  final: (v) => v === 'kept' ? '★ Kept as final' : '✦ Has versions',
   from: (v) => 'From ' + v,
   to: (v) => 'To ' + v,
 };
@@ -2234,7 +2409,8 @@ function clearAll() {
   if (fEl('content-scope')) fEl('content-scope').value = 'all';
   if (window.ContentSearch) window.ContentSearch.query('');
   if (els.search) els.search.value = '';
-  for (const id of ['f-exact', 'f-dir', 'f-album', 'f-project', 'f-tag', 'f-backup', 'f-from', 'f-to']) { const e = fEl(id); if (e) e.value = ''; }
+  F.final = '';
+  for (const id of ['f-exact', 'f-dir', 'f-album', 'f-project', 'f-tag', 'f-backup', 'f-final', 'f-from', 'f-to']) { const e = fEl(id); if (e) e.value = ''; }
   syncKindUi();
   if (typeof renderSourceBar === 'function') renderSourceBar();
   if (typeof AI !== 'undefined') { AI.renderAlbumBar(); AI.renderTagBar(); }
@@ -2244,7 +2420,7 @@ function clearOne(k) {
   if (k === '*') return clearAll();
   F[k] = '';
   if (k === 'q' && els.search) { els.search.value = ''; if (window.ContentSearch) window.ContentSearch.query(''); }
-  const ids = { exact: 'f-exact', dir: 'f-dir', album: 'f-album', project: 'f-project', tag: 'f-tag', backup: 'f-backup', from: 'f-from', to: 'f-to' };
+  const ids = { exact: 'f-exact', dir: 'f-dir', album: 'f-album', project: 'f-project', tag: 'f-tag', backup: 'f-backup', final: 'f-final', from: 'f-from', to: 'f-to' };
   if (ids[k]) { const e = fEl(ids[k]); if (e) e.value = ''; }
   if (k === 'kind') syncKindUi();
   if (k === 'source' && typeof renderSourceBar === 'function') renderSourceBar();
@@ -2282,6 +2458,10 @@ function matchesAdvanced(r) {
     if (cg !== F.project) return false;
   }
   if (F.tag && !(typeof AI !== 'undefined' && AI.hasTag(r.id, F.tag))) return false;
+  if (F.final && typeof Finals !== 'undefined') {
+    if (F.final === 'kept' && !Finals.isKept(r.id)) return false;
+    if (F.final === 'suggested' && !Finals.isSuggested(r.id)) return false;
+  }
   return true;
 }
 
@@ -2348,7 +2528,7 @@ function bindFilters() {
     if (!el) return;
     el.addEventListener('change', () => { F[key] = el.value; render(allItems); });
   };
-  wire('f-exact', 'exact'); wire('f-backup', 'backup'); wire('f-dir', 'dir'); wire('f-album', 'album');
+  wire('f-exact', 'exact'); wire('f-backup', 'backup'); wire('f-dir', 'dir'); wire('f-album', 'album'); wire('f-final', 'final');
   wire('f-project', 'project'); wire('f-from', 'from'); wire('f-to', 'to');
   const albSel = fEl('f-album');
   if (albSel) albSel.addEventListener('change', () => { F.album = albSel.value; if (typeof AI !== 'undefined') AI.renderAlbumBar(); render(allItems); });
@@ -2367,7 +2547,7 @@ function bindFilters() {
 function updateFilterCount() {
   renderActiveBar();
   const open = fEl('filters-open');
-  if (open) open.classList.toggle('on', !!(F.exact || F.dir || F.album || F.project || F.tag || F.backup || F.from || F.to));
+  if (open) open.classList.toggle('on', !!(F.exact || F.dir || F.album || F.project || F.tag || F.backup || F.final || F.from || F.to));
 }
 
 /* ---------- Last synced ---------- */
@@ -3029,7 +3209,41 @@ const Overview = (function () {
   let chats = [];
   let projects = [];
   let albums = [];
+  let topicsList = [];
+  let finalSets = [];
   let entered = false;
+
+  // Sets with a suggestion, as cards that open the Finals view on that set.
+  function renderFinals() {
+    const el = $('ov-finals'), sec = $('ov-finals-sec'), count = $('ov-fin-count');
+    if (!el) return;
+    const sets = finalSets.filter((s) => s.status === 'suggested');
+    if (sec) sec.classList.toggle('hidden', !sets.length);
+    if (count) count.textContent = sets.length ? sets.length + ' to decide' : '';
+    const nav = document.getElementById('nav-finals-count'); if (nav) nav.textContent = sets.length ? String(sets.length) : '';
+    el.innerHTML = sets.slice(0, 6).map((s) => {
+      const thumbs = s.members.slice(0, 5).map((m) => (m.kind === 'image' ? `<img src="/api/thumbnail/${encodeURIComponent(m.id)}" alt="" class="${m.id === s.suggestedId ? 'sug' : ''}">` : `<span>${m.kind === 'document' ? '📄' : '▶'}</span>`)).join('');
+      return `<button class="ov-card" data-kind="final" data-id="${escapeHtml(s.id)}"><div class="ov-emoji">★</div><div class="ov-body"><div class="ov-name">${escapeHtml(s.chat || 'versions')} · ${s.members.length} versions</div><div class="ov-desc">${escapeHtml(s.reason || '')}</div><div class="ov-thumbs">${thumbs}</div></div><div class="ov-count">${Math.round((s.confidence || 0) * 100)}%</div></button>`;
+    }).join('');
+  }
+
+  // The latest topics, as cards that open the conversation at that point.
+  function renderTopics() {
+    const el = $('ov-topics'), sec = $('ov-topics-sec'), count = $('ov-top-count');
+    if (!el) return;
+    if (sec) sec.classList.toggle('hidden', !topicsList.length);
+    if (count) count.textContent = topicsList.length ? topicsList.length + ' found' : '';
+    el.innerHTML = topicsList.slice(0, 8).map((t) => `<button class="ov-card" data-kind="topic" data-id="${escapeHtml(t.id)}"><div class="ov-emoji">${t.theme && t.theme.emoji ? escapeHtml(t.theme.emoji) : '💬'}</div><div class="ov-body"><div class="ov-name">${escapeHtml(t.title)}</div><div class="ov-desc">${escapeHtml(t.summary || '')}</div><div class="ov-foot">${escapeHtml(t.chatName || '')} · ${new Date(t.toTs).toLocaleDateString()}${t.decisions && t.decisions.length ? ' · ✓ ' + escapeHtml(t.decisions[0]) : ''}</div></div><div class="ov-count">${t.msgCount}</div></button>`).join('');
+  }
+
+  // The question box on the overview goes to the Search view's answer.
+  (function bindAsk() {
+    const q = $('ov-ask-q'), go = $('ov-ask-go');
+    if (!q || !go) return;
+    const run = () => { const v = q.value.trim(); if (!v) return; setView('search'); if (typeof Search !== 'undefined') Search.ask(v); };
+    go.addEventListener('click', run);
+    q.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); run(); } });
+  })();
 
   const card = (bits) =>
     '<button class="ov-card" data-kind="' + bits.kind + '" data-id="' + escapeHtml(bits.id) + '">'
@@ -3088,13 +3302,22 @@ const Overview = (function () {
     const shownIds = new Set(shown.map((r) => r.id));
     const shownAlbums = albums.map((g) => ({ ...g, items: (g.items || []).filter((id) => shownIds.has(id)) })).filter((g) => g.items.length);
     const shownProjects = !F.source || F.source === 'whatsapp' ? projects : [];
+    const docs = shown.filter((r) => r.kind === 'document').length;
+    const voice = shown.filter((r) => r.kind === 'voice' || r.kind === 'audio').length;
+    const kept = typeof Finals !== 'undefined' ? Finals.keptCount() : 0;
     statsEl.innerHTML = stat(photos, photos === 1 ? 'photo' : 'photos')
       + stat(videos, videos === 1 ? 'video' : 'videos')
+      + (docs ? stat(docs, docs === 1 ? 'document' : 'documents') : '')
+      + (voice ? stat(voice, 'voice notes') : '')
       + stat(!F.source || F.source === 'whatsapp' ? chats.length : 0, 'WhatsApp conversations')
       + stat(shownProjects.length, 'projects')
-      + stat(shownAlbums.length, 'albums');
+      + stat(shownAlbums.length, 'albums')
+      + (topicsList.length ? stat(topicsList.length, 'topics') : '')
+      + (kept ? stat(kept, 'finals kept') : '');
     renderBackup();
     renderUpkeep();
+    renderFinals();
+    renderTopics();
 
     // Projects, busiest first — a project with two chats in it is less of a
     // thing than one with thirty, and the eye should land on the thirty.
@@ -3134,12 +3357,16 @@ const Overview = (function () {
 
   async function enter() {
     if (!entered) { entered = true; }
-    const [c, p, a] = await Promise.all([
+    const [c, p, a, t, f] = await Promise.all([
       requestJson('/api/chats').catch(() => []),
       fetchGroups('chat'),
       fetchGroups('media'),
+      requestJson('/api/topics').catch(() => ({ topics: [] })),
+      requestJson('/api/finals/sets').catch(() => ({ sets: [] })),
     ]);
     chats = Array.isArray(c) ? c : []; projects = p; albums = a;
+    topicsList = (t && t.topics) || [];
+    finalSets = (f && f.sets) || [];
     if (typeof AI !== 'undefined') {
       try { await AI.ensureChatGroups(); } catch (e) {}
       try { await AI.loadLabels(); } catch (e) {}
@@ -3152,6 +3379,12 @@ const Overview = (function () {
   const go = (e) => {
     const b = e.target.closest('.ov-card');
     if (!b) return;
+    if (b.dataset.kind === 'final') { setView('finals'); if (typeof Finals !== 'undefined') Finals.showSet(b.dataset.id); return; }
+    if (b.dataset.kind === 'topic') {
+      const t = topicsList.find((x) => x.id === b.dataset.id);
+      if (t) { setView('convo'); Convo.openAt(t.chatId, t.fromTs, t.chatName); }
+      return;
+    }
     if (b.dataset.kind === 'album') {
       const source = F.source; clearAll(); F.source = source; renderSourceBar();
       setView('media');
@@ -3166,8 +3399,307 @@ const Overview = (function () {
   };
   projEl.addEventListener('click', go);
   albEl.addEventListener('click', go);
+  const fe = $('ov-finals'); if (fe) fe.addEventListener('click', go);
+  const te = $('ov-topics'); if (te) te.addEventListener('click', go);
 
   return { enter, render, renderBackup };
+})();
+
+
+/* ---------- Finals: versions of one thing, and which to keep ---------------
+   The engine finds the sets and the AI suggests one; this is where the
+   person decides. Keeping copies the file into the Finals folder and marks it;
+   the mark shows on the tile and in the lightbox. Nothing is deleted. */
+const Finals = (function () {
+  const list = $('fn-list'), tabs = $('fn-tabs'), detect = $('fn-detect'), sub = $('fn-sub');
+  let sets = [];
+  let dirs = null;
+  let marks = new Map();            // id -> mark
+  let suggested = new Set();        // ids in a set with a live suggestion
+  let tab = 'suggested';
+  let pendingShow = null;
+
+  const isKept = (id) => marks.has(id);
+  const isSuggested = (id) => suggested.has(id);
+  const keptCount = () => marks.size;
+
+  async function refreshMarks() {
+    try {
+      const [m, s] = await Promise.all([requestJson('/api/finals/marks'), requestJson('/api/finals/sets')]);
+      marks = new Map((m || []).map((x) => [x.id, x]));
+      sets = (s && s.sets) || []; dirs = s && s.dirs;
+      suggested = new Set();
+      for (const st of sets) if (st.status === 'suggested') for (const mm of st.members) suggested.add(mm.id);
+      const nav = document.getElementById('nav-finals-count');
+      if (nav) { const n = sets.filter((x) => x.status === 'suggested').length; nav.textContent = n ? String(n) : ''; }
+    } catch (_) {}
+  }
+
+  async function toggleKeep(id) {
+    const on = marks.has(id);
+    try {
+      await requestJson(on ? '/api/finals/unkeep' : '/api/finals/keep', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ refId: id }) });
+    } catch (e) { alert('Could not change that: ' + e.message); return on; }
+    await refreshMarks();
+    return !on;
+  }
+
+  const thumb = (m) => m.kind === 'image' || m.kind === 'sticker'
+    ? `<img class="th" src="/api/thumbnail/${encodeURIComponent(m.id)}" alt="" data-open="${escapeHtml(m.id)}">`
+    : `<div class="th file" data-open="${escapeHtml(m.id)}">${m.kind === 'video' ? '▶' : KIND_ICON[m.kind] || '📄'}</div>`;
+
+  function setCard(s) {
+    const el = document.createElement('section');
+    el.className = 'fn-set';
+    el.dataset.set = s.id;
+    const conf = s.confidence ? `<span class="conf">${Math.round(s.confidence * 100)}% sure</span>` : '';
+    el.innerHTML = `<div class="fn-set-head"><b>${escapeHtml(s.chat || 'Versions')}</b><span class="muted small">${s.members.length} versions · ${new Date(s.members[0].ts).toLocaleDateString()}</span>${conf}<span class="reason">${escapeHtml(s.reason || (s.status === 'pending' ? 'Being judged…' : ''))}</span></div>
+      <div class="fn-members">${s.members.map((m) => {
+        const kept = marks.has(m.id);
+        const sug = m.id === s.suggestedId;
+        return `<div class="fn-member${sug ? ' suggested' : ''}${kept ? ' kept' : ''}">${thumb(m)}
+          ${kept ? '<span class="star">★ Kept</span>' : sug ? '<span class="star">✦ AI pick</span>' : ''}
+          <div class="meta" title="${escapeHtml(m.docName || m.caption || '')}">${escapeHtml(new Date(m.ts).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }))}${m.docName ? ' · ' + escapeHtml(m.docName) : m.caption ? ' · ' + escapeHtml(m.caption) : ''}</div>
+          <div class="act"><button class="btn small${sug && !kept ? ' primary' : ''}" data-keep="${escapeHtml(m.id)}">${kept ? 'Un-keep' : 'Keep this one'}</button></div></div>`;
+      }).join('')}</div>
+      <div class="fn-set-foot"><span class="muted small">${s.status === 'kept' ? 'Decided.' : s.status === 'dismissed' ? 'Dismissed — these stay as they are.' : 'Keeping one copies it into your Finals folder. The others are not touched.'}</span>
+        ${s.status === 'suggested' || s.status === 'pending' ? `<button class="btn small ghost" data-dismiss="${escapeHtml(s.id)}">Not versions / leave it</button>` : `<button class="btn small ghost" data-reopen="${escapeHtml(s.id)}">Reopen</button>`}</div>`;
+    return el;
+  }
+
+  function render() {
+    if (!list) return;
+    if (sub && dirs) sub.innerHTML = `When several versions of one thing were sent — an advert, a quote, a retaken photo — the AI suggests which is the final. Keeping one copies it to <span class="kbd">${escapeHtml(dirs.local)}</span>${dirs.cloud ? ' and <span class="kbd">' + escapeHtml(dirs.cloud) + '</span>' : ''}; nothing is deleted.`;
+    if (tabs) [...tabs.querySelectorAll('button')].forEach((b) => b.classList.toggle('active', b.dataset.status === tab));
+    list.innerHTML = '';
+    if (tab === 'marks') {
+      const rows = [...marks.values()].sort((a, b) => b.at - a.at);
+      if (!rows.length) { list.innerHTML = '<p class="sv-empty">Nothing kept yet. Keep one from a set, or from any item\'s viewer (☆ Keep as final).</p>'; return; }
+      for (const m of rows) {
+        const r = allItems.find((x) => x.id === m.id);
+        const el = document.createElement('div');
+        el.className = 'fn-mark';
+        el.innerHTML = `${r && (r.kind === 'image' || r.kind === 'sticker') ? `<img src="/api/thumbnail/${encodeURIComponent(m.id)}" alt="" data-open="${escapeHtml(m.id)}">` : `<div class="th file" data-open="${escapeHtml(m.id)}">${r ? (r.kind === 'video' ? '▶' : KIND_ICON[r.kind] || '📄') : '📄'}</div>`}
+          <div class="body"><div>${r ? escapeHtml(r.chat) + ' · ' + new Date(r.ts).toLocaleDateString() + (r.docName ? ' · ' + escapeHtml(r.docName) : '') : escapeHtml(m.id)}</div><div class="p">${escapeHtml(m.localPath || '')}${m.cloudPath ? '<br>' + escapeHtml(m.cloudPath) : ''}</div></div>
+          <button class="btn small" data-show="${escapeHtml(m.localPath || '')}">📁 Show</button>
+          <button class="btn small ghost" data-keep="${escapeHtml(m.id)}">Un-keep</button>`;
+        list.appendChild(el);
+      }
+      return;
+    }
+    const want = tab === 'kept' ? sets.filter((s) => s.status === 'kept') : tab === 'dismissed' ? sets.filter((s) => s.status === 'dismissed') : sets.filter((s) => s.status === 'suggested' || s.status === 'pending');
+    if (!want.length) {
+      list.innerHTML = `<p class="sv-empty">${tab === 'suggested' ? 'No sets waiting. Sets appear after the AI has read your photos and documents — run the sorting in Settings, or press “Look for new sets”.' : 'Nothing here yet.'}</p>`;
+      return;
+    }
+    for (const s of want) list.appendChild(setCard(s));
+    if (pendingShow) {
+      const el = list.querySelector('.fn-set[data-set="' + CSS.escape(pendingShow) + '"]');
+      if (el) { el.scrollIntoView({ block: 'center' }); el.style.outline = '2px solid var(--accent)'; setTimeout(() => { el.style.outline = ''; }, 3000); }
+      pendingShow = null;
+    }
+  }
+
+  async function enter() { await refreshMarks(); render(); }
+  function showSet(id) {
+    const s = sets.find((x) => x.id === id);
+    tab = s && s.status === 'kept' ? 'kept' : s && s.status === 'dismissed' ? 'dismissed' : 'suggested';
+    pendingShow = id;
+    enter();
+  }
+
+  if (tabs) tabs.addEventListener('click', (e) => { const b = e.target.closest('button[data-status]'); if (!b) return; tab = b.dataset.status; render(); });
+  if (list) list.addEventListener('click', async (e) => {
+    const open = e.target.closest('[data-open]');
+    if (open) { const r = allItems.find((x) => x.id === open.dataset.open); if (r) openLightbox(r); return; }
+    const keep = e.target.closest('button[data-keep]');
+    if (keep) {
+      const set = e.target.closest('.fn-set');
+      const id = keep.dataset.keep;
+      keep.disabled = true;
+      try {
+        if (marks.has(id)) await requestJson('/api/finals/unkeep', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ refId: id }) });
+        else {
+          await requestJson('/api/finals/keep', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ refId: id, setId: set ? set.dataset.set : null }) });
+          // The set is decided now: follow it to the Kept tab rather than
+          // leaving an empty "nothing waiting" screen behind.
+          if (set && tab === 'suggested') { tab = 'kept'; pendingShow = set.dataset.set; }
+        }
+      } catch (err) { alert('Could not do that: ' + err.message); }
+      await refreshMarks(); render();
+      if (currentView === 'media') window.render(allItems);
+      return;
+    }
+    const dis = e.target.closest('button[data-dismiss]');
+    if (dis) { try { await requestJson('/api/finals/dismiss', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ setId: dis.dataset.dismiss }) }); } catch (_) {} await refreshMarks(); render(); return; }
+    const re = e.target.closest('button[data-reopen]');
+    if (re) { try { await requestJson('/api/finals/reopen', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ setId: re.dataset.reopen }) }); } catch (_) {} await refreshMarks(); render(); return; }
+    const show = e.target.closest('button[data-show]');
+    if (show && show.dataset.show) {
+      if (bridge && bridge.showInFolder) { const ok = await bridge.showInFolder(show.dataset.show); if (ok) return; }
+      try { await navigator.clipboard.writeText(show.dataset.show); show.textContent = 'Path copied'; } catch (_) {}
+    }
+  });
+  if (detect) detect.addEventListener('click', async () => {
+    detect.disabled = true; detect.textContent = 'Looking…';
+    try {
+      const r = await requestJson('/api/finals/detect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      detect.textContent = r.queued ? `${r.queued} to judge — refreshing…` : 'Nothing new';
+      // The judging runs in the background; look again in a moment.
+      setTimeout(async () => { await refreshMarks(); render(); detect.textContent = 'Look for new sets'; detect.disabled = false; }, r.queued ? 6000 : 1500);
+    } catch (e) { detect.textContent = 'Look for new sets'; detect.disabled = false; alert(e.message); }
+  });
+
+  return { enter, refreshMarks, isKept, isSuggested, keptCount, toggleKeep, showSet };
+})();
+
+
+/* ---------- Topics: what the conversations were about ---------------------- */
+const Topics = (function () {
+  const list = $('tp-list'), themes = $('tp-themes'), search = $('tp-search'), chatSel = $('tp-chat');
+  let data = { topics: [], themes: [] };
+  let theme = '', q = '', chat = '';
+
+  function render() {
+    if (!list) return;
+    const ql = q.toLowerCase();
+    let rows = data.topics.slice().sort((a, b) => b.toTs - a.toTs);
+    if (theme) rows = rows.filter((t) => t.theme && t.theme.id === theme);
+    if (chat) rows = rows.filter((t) => t.chatId === chat);
+    if (ql) rows = rows.filter((t) => [t.title, t.summary, t.chatName, (t.keywords || []).join(' '), (t.decisions || []).join(' ')].join(' ').toLowerCase().includes(ql));
+    if (themes) themes.innerHTML = data.themes.length
+      ? `<button class="chip${!theme ? ' active' : ''}" data-theme="">All</button>` + data.themes.map((g) => `<button class="chip${theme === g.id ? ' active' : ''}" data-theme="${escapeHtml(g.id)}" title="${escapeHtml(g.description || '')}">${escapeHtml((g.emoji ? g.emoji + ' ' : '') + g.name)}<span class="n">${g.members}</span></button>`).join('')
+      : '';
+    if (chatSel && chatSel.options.length <= 1) {
+      const names = new Map(); for (const t of data.topics) names.set(t.chatId, t.chatName);
+      chatSel.innerHTML = '<option value="">Every chat</option>' + [...names.entries()].sort((a, b) => String(a[1]).localeCompare(String(b[1]))).map(([id, n]) => `<option value="${escapeHtml(id)}">${escapeHtml(n)}</option>`).join('');
+    }
+    if (!rows.length) { list.innerHTML = `<p class="sv-empty">${data.topics.length ? 'No topics match.' : 'No topics yet. Topics are read from your conversations by the AI sorting — run it in Settings → AI & search.'}</p>`; return; }
+    list.innerHTML = rows.slice(0, 300).map((t) => `<button class="tp-card" data-id="${escapeHtml(t.id)}">
+      <div class="t">${escapeHtml(t.title)}${t.theme ? `<span class="theme">${escapeHtml((t.theme.emoji ? t.theme.emoji + ' ' : '') + t.theme.name)}</span>` : ''}</div>
+      <div class="m">${escapeHtml(t.chatName)} · ${new Date(t.fromTs).toLocaleDateString()}${t.toTs - t.fromTs > 86400000 ? ' – ' + new Date(t.toTs).toLocaleDateString() : ''} · ${t.msgCount} messages${t.people && t.people.length ? ' · ' + escapeHtml(t.people.slice(0, 3).join(', ')) : ''}</div>
+      <div class="s">${escapeHtml(t.summary || '')}</div>
+      ${(t.decisions || []).slice(0, 2).map((d) => `<div class="d">✓ ${escapeHtml(d)}</div>`).join('')}
+      ${t.keywords && t.keywords.length ? `<div class="k">${t.keywords.slice(0, 6).map((k) => `<i>${escapeHtml(k)}</i>`).join('')}</div>` : ''}
+    </button>`).join('');
+  }
+
+  async function enter() {
+    try { data = await requestJson('/api/topics'); } catch (_) { data = { topics: [], themes: [] }; }
+    render();
+  }
+  if (themes) themes.addEventListener('click', (e) => { const b = e.target.closest('button[data-theme]'); if (!b) return; theme = b.dataset.theme; render(); });
+  if (search) search.addEventListener('input', () => { q = search.value.trim(); render(); });
+  if (chatSel) chatSel.addEventListener('change', () => { chat = chatSel.value; render(); });
+  if (list) list.addEventListener('click', (e) => {
+    const b = e.target.closest('.tp-card'); if (!b) return;
+    const t = data.topics.find((x) => x.id === b.dataset.id);
+    if (!t) return;
+    setView('convo');
+    Convo.openAt(t.chatId, t.fromTs, t.chatName);
+  });
+  return { enter, render };
+})();
+
+
+/* ---------- Search & ask: every angle at once ------------------------------ */
+const Search = (function () {
+  const input = $('gsearch'), form = $('gsearch-form');
+  const title = $('sv-title'), sub = $('sv-sub'), filters = $('sv-filters'), results = $('sv-results');
+  const askQ = $('ask-q'), askGo = $('ask-go'), askOut = $('ask-out');
+  let last = '';
+  let seq = 0;
+
+  const when = (ts) => new Date(ts).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' });
+  const hi = (s) => escapeHtml(s || '').replace(/\[\[(.+?)\]\]/g, '<mark>$1</mark>');
+
+  function chipsFor(f) {
+    const out = [];
+    if (f.kind) out.push(({ image: 'Photos', video: 'Videos', document: 'Documents', audio: 'Voice notes' })[f.kind]);
+    if (f.docType) out.push(f.docType);
+    if (f.from && f.to) out.push(when(f.from) + ' – ' + when(f.to - 1));
+    if (f.dir) out.push(f.dir === 'out' ? 'Sent' : 'Received');
+    if (f.chat) out.push('with ' + f.chat);
+    return out;
+  }
+
+  function mediaCard(m) {
+    const th = m.kind === 'image' || m.kind === 'sticker' || m.kind === 'video'
+      ? `<img class="th" src="/api/thumbnail/${encodeURIComponent(m.id)}" alt="" onerror="this.outerHTML='<div class=&quot;th file&quot;>${m.kind === 'video' ? '▶' : '🖼'}</div>'">`
+      : `<div class="th file">${KIND_ICON[m.kind] || '📄'}</div>`;
+    return `<button class="sv-item" data-open="${escapeHtml(m.id)}">${th}<div class="body"><div class="t1">${escapeHtml(m.docName || m.title || m.caption || m.chat)}</div><div class="t2">${escapeHtml(m.chat)} · ${when(m.ts)}${m.snippet ? ' · ' : ''}${hi(m.snippet)}</div><div class="why">${escapeHtml((m.why || []).join(', '))}</div></div></button>`;
+  }
+
+  function render(r) {
+    if (!results) return;
+    if (title) title.textContent = 'Search: ' + r.query;
+    if (filters) filters.innerHTML = chipsFor(r.filters || {}).map((c) => `<span class="chip">${escapeHtml(c)}</span>`).join('') + (r.semantic ? '<span class="chip" title="Vectors were used: results can match by meaning, not only by the words">by meaning too</span>' : '');
+    const total = (r.media || []).length + (r.messages || []).length + (r.chats || []).length + (r.topics || []).length + (r.contacts || []).length;
+    if (sub) sub.textContent = total ? `${total} results across photos, documents, voice notes, messages, chats, topics and people.` : 'Nothing matches. Try fewer words, or ask the question below.';
+    const groups = [];
+    if (r.topics && r.topics.length) groups.push(`<section class="sv-group"><h3>Topics<span class="n">${r.topics.length}</span></h3><div class="sv-rows">${r.topics.map((t) => `<button class="sv-row" data-topic="${escapeHtml(t.chatId)}" data-ts="${t.fromTs}" data-name="${escapeHtml(t.chatName || '')}"><span class="who">${escapeHtml(t.chatName || '')}</span><span class="what"><b>${escapeHtml(t.title)}</b> — ${hi(t.snippet || t.summary)}</span><span class="when">${when(t.toTs)}</span></button>`).join('')}</div></section>`);
+    if (r.media && r.media.length) groups.push(`<section class="sv-group"><h3>Photos, videos, documents, voice notes<span class="n">${r.media.length}</span></h3><div class="sv-media">${r.media.map(mediaCard).join('')}</div></section>`);
+    if (r.messages && r.messages.length) groups.push(`<section class="sv-group"><h3>Messages<span class="n">${r.messages.length}</span></h3><div class="sv-rows">${r.messages.map((m) => `<button class="sv-row" data-msg="${escapeHtml(m.chatId)}" data-ts="${m.ts}" data-name="${escapeHtml(m.chatName || '')}"><span class="who">${escapeHtml(m.chatName)}${m.author && m.author !== m.chatName ? ' · ' + escapeHtml(m.author) : m.fromMe ? ' · you' : ''}</span><span class="what">${hi(m.snippet)}</span><span class="when">${when(m.ts)}</span></button>`).join('')}</div></section>`);
+    if (r.chats && r.chats.length) groups.push(`<section class="sv-group"><h3>Conversations<span class="n">${r.chats.length}</span></h3><div class="sv-rows">${r.chats.map((c) => `<button class="sv-row" data-chat="${escapeHtml(c.chatId)}" data-name="${escapeHtml(c.chatName || '')}"><span class="who">${escapeHtml(c.chatName)}</span><span class="what">${escapeHtml(c.summary || '')}${c.project ? ' · ' + escapeHtml(c.project) : ''}</span><span class="when">${escapeHtml(c.why || '')}</span></button>`).join('')}</div></section>`);
+    if (r.contacts && r.contacts.length) groups.push(`<section class="sv-group"><h3>People<span class="n">${r.contacts.length}</span></h3><div class="sv-rows">${r.contacts.map((c) => `<button class="sv-row" data-chat="${escapeHtml(c.id)}" data-name="${escapeHtml(c.name || c.pushname || c.number)}"><span class="who">${escapeHtml(c.name || c.pushname || '')}</span><span class="what">${escapeHtml(c.number ? '+' + c.number : '')}${c.isGroup ? ' · group' : ''}</span><span class="when">open chat</span></button>`).join('')}</div></section>`);
+    results.innerHTML = groups.join('') || '<p class="sv-empty">Nothing found.</p>';
+  }
+
+  async function run(q) {
+    q = String(q || '').trim();
+    if (!q) return;
+    last = q;
+    if (input && input.value !== q) input.value = q;
+    if (askQ && !askQ.value) askQ.placeholder = 'Or ask: ' + q + '?';
+    setView('search');
+    const my = ++seq;
+    if (sub) sub.textContent = 'Searching…';
+    let r;
+    try { r = await requestJson('/api/search/all?q=' + encodeURIComponent(q)); } catch (e) { if (sub) sub.textContent = 'Search failed: ' + e.message; return; }
+    if (my !== seq) return;
+    render(r);
+  }
+
+  async function ask(q) {
+    q = String(q || '').trim();
+    if (!q) return;
+    setView('search');
+    if (askQ) askQ.value = q;
+    if (askOut) { askOut.classList.remove('hidden'); askOut.innerHTML = '<div class="muted">Reading your archive…</div>'; }
+    if (askGo) askGo.disabled = true;
+    try {
+      const r = await requestJson('/api/ai/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: q }) });
+      askOut.innerHTML = `<div class="ask-answer">${escapeHtml(r.answer || '')}</div>` + (r.sources && r.sources.length ? `<div class="ask-sources">${r.sources.map((s) => `<button class="ask-src" data-src='${escapeHtml(JSON.stringify(s.ref || {}))}' data-kind="${escapeHtml(s.kind)}" data-ts="${s.ts || 0}" data-name="${escapeHtml(s.chat || '')}">${s.serve && (s.kind === 'image') ? `<img src="/api/thumbnail/${encodeURIComponent(s.ref.id)}" alt="">` : ''}<span class="n">${s.n}</span><span class="t"><b>${escapeHtml(s.kind)}${s.chat ? ' · ' + escapeHtml(s.chat) : ''}${s.ts ? ' · ' + when(s.ts) : ''}</b><br>${escapeHtml(s.text)}</span></button>`).join('')}</div>` : '');
+    } catch (e) { askOut.innerHTML = `<div class="bad-text">${escapeHtml(e.message)}</div>`; }
+    if (askGo) askGo.disabled = false;
+    // The plain search for the same words, underneath the answer.
+    if (last !== q) run(q);
+  }
+
+  function enter() { if (input) { if (input.value.trim() && input.value.trim() !== last) run(input.value); else if (!last) setTimeout(() => input.focus(), 50); } }
+
+  if (form) form.addEventListener('submit', (e) => { e.preventDefault(); run(input.value); });
+  if (input) { let t; input.addEventListener('input', () => { clearTimeout(t); const v = input.value.trim(); if (v.length >= 2) t = setTimeout(() => run(v), 350); }); }
+  if (askGo) askGo.addEventListener('click', () => ask(askQ.value));
+  if (askQ) askQ.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); ask(askQ.value); } });
+  if (results) results.addEventListener('click', (e) => {
+    const open = e.target.closest('[data-open]');
+    if (open) { const r = allItems.find((x) => x.id === open.dataset.open); if (r) openLightbox(r); return; }
+    const row = e.target.closest('.sv-row');
+    if (!row) return;
+    if (row.dataset.msg || row.dataset.topic) { setView('convo'); Convo.openAt(row.dataset.msg || row.dataset.topic, parseInt(row.dataset.ts, 10), row.dataset.name); return; }
+    if (row.dataset.chat) { setView('convo'); Convo.openChat({ chatId: row.dataset.chat, chatName: row.dataset.name }); }
+  });
+  if (askOut) askOut.addEventListener('click', (e) => {
+    const b = e.target.closest('.ask-src'); if (!b) return;
+    let ref = {}; try { ref = JSON.parse(b.dataset.src); } catch (_) {}
+    const kind = b.dataset.kind;
+    if (kind === 'message' || kind === 'topic') { setView('convo'); Convo.openAt(ref.chatId, kind === 'topic' ? ref.fromTs : parseInt(b.dataset.ts, 10), b.dataset.name); return; }
+    if (kind === 'chat') { setView('convo'); Convo.openChat({ chatId: ref.chatId, chatName: b.dataset.name }); return; }
+    const r = allItems.find((x) => x.id === ref.id); if (r) openLightbox(r);
+  });
+
+  return { run, ask, enter };
 })();
 
 
@@ -3242,6 +3774,7 @@ const SourceOverview = (() => {
 /* Start-up, last: every module above is defined by this point, and a const
    that has not been reached yet cannot be tested for with typeof. */
 loadItems(true).then(async () => {
+  if (typeof Finals !== 'undefined') await Finals.refreshMarks();
   await AI.loadLabels();
   await AI.loadChatGroups();
   renderSourceBar();

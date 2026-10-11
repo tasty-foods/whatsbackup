@@ -2,7 +2,7 @@
 
 A Windows desktop app that saves every photo, video and message from your WhatsApp — to a local folder, and to a cloud folder if you point it at one.
 
-The 1.6.0 desktop workspace searches photo details, document text and sampled video scenes. The Library includes favourites, saved searches, selected-file ZIP exports and persistent appearance preferences. Personal organisation lives in `data/library.json`; display choices live in `data/settings.json`.
+The 2.0 release makes the archive understood rather than just stored. The AI reads photos, documents and (optionally) voice notes, follows each conversation into **Topics** with decisions and keywords, finds the versions of one thing that were sent and suggests the **Final** to keep (keeping copies the file into a `Finals` folder, nothing is deleted), and answers questions over the whole archive with cited sources in **Search & ask**. Search runs from every angle at once: full-text over messages with stemming and date/kind/direction filters, AI labels, vectors for search by meaning, topics, chats and people. Contacts and chats are now persisted and kept in sync with a catch-up pass on connect and every twenty minutes. The 1.6.0 workspace underneath is kept whole: photo details, document text, sampled video scenes, favourites, saved searches, selected-file ZIP exports and persistent appearance preferences. Personal organisation lives in `data/library.json`; display choices live in `data/settings.json`.
 
 For installing and using it, see **[INSTALL.md](INSTALL.md)**. This file is about how it's built.
 
@@ -118,7 +118,53 @@ It is stripped from `/api/settings` and the diagnostic report. The engine's
 fail on any machine with TLS inspection and the first call dies as "fetch failed".
 
 `demo` is a real preset: a local fake provider that labels and groups with no key
-and no cost, for seeing what sorting looks like before paying for it.
+and no cost, for seeing what sorting looks like before paying for it. In 2.0 it
+also fakes transcripts, topics, vectors and finals judgements, so every screen
+can be exercised offline (`tools/seed-dev.js` builds an archive for exactly that).
+
+### Understanding, topics, finals and search from every angle (2.0)
+
+The runner (`src/ai/index.js`) now drains one queue of typed jobs — image,
+video, document, audio, chat, topic, finals, embed — picking the provider in
+the chain that can do each one (`capabilities()`: vision, audio, embeddings are
+probed per preset) and booking every paid reply through `onUsage` the moment it
+arrives. A second pass ten minutes after a kick judges the version sets and
+makes the vectors, so the first pass stays cheap.
+
+- **Transcribe** (`provider.transcribe`, `label.labelAudio`) — voice notes and
+  audio go to `/audio/transcriptions` (Groq's whisper is free, OpenAI's is not);
+  off by default, `aiTranscribeAudio`. The transcript is indexed and shown under
+  the bubble.
+- **Documents** (`src/ai/extract.js` for tests; the content worker in the app) —
+  text comes out locally, scanned pages through vision; the label carries
+  *facts*: title, type, parties, dates, amounts, references.
+- **Topics** (`src/ai/topics.js`) — each chat is read in windows from a cursor
+  (`ai_topic_cursor`), so a rerun only reads what is new. Topics are bounded to
+  the messages the model was shown (`validate`), then arranged into themes
+  (`ai_groups.kind = 'topic'`) once there are enough of them.
+- **Finals** (`src/ai/finals.js`) — candidate sets are clustered without AI:
+  dHash fingerprints (`src/imaging.js`, or the shell's `nativeImage`), alike
+  captions or labels, same chat and kind, 72 hours. The model judges the set
+  with the chat around it; the suggestion is stored in `finals_sets`, the
+  person's decision in `finals_marks`. Keep copies the file to `Finals` under the
+  media and cloud roots with a readable name; nothing is ever deleted or moved.
+- **Vectors** (`src/ai/embed.js`) — labels, transcripts, topics and chat
+  summaries are embedded (`ai_embeddings`) when a provider can; search by
+  meaning is a cosine scan in memory and is skipped silently without a key.
+- **Search** (`src/search.js`) — one query is parsed for dates ("last month",
+  "in March"), kinds ("invoices", "voice notes"), direction ("sent") and chat
+  ("with Lotte"); the rest hits FTS5 over messages with stemming (AND, with an
+  any-word fallback for questions), the label index, the vectors, topics, chats
+  and contacts, and comes back as one ranked answer per group.
+- **Ask** (`src/ai/ask.js`) — the same retrieval, then one text call with the
+  sources numbered; the answer cites them and the UI opens each one in place.
+
+**Sync** (`src/whatsapp.js`, `src/contacts.js`, `src/messages.js`) — contacts
+and chats are persisted tables, not a cache; lid→phone pairs are learned from
+the client so group authors resolve to names; a catch-up pass on connect and
+every 20 minutes walks each chat from its last synced message, and edits and
+revocations are recorded rather than lost. The dashboard offers a catch-up and
+a per-chat sync by hand.
 
 ## Building
 
@@ -143,6 +189,12 @@ Desktop updater diagnostics are saved under `<appHome>/logs/updates.log`.
 - `npm start` — run the desktop app from source
 - `npm run server` — run only the capture engine + dashboard (no Electron)
 - `npm run icons` — regenerate app and tray icons
+- `node tools/seed-dev.js && node tools/dev-server.js` — a throwaway archive
+  under `.dev-home/` (photos with three versions of one advert, a PDF, a Word
+  file, a voice note, a group chat) served on port 8799 with the WhatsApp link
+  disabled and the `demo` provider on, for working on the dashboard and the AI
+  passes without touching a real archive. The `dev` entry in
+  `.claude/launch.json` starts the same thing.
 
 ## Website (`docs/`)
 
