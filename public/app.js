@@ -291,8 +291,12 @@ function showCurrent() {
     ${aiBlock}
     ${typeof AI !== 'undefined' && AI.groups().length ? AI.albumPicker(r) : ''}
     <a href="${r.serve}" download>⭳ Download</a>
-    ${(r.kind === 'image' || r.kind === 'video') ? '<a href="#" id="lb-queue-status" title="Add to the status queue">📣 Queue as status</a>' : ''}`;
+    <a href="#" id="lb-show-local" title="Open the folder on this PC with this file selected">📁 Show in folder</a>
+    <a href="#" id="lb-show-cloud" title="Open the pCloud folder with this file selected">☁ Show in pCloud</a>
+    ${(r.kind === 'image' || r.kind === 'video') ? '<a href="#" id="lb-queue-status" title="Add to the status queue">📣 Queue as status</a>' : ''}
+    <span id="lb-where" class="m-where"></span>`;
   if (typeof AI !== 'undefined') AI.bindAlbumPicker(r);
+  bindShowInFolder(r);
   const qs = document.getElementById('lb-queue-status');
   if (qs) qs.addEventListener('click', async (e) => {
     e.preventDefault();
@@ -302,6 +306,31 @@ function showCurrent() {
   els.lbPrev.style.visibility = i > 0 ? 'visible' : 'hidden';
   els.lbNext.style.visibility = i < filteredCache.length - 1 ? 'visible' : 'hidden';
 }
+// "Show in folder": the desktop app opens Explorer with the file selected; in
+// a plain browser, which cannot, the path is shown and copied instead.
+async function bindShowInFolder(r) {
+  const aLocal = document.getElementById('lb-show-local');
+  const aCloud = document.getElementById('lb-show-cloud');
+  const out = document.getElementById('lb-where');
+  if (!aLocal || !aCloud) return;
+  let w = null;
+  try { w = await requestJson('/api/media/' + encodeURIComponent(r.id) + '/where'); } catch (_) {}
+  if (lbId !== r.id) return;                       // moved on while asking
+  aLocal.hidden = !(w && w.local);
+  aCloud.hidden = !(w && w.cloud);
+  if (w && !w.cloud && w.cloudExpected) out.textContent = 'Not copied to pCloud yet — the backup picks it up shortly.';
+  const reveal = async (p) => {
+    if (bridge && bridge.showInFolder) {
+      const ok = await bridge.showInFolder(p);
+      if (ok) { out.textContent = ''; return; }
+    }
+    try { await navigator.clipboard.writeText(p); out.textContent = 'Path copied: ' + p; }
+    catch (_) { out.textContent = p; }
+  };
+  aLocal.onclick = (e) => { e.preventDefault(); if (w && w.local) reveal(w.local); };
+  aCloud.onclick = (e) => { e.preventDefault(); if (w && w.cloud) reveal(w.cloud); };
+}
+
 function step(d) {
   const i = currentIndex();
   if (i < 0) return;

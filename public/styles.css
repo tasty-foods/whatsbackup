@@ -766,3 +766,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .update-btn { margin-left: 6px; vertical-align: middle; font-size: var(--fs-xs); padding: 3px 9px; }
 .update-btn.ready { background: var(--accent2); color: #fff; border-color: var(--accent2); }
 .update-btn.busy { opacity: .75; }
+
+/* Show in folder: the path line under the viewer's links */
+.m-where { display: block; color: var(--muted); font-size: 12px; word-break: break-all; margin-top: 4px; }
+.m-where:empty { display: none; }

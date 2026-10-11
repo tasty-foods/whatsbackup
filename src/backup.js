@@ -191,4 +191,4 @@ function init() {
   if (periodic.unref) periodic.unref();
 }
 
-module.exports = { init, status, sweep, nudge, onCloud, available };
+module.exports = { init, status, sweep, nudge, onCloud, available, cloudPathFor, localPathFor };

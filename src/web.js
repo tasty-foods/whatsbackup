@@ -796,6 +796,58 @@ function createApp() {
     res.json({ dryRun: false, source, cleared: store.clearCaptions(source), backup });
   });
 
+  // Where one item's files are: the copy on this PC and the one in the cloud
+  // folder, and whether each is actually there. For "Show in folder".
+  app.get('/api/media/:id/where', (req, res) => {
+    const rec = store.get(String(req.params.id || ''));
+    if (!rec) return res.status(404).json({ error: 'not found' });
+    const bk = require('./backup');
+    const fsx = require('fs');
+    const local = bk.localPathFor(rec);
+    const cloud = bk.cloudPathFor(rec);
+    let cloudThere = false;
+    try { cloudThere = !!cloud && fsx.existsSync(cloud); } catch (_) {}
+    const same = !!local && !!cloud && path.resolve(local).toLowerCase() === path.resolve(cloud).toLowerCase();
+    res.json({ local: same ? null : local, cloud: cloudThere ? cloud : null, cloudExpected: cloud });
+  });
+
+  // Documents saved before their extension was worked out properly ended in the
+  // tail of a long type ("…vnd.openxmlformats-"). Renamed here to what they are.
+  app.post('/api/maintenance/fix-doc-names', sameOrigin, (req, res) => {
+    const dry = !!(req.body && req.body.dryRun);
+    const MAP = {
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
+      'application/msword': 'doc', 'application/vnd.ms-excel': 'xls', 'application/vnd.ms-powerpoint': 'ppt',
+    };
+    const out = { dryRun: dry, found: 0, renamed: 0, names: [] };
+    for (const r of store.listRecords({})) {
+      if (r.kind !== 'document') continue;
+      const own = /\.([A-Za-z0-9]{1,6})$/.exec(r.docName || '');
+      const want = own ? own[1].toLowerCase() : MAP[(r.mimetype || '').split(';')[0]];
+      if (!want) continue;                                  // nothing better to call it
+      // Everything after the id is the extension, however many dots the old
+      // tail carried: <stamp>__<dir>__<chat>__<id10>.<ext>
+      const next = r.filename.replace(/(__[A-Za-z0-9]{10})\..*$/, '$1') + '.' + want;
+      if (next === r.filename) continue;
+      out.found++;
+      out.names.push(next);
+      if (dry) continue;
+      const oldName = r.filename;
+      if (store.renameFile(r.id, next, cfg.FILES_DIR)) {
+        out.renamed++;
+        // The cloud copy, if the backup already made one, follows its name.
+        if (cfg.CLOUD_ROOT) {
+          const fsx = require('fs');
+          const a = path.join(cfg.CLOUD_ROOT, 'Files', oldName), b = path.join(cfg.CLOUD_ROOT, 'Files', next);
+          try { if (fsx.existsSync(a) && !fsx.existsSync(b)) { fsx.renameSync(a, b); out.cloudRenamed = (out.cloudRenamed || 0) + 1; } } catch (_) {}
+        }
+      }
+    }
+    res.json(out);
+  });
+
   app.get('/healthz', (req, res) => res.json({ ok: true }));
   return app;
 }

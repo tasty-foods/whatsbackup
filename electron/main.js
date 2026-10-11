@@ -472,6 +472,25 @@ function registerIpc() {
     return true;
   });
 
+  // Opens Explorer with the file selected. Only for files inside this app's
+  // own folder or its cloud folder: the page asks, the shell checks.
+  ipcMain.handle('wb:showInFolder', async (_e, target) => {
+    if (typeof target !== 'string' || !target) return false;
+    const fsx = require('fs');
+    let real;
+    try { real = fsx.realpathSync(target); } catch (_) { return false; }
+    const inside = (root) => {
+      if (!root) return false;
+      let r; try { r = fsx.realpathSync(root); } catch (_) { r = path.resolve(root); }
+      const rel = path.relative(r.toLowerCase(), real.toLowerCase());
+      return !!rel && !rel.startsWith('..') && !path.isAbsolute(rel);
+    };
+    const s = settings.read();
+    if (!inside(HOME) && !inside(s.cloudRoot) && !inside(s.mediaRoot)) return false;
+    shell.showItemInFolder(real);
+    return true;
+  });
+
   ipcMain.handle('wb:setStartup', (_e, enabled) => {
     const now = setStartup(enabled);
     settings.write({ startWithWindows: now });

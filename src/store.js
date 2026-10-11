@@ -130,4 +130,21 @@ function clearCaptions(source) {
   return changed;
 }
 
-module.exports = { renameChat, ensureDirs, loadAll, has, get, addRecord, removeRecords, clearCaptions, listRecords, counts, hide, unhide, hiddenIds };
+// A record's file given a new name: the file is renamed first and the index
+// rewritten only once that worked. For names that came out wrong.
+function renameFile(id, newName, dir) {
+  const rec = byId.get(id);
+  if (!rec || !newName || newName === rec.filename) return false;
+  const path = require('path');
+  const from = path.join(dir, rec.filename), to = path.join(dir, newName);
+  if (!fs.existsSync(from) || fs.existsSync(to)) return false;
+  fs.renameSync(from, to);
+  rec.filename = newName;
+  rec.serve = rec.serve ? rec.serve.replace(/[^/]+$/, encodeURIComponent(newName)) : rec.serve;
+  const tmp = cfg.INDEX_FILE + '.tmp';
+  fs.writeFileSync(tmp, records.slice().sort((a, b) => a.ts - b.ts).map((r) => JSON.stringify(r)).join('\n') + '\n');
+  fs.renameSync(tmp, cfg.INDEX_FILE);
+  return true;
+}
+
+module.exports = { renameChat, ensureDirs, loadAll, has, get, addRecord, removeRecords, clearCaptions, renameFile, listRecords, counts, hide, unhide, hiddenIds };

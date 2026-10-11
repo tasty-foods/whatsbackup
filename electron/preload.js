@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('desktop', {
   info: () => ipcRenderer.invoke('wb:info'),
   pickFolder: (opts) => ipcRenderer.invoke('wb:pickFolder', opts || {}),
   openPath: (target) => ipcRenderer.invoke('wb:openPath', target),
+  showInFolder: (target) => ipcRenderer.invoke('wb:showInFolder', target),
   setStartup: (enabled) => ipcRenderer.invoke('wb:setStartup', !!enabled),
   restart: () => ipcRenderer.invoke('wb:restart'),
   checkUpdates: (quiet) => ipcRenderer.invoke('wb:checkUpdates', !!quiet),

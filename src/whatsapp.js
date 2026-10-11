@@ -116,8 +116,26 @@ const EXT = {
   'image/gif': 'gif', 'video/mp4': 'mp4', 'video/3gpp': '3gp', 'video/quicktime': 'mov',
   'video/x-matroska': 'mkv', 'audio/ogg': 'ogg', 'audio/mpeg': 'mp3', 'audio/mp4': 'm4a',
   'audio/aac': 'aac', 'audio/wav': 'wav', 'application/pdf': 'pdf',
+  // Documents: Office's own types are long and none of them is an extension.
+  'application/msword': 'doc', 'application/vnd.ms-excel': 'xls', 'application/vnd.ms-powerpoint': 'ppt',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
+  'application/vnd.oasis.opendocument.text': 'odt', 'application/vnd.oasis.opendocument.spreadsheet': 'ods',
+  'text/plain': 'txt', 'text/csv': 'csv', 'application/zip': 'zip', 'application/x-zip-compressed': 'zip',
+  'application/rtf': 'rtf', 'text/rtf': 'rtf', 'image/heic': 'heic', 'image/heif': 'heif',
 };
-const extFor = (m) => EXT[(m || '').split(';')[0]] || ((m || '').split(';')[0].split('/')[1]) || 'bin';
+// A document's own name says best what it is ("Invoice 4021.xlsx"); the type
+// is the fallback, and a type with no known extension becomes .bin rather
+// than the tail of a long name Windows will not open.
+const extFor = (m, name) => {
+  const own = /\.([A-Za-z0-9]{1,6})$/.exec(String(name || ''));
+  if (own) return own[1].toLowerCase();
+  const type = (m || '').split(';')[0].trim().toLowerCase();
+  if (EXT[type]) return EXT[type];
+  const tail = type.split('/')[1] || '';
+  return /^[a-z0-9]{1,5}$/.test(tail) ? tail : 'bin';
+};
 const sanitize = (x) => (x || 'unknown').replace(/[^\p{L}\p{N}\-_. ]/gu, '_').replace(/\s+/g, ' ').trim().slice(0, 60) || 'unknown';
 const stamp = (ms) => { const d = new Date(ms), p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`; };
 const mirrorImages = () => (process.env.WA_MIRROR_IMAGES === '1') || !!settings.read().mirrorImages;
@@ -272,17 +290,24 @@ async function downloadMediaByKey(key) {
     const stage = msg.mediaData.mediaStage || '';
     if (stage.includes('ERROR') || stage === 'FETCHING') return { unavailable: 'not retrievable (stage ' + stage + ')' };
     const qpl = { addAnnotations() { return this; }, addPoint() { return this; } };
+    // WhatsApp's downloader checks the file's type against the kind of media
+    // since early October 2026, and takes application/octet-stream when none is
+    // given — which it then refuses for every photo and video
+    // (InvalidMediaFileType). The message knows its own type; pass it on.
+    // (wwebjs/whatsapp-web.js#201908, open upstream.)
+    const FALLBACK_TYPE = { image: 'image/jpeg', video: 'video/mp4', ptt: 'audio/ogg; codecs=opus', audio: 'audio/mpeg', sticker: 'image/webp', document: 'application/octet-stream' };
+    const mimetype = msg.mimetype || FALLBACK_TYPE[msg.type] || 'application/octet-stream';
     let bytes;
     try {
       bytes = await window.require('WAWebDownloadManager').downloadManager.downloadAndMaybeDecrypt({
         directPath: msg.directPath, encFilehash: msg.encFilehash, filehash: msg.filehash,
         mediaKey: msg.mediaKey, mediaKeyTimestamp: msg.mediaKeyTimestamp, type: msg.type,
-        signal: new AbortController().signal, downloadQpl: qpl,
+        mimetype, signal: new AbortController().signal, downloadQpl: qpl,
       });
     } catch (e) {
       return { unavailable: 'download failed — ' + ((e && e.name) || 'error') + ': ' + ((e && e.message) || 'unknown') };
     }
-    return { data: await window.WWebJS.arrayBufferToBase64Async(bytes), mimetype: msg.mimetype };
+    return { data: await window.WWebJS.arrayBufferToBase64Async(bytes), mimetype };
   }, key);
 }
 
@@ -310,7 +335,7 @@ async function saveMediaMessage(msg, chatObj) {
   const chatName = (chat && (chat._wbName || chat.name)) || cachedChatName(chat) || 'unknown';
   const number = (chat && chat.id && chat.id.user) || '';
 
-  const ext = extFor(media.mimetype);
+  const ext = extFor(media.mimetype, msg.type === 'document' ? (msg._data && msg._data.filename) : '');
   const filename = `${stamp(ts)}__${dir}__${sanitize(chatName)}__${id.replace(/[^A-Za-z0-9]/g, '').slice(-10)}.${ext}`;
   const buf = Buffer.from(media.data, 'base64');
 
@@ -548,7 +573,11 @@ function buildClient() {
     try { state.qrDataUrl = await qrcode.toDataURL(qr, { margin: 1, width: 320 }); } catch (_) {}
     console.log(`\n[link] Scan required at http://localhost:${cfg.PORT}\n`);
   });
-  c.on('authenticated', () => { state.status = 'authenticated'; state.qrDataUrl = null; clearTimeout(startWatchdog); });
+  // Accepted is not ready. On 2026-10-11 WhatsApp Web accepted the session and
+  // synced, then the library hung hooking into its events and never said ready —
+  // so the watchdog stays armed until ready, and a link stuck between the two is
+  // restarted like one that never started.
+  c.on('authenticated', () => { state.status = 'authenticated'; state.qrDataUrl = null; if (c === client) watchStart(); });
   c.on('ready', () => {
     clearTimeout(startWatchdog); startAttempts = 0;
     state.status = 'ready';
@@ -613,10 +642,12 @@ let startWatchdog = null;
 function watchStart() {
   clearTimeout(startWatchdog);
   startWatchdog = setTimeout(async () => {
-    if (state.status !== 'starting') return;          // it got somewhere
+    if (state.status === 'ready') return;               // it got there
+    if (state.status === 'qr') return;                  // waiting on a person, not stuck
+    if (state.status === 'error' && state.needsRelink) return;
     startAttempts++;
     const again = startAttempts <= 5;
-    console.error(`[link] no progress after ${Math.round(START_WATCHDOG_MS / 60000)} min — ${again ? 'restarting the link (attempt ' + startAttempts + ')' : 'giving up until the app is restarted'}`);
+    console.error(`[link] not ready after ${Math.round(START_WATCHDOG_MS / 60000)} min (stuck at ${state.status}) — ${again ? 'restarting the link (attempt ' + startAttempts + ')' : 'giving up until the app is restarted'}`);
     clearTimeout(reconnectTimer); reconnectTimer = null;
     const old = client; client = null;                  // nothing may reconnect the old one now
     try { if (old) await old.destroy(); } catch (_) {}
