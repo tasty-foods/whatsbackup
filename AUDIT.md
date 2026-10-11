@@ -1,3 +1,48 @@
+# Content search and responsiveness — 1.6.0
+
+Reviewed Overview, Library, Conversations, Status Studio, Clean up and all eight
+Settings panes in the built-in browser, using cloned archive metadata and the
+existing media folders. Live source unlinking, posting, destructive cleanup and
+installation over the user's running app were not exercised.
+
+- Photos now have detailed visual descriptions and visible text; videos use
+  sampled frames with timestamp evidence; PDF, Office and text files expose
+  searchable contents. Document extraction is local, with optional AI reading
+  of scanned pages. Search can exclude filenames, interpret natural-language
+  queries with AI, and show the matching page or scene.
+- Added content coverage, per-file indexing, persistent pause/resume, local-only
+  document reading, failure details, workload controls and document/video detail
+  limits. The single-file action processes only that file. Monthly accounting
+  records completed provider calls even when a later step fails.
+- Removed blocking cloud status/copy/cleanup work from the event loop. Images,
+  documents and video frames are processed in bounded worker threads; thumbnails
+  are cached and hover video previews are opt-in. A large archive cost estimate
+  fell from approximately 4.4 seconds to 14 ms. During a 1.7-second storage scan,
+  state requests completed in 3–19 ms on the test PC. These measurements do not
+  rule out unrelated Windows or source-browser problems.
+- Fixed media-viewer overflow, conversation search opening the wrong message,
+  raw image data appearing as chat text, the AI-settings shortcut, saved-search
+  scope, and immediate saving of the workload menu. Status Studio previews now
+  work while WhatsApp is disconnected. A single-instance guard avoids duplicate
+  desktop processes, and reconnect handling no longer reuses a stale web cache.
+
+49 automated checks pass, including actual image/PDF/Office/video workers,
+search evidence, malformed AI replies, queue isolation, pause and spending,
+asynchronous backup, exports, settings and desktop updates. A packaged Electron
+utility-process smoke test verifies native image/PDF rendering, Office reading,
+FFmpeg frame extraction and video posters. Browser checks verify content-only
+photo/document/video results, video seeking, saved views, layouts, conversation
+message highlighting, settings persistence and an offline status dry run.
+
+Existing files need a new content-index pass. Video search does not transcribe
+audio and cannot guarantee detection between sampled frames. Scanned documents
+remain partial when their configured limits are reached. Tests used a small
+AI sample; the user's complete archive was not sent for indexing. Live WhatsApp
+reconnection needs confirmation in the installed app. Runtime dependencies were
+updated within compatible ranges; unresolved transitive audit findings remain.
+
+---
+
 # Desktop updates — 1.5.1
 
 The installed app and public feed were still 1.4.9 while the workspace redesign

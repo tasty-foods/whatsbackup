@@ -48,23 +48,23 @@ function cloudPathFor(rec) {
 }
 
 // Where the local copy is, if there is one.
-function localPathFor(rec) {
+async function localPathFor(rec) {
   const dirs = rec.kind === 'video' ? [cfg.LOCAL_VIDEO_DIR, cfg.VIDEO_DIR]
     : rec.kind === 'image' || rec.kind === 'sticker' ? [cfg.IMAGES_DIR]
       : [cfg.FILES_DIR];
   for (const d of dirs) {
     if (!d) continue;
     const p = path.join(d, rec.filename);
-    try { if (fs.existsSync(p)) return p; } catch (_) {}
+    try { if ((await fs.promises.stat(p)).isFile()) return p; } catch (_) {}
   }
   return null;
 }
 
-function available() {
+async function available() {
   if (!cfg.CLOUD_ROOT) return false;
   if (Date.now() - probe.at < PROBE_TTL_MS) return probe.available;
   let ok = false;
-  try { ok = fs.statSync(cfg.CLOUD_ROOT).isDirectory(); } catch (_) { ok = false; }
+  try { ok = (await fs.promises.stat(cfg.CLOUD_ROOT)).isDirectory(); } catch (_) { ok = false; }
   probe = { at: Date.now(), available: ok };
   return ok;
 }
@@ -72,21 +72,21 @@ function available() {
 // The size a cloud copy must match is the file we would copy from. The
 // record's size is what the message said on arrival; a re-download can
 // change the bytes, and then a perfect copy would be called missing for ever.
-function expectedSize(rec) {
-  const src = localPathFor(rec);
-  if (src) { try { return fs.statSync(src).size; } catch (_) {} }
+async function expectedSize(rec) {
+  const src = await localPathFor(rec);
+  if (src) { try { return (await fs.promises.stat(src)).size; } catch (_) {} }
   return rec.size || 0;
 }
 
-function onCloud(rec) {
+async function onCloud(rec) {
   const hit = known.get(rec.id);
   if (hit && Date.now() - hit.at < EXIST_TTL_MS) return hit.on;
   const p = cloudPathFor(rec);
   let on = false;
   if (p) {
     try {
-      const file = fs.statSync(p);
-      const want = expectedSize(rec);
+      const file = await fs.promises.stat(p);
+      const want = await expectedSize(rec);
       on = file.isFile() && file.size > 0 && (!want || file.size === want);
     } catch (_) { on = false; }
   }
@@ -94,9 +94,9 @@ function onCloud(rec) {
   return on;
 }
 
-function status({ ids = true } = {}) {
+async function status({ ids = true } = {}) {
   const configured = !!cfg.CLOUD_ROOT;
-  const avail = available();
+  const avail = await available();
   const hidden = store.hiddenIds();
   const recs = store.listRecords({}).filter((r) => !hidden.has(r.id) && !r.sample);
   const byKind = {};
@@ -108,7 +108,7 @@ function status({ ids = true } = {}) {
     byKind[k].total++;
     // With no drive configured nothing is on the cloud and that is the answer;
     // with one configured but away, the last known answers stand.
-    const here = configured && onCloud(r);
+    const here = configured && await onCloud(r);
     if (here) { on++; byKind[k].onCloud++; } else onlyHere.push(r.id);
   }
   return {
@@ -125,8 +125,9 @@ function status({ ids = true } = {}) {
 async function sweep({ reason = 'manual' } = {}) {
   if (state.running) return { ok: false, error: 'already running' };
   if (!cfg.CLOUD_ROOT) return { ok: false, error: 'no cloud folder set' };
+  state.running = true;
   probe.at = 0;
-  if (!available()) return { ok: false, error: 'cloud folder not reachable' };
+  if (!await available()) { state.running = false; return { ok: false, error: 'cloud folder not reachable' }; }
   known.clear();
   state.running = true; state.startedAt = Date.now(); state.finishedAt = null;
   state.copied = 0; state.failed = 0; state.bytes = 0; state.lastError = null;
@@ -135,8 +136,8 @@ async function sweep({ reason = 'manual' } = {}) {
   let i = 0;
   try {
     for (const r of recs) {
-      if (onCloud(r)) continue;
-      const src = localPathFor(r);
+      if (await onCloud(r)) continue;
+      const src = await localPathFor(r);
       const dst = cloudPathFor(r);
       if (!src || !dst) {
         state.failed++; state.lastError = 'An original file is missing. Check your media folder.';
@@ -145,22 +146,22 @@ async function sweep({ reason = 'manual' } = {}) {
       const temporary = dst + '.whatsbackup-part';
       try {
         if (path.resolve(src) === path.resolve(dst)) throw new Error('The cloud file is incomplete and no separate local copy is available.');
-        fs.mkdirSync(path.dirname(dst), { recursive: true });
-        fs.copyFileSync(src, temporary);
-        const size = fs.statSync(temporary).size;
-        const want = fs.statSync(src).size;
+        await fs.promises.mkdir(path.dirname(dst), { recursive: true });
+        await fs.promises.copyFile(src, temporary);
+        const size = (await fs.promises.stat(temporary)).size;
+        const want = (await fs.promises.stat(src)).size;
         if (!size || size !== want) throw new Error('The copy came out a different size from the original.');
-        fs.renameSync(temporary, dst);
+        await fs.promises.rename(temporary, dst);
         state.copied++;
-        try { state.bytes += fs.statSync(dst).size; } catch (_) {}
+        try { state.bytes += (await fs.promises.stat(dst)).size; } catch (_) {}
         known.set(r.id, { on: true, at: Date.now() });
       } catch (e) {
-        try { fs.rmSync(temporary, { force: true }); } catch (_) {}
+        try { await fs.promises.rm(temporary, { force: true }); } catch (_) {}
         state.failed++; state.lastError = e.message;
         // The drive going away mid-sweep looks like a run of failures; stop
         // rather than fail every remaining item one by one.
         probe.at = 0;
-        if (!available()) break;
+        if (!await available()) break;
       }
       // Yield now and then so a big first sweep does not stall the server.
       if (++i % 25 === 0) await new Promise((res) => setImmediate(res));

@@ -17,6 +17,10 @@ fs.mkdirSync(HOME, { recursive: true });
 process.env.WB_HOME = HOME;
 app.setPath('userData', path.join(HOME, 'shell'));   // Electron's own cache, kept apart from user data
 app.setAppUserModelId('be.tastyfoods.whatsbackup');  // Windows needs this for notifications + taskbar identity
+// Take the lock before loading the engine, updater or native image dependencies.
+// Double-clicks during an update must not create several half-started shells.
+const ownsInstance = app.requestSingleInstanceLock();
+if (!ownsInstance) app.exit(0);
 
 const ROOT = path.join(__dirname, '..');
 const RESOURCES = process.resourcesPath || ROOT;
@@ -538,7 +542,7 @@ function registerIpc() {
 }
 
 // ---------- lifecycle ----------
-if (!app.requestSingleInstanceLock()) {
+if (!ownsInstance) {
   app.quit();
 } else {
   app.on('second-instance', () => openWindow());

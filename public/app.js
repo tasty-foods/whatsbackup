@@ -34,7 +34,7 @@ let allItems = [];         // full list, newest first
 // this and re-renders from it; none keeps a private copy. If two controls
 // could disagree, one of them would be wrong.
 const F = {
-  q: '', source: '', kind: '', exact: '', dir: '', album: '', project: '', tag: '', backup: '', from: '', to: '', sort: 'new', favorite: false,
+  q: '', contentScope: 'all', source: '', kind: '', exact: '', dir: '', album: '', project: '', tag: '', backup: '', from: '', to: '', sort: 'new', favorite: false,
 };
 const fEl = (id) => document.getElementById(id);
 
@@ -45,7 +45,7 @@ let sentinel = null;
 let io = null;
 let newestTs = 0;
 let lbId = null;           // id of the item currently open in the lightbox
-const CHUNK = 140;
+const CHUNK = 72;
 
 function fmtTime(ms) { return new Date(ms).toLocaleString([], { hour: '2-digit', minute: '2-digit' }); }
 function dayKey(ms) { return new Date(ms).toDateString(); }
@@ -70,6 +70,10 @@ function matchesFilter(r) {
   // Search reads the chat, the caption, a file name and — once labelled —
   // what is actually in the picture.
   if (F.q) {
+    if (window.ContentSearch && window.ContentSearch.current(F.q)) {
+      if (!window.ContentSearch.matches(r.id)) return false;
+      return typeof matchesAdvanced === 'function' ? matchesAdvanced(r) : true;
+    }
     const hay = [r.chat, r.caption, r.docName, r.filename].filter(Boolean).join(' ').toLowerCase();
     if (!hay.includes(F.q) && !(typeof AI !== 'undefined' && AI.matchesText(r, F.q))) return false;
   }
@@ -102,7 +106,7 @@ function tile(r) {
   const bk = local ? '<span class="bk local" title="On this PC only — not yet in your cloud folder">⚠</span>' : '';
   const cap = `<div class="cap"><span class="chat">${escapeHtml(r.chat)}</span>${bk}<span class="time">${fmtTime(r.ts)}</span></div>${albumTag}`;
   if (r.kind === 'image' || r.kind === 'sticker') {
-    el.innerHTML = `<img loading="lazy" src="${r.serve}" alt="" onerror="this.classList.add('imgerr')" />${badge}${cap}`;
+    el.innerHTML = `<img loading="lazy" decoding="async" src="/api/thumbnail/${encodeURIComponent(r.id)}" alt="${escapeHtml(lbl?.label?.caption || r.caption || 'Saved photo')}" onerror="this.classList.add('imgerr')" />${badge}${cap}`;
   } else if (r.kind === 'video') {
     // A real video rather than a placeholder glyph, so the grid shows what the
     // clip actually is. The #t= fragment makes the browser paint that frame as
@@ -110,7 +114,7 @@ function tile(r) {
     // video — and these sit on a cloud drive where writing thumbnails back
     // would be slow and untidy.
     el.innerHTML = `<div class="videotile">
-        <video class="tile-vid" muted playsinline loop preload="none" data-src="${r.serve}#t=${PREVIEW_AT}"></video>
+        <video class="tile-vid" muted playsinline loop preload="none" poster="/api/thumbnail/${encodeURIComponent(r.id)}" data-src="${r.serve}#t=${PREVIEW_AT}"></video>
         <div class="play">▶</div>
         <div class="mutehint" title="Muted while previewing — click to open it with sound">🔇</div>
       </div>${badge}${cap}`;
@@ -122,6 +126,7 @@ function tile(r) {
   }
   el.addEventListener('click', (event) => { if (event.target.closest('.tile-favorite,.tile-select')) return; event.preventDefault(); openLightbox(r); });
   if (window.Workspace) window.Workspace.decorateTile(el, r);
+  if (window.ContentSearch) window.ContentSearch.decorate(el, r);
   if (r.kind === 'video') wireVideoPreview(el);
   return el;
 }
@@ -147,7 +152,7 @@ const tileVideoIO = ('IntersectionObserver' in window)
   ? new IntersectionObserver((entries) => {
       for (const e of entries) {
         if (!e.isIntersecting) continue;
-        loadTileVideo(e.target.querySelector('.tile-vid'));
+        // Video bytes are fetched only after an intentional hover or open.
         tileVideoIO.unobserve(e.target);
       }
     }, { rootMargin: '250px' })
@@ -165,12 +170,13 @@ function wireVideoPreview(el) {
   if (wantsStill) { if (tileVideoIO) tileVideoIO.observe(el); return; }
   let hold = null;
   el.addEventListener('mouseenter', () => {
-    loadTileVideo(v);            // also covers the case where the observer never ran
+    if (window.Workspace && !window.Workspace.videoPreview()) return;
     clearTimeout(hold);
     // A beat before starting, so sweeping the pointer across the grid doesn't
     // kick off a dozen downloads that are all abandoned immediately.
     hold = setTimeout(() => {
       if (window.Workspace && !window.Workspace.videoPreview()) return;
+      loadTileVideo(v);
       try { v.currentTime = 0; } catch (_) {}
       v.play().then(() => el.classList.add('previewing')).catch(() => {});
     }, 180);
@@ -217,6 +223,8 @@ function render(all) {
   filteredCache = allItems.filter(matchesFilter);
   if (typeof sortRecords === 'function') sortRecords(filteredCache);
   if (typeof updateFilterCount === 'function') updateFilterCount(filteredCache.length, allItems.length);
+  if (tileVideoIO) tileVideoIO.disconnect();
+  els.gallery.querySelectorAll('video').forEach(video => { video.pause(); video.removeAttribute('src'); video.load(); });
   els.gallery.innerHTML = '';
   renderedCount = 0; lastDayRendered = null; sentinel = null;
   const none = filteredCache.length === 0;
@@ -270,7 +278,7 @@ function showCurrent() {
   const r = filteredCache[i];
   els.lbStage.innerHTML = '';
   let el;
-  if (r.kind === 'image' || r.kind === 'sticker') { el = document.createElement('img'); el.src = r.serve; }
+  if (r.kind === 'image' || r.kind === 'sticker') { el = document.createElement('img'); el.src = r.serve; el.alt = r.caption || r.docName || `${r.chat || 'Saved'} photo`; }
   else if (r.kind === 'video') { el = document.createElement('video'); el.src = r.serve; el.controls = true; el.autoplay = true; el.playsInline = true; }
   else if (r.kind === 'voice' || r.kind === 'audio') { el = document.createElement('audio'); el.src = r.serve; el.controls = true; el.autoplay = true; }
   else {
@@ -307,6 +315,7 @@ function showCurrent() {
   if (typeof AI !== 'undefined') AI.bindAlbumPicker(r);
   bindShowInFolder(r);
   if (window.Workspace) window.Workspace.viewer(r);
+  if (window.ContentSearch) window.ContentSearch.viewer(r);
   const qs = document.getElementById('lb-queue-status');
   if (qs) qs.addEventListener('click', async (e) => {
     e.preventDefault();
@@ -380,7 +389,7 @@ if (els.tabs) els.tabs.addEventListener('click', (e) => {
 let searchT;
 els.search.addEventListener('input', () => {
   clearTimeout(searchT);
-  searchT = setTimeout(() => { F.q = els.search.value.trim().toLowerCase(); render(allItems); }, 150);
+  searchT = setTimeout(() => { F.q = els.search.value.trim().toLowerCase(); if (window.ContentSearch) window.ContentSearch.query(F.q); else render(allItems); }, 250);
 });
 
 /* ---------- Data + live updates ---------- */
@@ -412,7 +421,7 @@ async function loadState() {
       els.qrwrap.innerHTML = s.qr ? `<img src="${s.qr}" alt="QR code" />` : '<div class="spinner"></div>';
       els.sub.innerHTML = `<span class="dot warn"></span>Waiting for you to scan the QR code`;
     } else if (status === 'authenticated' || status === 'starting') {
-      els.sub.innerHTML = `<span class="dot warn"></span>Connecting…`;
+      els.sub.innerHTML = `<span class="dot warn"></span>${status === 'authenticated' ? 'WhatsApp signed in · waiting for sync' : 'Connecting to WhatsApp'} · saved files are available`;
       if (status === 'authenticated') els.link.classList.add('hidden');
     } else if (s.needsRelink) {
       els.sub.innerHTML = `<span class="dot bad"></span>Device unlinked — open ⚙︎ Settings → Restart app, then re-scan the QR`;
@@ -625,7 +634,7 @@ const Cleanup = (function () {
   const mb = (b) => b >= 1e9 ? (b / 1e9).toFixed(2) + " GB" : b >= 1e6 ? (b / 1e6).toFixed(1) + " MB" : Math.round(b / 1024) + " KB";
   const thumb = (it) => it.kind === "video"
     ? "<div class=" + q("cl-thumb vid") + ">&#9654;</div>"
-    : "<img class=" + q("cl-thumb") + " loading=" + q("lazy") + " src=" + q(it.serve || "") + " alt=" + q("") + ">";
+    : "<img class=" + q("cl-thumb") + " loading=" + q("lazy") + " decoding=" + q("async") + " src=" + q('/api/thumbnail/' + encodeURIComponent(it.id)) + " alt=" + q("") + ">";
   function q(s) { return String.fromCharCode(34) + s + String.fromCharCode(34); }
 
   function renderGroups() {
@@ -758,6 +767,7 @@ const FIELDS = {
   port: 'int', downloadTimeoutSec: 'int', logMaxMB: 'int',
   autoImportHours: 'int',
   aiEnabled: 'bool', aiConsent: 'bool', aiAnalyseImages: 'bool', aiAnalyseChats: 'bool',
+  aiAnalyseVideos: 'bool', aiAnalyseDocuments: 'bool', aiVideoFrames: 'int', aiDocumentPages: 'int', aiOcrPages: 'int', aiResumeOnLaunch: 'bool', performanceMode: 'enum',
   aiProvider: 'text', aiModel: 'text', aiBaseUrl: 'text', aiMode: 'text', aiMonthlyBudget: 'int',
   chatgptEnabled: 'bool', chatgptScanHours: 'int', chatgptUploads: 'bool', chatgptGenerated: 'bool', chatgptSearchChats: 'bool',
   geminiEnabled: 'bool', geminiScanHours: 'int',
@@ -1053,9 +1063,9 @@ function updateConn(s) {
   }
   const h = s.health;
   if (S.health && h) {
-    S.health.innerHTML = h.ok
+    S.health.innerHTML = h.ok && s.status === 'ready'
       ? `Downloads working${h.lastCaptureAt ? ' · last saved ' + new Date(h.lastCaptureAt).toLocaleString() : ''}`
-      : `<span class="bad-text">${h.consecutiveFailures} downloads failed in a row${h.lastError ? ' — ' + escapeHtml(h.lastError) : ''}</span>`;
+      : h.ok ? 'Capture is waiting for WhatsApp to connect. Saved files remain available.' : `<span class="bad-text">${h.consecutiveFailures} downloads failed in a row${h.lastError ? ' — ' + escapeHtml(h.lastError) : ''}</span>`;
   }
   if (h && !h.ok && !healthDismissed) {
     $('health-text').textContent = `Capture may be broken — ${h.consecutiveFailures} downloads failed in a row. WhatsApp may have changed something.`;
@@ -1359,13 +1369,18 @@ const Convo = (function () {
     try { return await (await fetch(url)).json(); } catch (e) { return []; }
   }
 
-  async function openChat(c) {
-    activeChat = { chatId: c.chatId, chatName: c.chatName || c.chatId };
+  let chatRequest = 0;
+  async function openChat(c, match = null) {
+    const ticket = ++chatRequest;
+    activeChat = { chatId: c.chatId, chatName: c.chatName || c.chatId, focused: !!match };
     [...chatsEl.children].forEach((x) => x.classList.toggle('active', x.dataset.chat === c.chatId));
     headEl.innerHTML = `<span class="th-name">${escapeHtml(activeChat.chatName)}</span>`;
+    if (match) { const latest = document.createElement('button'); latest.className = 'btn small'; latest.textContent = 'Latest messages'; latest.onclick = () => openChat(c); headEl.append(latest); }
     bodyEl.innerHTML = '<div class="convo-empty">Loading…</div>';
     oldestTs = null; oldestId = null; newestTs = 0; seenIds.clear();
-    const rows = await fetchThread(activeChat.chatId, null);
+    const rows = await fetchThread(c.chatId, match?.ts || null, match?.id);
+    if (ticket !== chatRequest) return;
+    if (match) rows.push(match);
     bodyEl.innerHTML = '';
     if (!rows.length) { bodyEl.innerHTML = '<div class="convo-empty">No messages stored for this chat.</div>'; return; }
     oldestTs = rows[0].ts; oldestId = rows[0].id; newestTs = rows[rows.length - 1].ts;
@@ -1373,6 +1388,7 @@ const Convo = (function () {
     canLoadOlder = rows.length >= 200;
     bodyEl.appendChild(buildBubbles(rows));
     bodyEl.scrollTop = bodyEl.scrollHeight;
+    if (match) { const found = [...bodyEl.children].find(el => el.dataset.messageId === match.id); found?.classList.add('search-hit'); found?.scrollIntoView({ block: 'center' }); }
   }
 
   async function loadOlder() {
@@ -1397,6 +1413,7 @@ const Convo = (function () {
       if (day !== lastDay) { const s = document.createElement('div'); s.className = 'day-sep'; s.textContent = day; frag.appendChild(s); lastDay = day; }
       const b = document.createElement('div');
       b.className = 'bubble' + (m.fromMe ? ' out' : '');
+      b.dataset.messageId = m.id;
       let media = '';
       if (m.mediaServe && m.mediaKind === 'image') media = `<div class="b-media"><img loading="lazy" src="${m.mediaServe}" onerror="this.classList.add('imgerr')"></div>`;
       else if (m.mediaServe && m.mediaKind === 'video') media = `<div class="b-mediatag">▶ video</div>`;
@@ -1416,7 +1433,7 @@ const Convo = (function () {
   }
 
   async function pollActive() {
-    if (currentView !== 'convo' || !activeChat || searchMode) return;
+    if (currentView !== 'convo' || !activeChat || activeChat.focused || searchMode) return;
     try {
       const got = await (await fetch('/api/thread?chat=' + encodeURIComponent(activeChat.chatId) + '&after=' + newestTs + '&limit=200')).json();
       // The server returns ts >= newest so same-second arrivals aren't lost;
@@ -1494,7 +1511,7 @@ const Convo = (function () {
         el.innerHTML = '<div class="ci-top"><span class="ci-name">' + escapeHtml(m.chatName || m.chatId) + '</span>'
           + '<span class="ci-time">' + shortDay(m.ts) + '</span></div>'
           + '<div class="ci-last">' + escapeHtml((m.body || '').slice(0, 100)) + '</div>';
-        el.addEventListener('click', () => { searchEl.value = ''; searchMode = false; openChat({ chatId: m.chatId, chatName: m.chatName }); loadChats(); });
+        el.addEventListener('click', () => { searchEl.value = ''; searchMode = false; openChat({ chatId: m.chatId, chatName: m.chatName }, m); loadChats(); });
         el.tabIndex = 0; el.setAttribute('role', 'button');
         el.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); el.click(); } });
         chatsEl.appendChild(el);
@@ -1762,6 +1779,7 @@ const AI = (function () {
       const parts = [];
       if (e.todo.images) parts.push(`${e.todo.images} photos`);
       if (e.todo.videos) parts.push(`${e.todo.videos} videos`);
+      if (e.todo.documents) parts.push(`${e.todo.documents} documents`);
       if (e.todo.chats) parts.push(`${e.todo.chats} conversations`);
       if (!parts.length) { el.innerHTML = '<span class="ok-text">Everything is already sorted.</span>'; return; }
       const cost = e.costKnown
@@ -1802,6 +1820,13 @@ const AI = (function () {
       aiMode: $$('set-aiMode').value,
       aiAnalyseImages: $$('set-aiAnalyseImages').checked,
       aiAnalyseChats: $$('set-aiAnalyseChats').checked,
+      aiAnalyseVideos: $$('set-aiAnalyseVideos').checked,
+      aiAnalyseDocuments: $$('set-aiAnalyseDocuments').checked,
+      aiVideoFrames: Number($$('set-aiVideoFrames').value),
+      aiDocumentPages: Number($$('set-aiDocumentPages').value),
+      aiOcrPages: Number($$('set-aiOcrPages').value),
+      aiResumeOnLaunch: $$('set-aiResumeOnLaunch').checked,
+      performanceMode: $$('set-performanceMode').value,
       aiMonthlyBudget: parseInt($$('set-aiMonthlyBudget').value, 10) || 0,
     };
     await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -1877,7 +1902,7 @@ const AI = (function () {
       el.textContent = [
         p.image ? `— for one photo —\nthe image file ${p.image.file} (${Math.round(p.image.sentBytes / 1024)} KB)\n${p.image.text}` : '',
         p.chat ? `\n\n— for one conversation (“${p.chat.name}”) —\n${p.chat.text}` : '',
-        '\n\nNothing else is sent. No file paths, no phone numbers, no other chats.',
+        '\n\nFor video indexing: sampled frames and their timestamps. For scanned documents: selected page images. For AI search: your query and matching saved descriptions. Text from ordinary documents stays local. Content itself can contain personal information.',
       ].join('');
     } catch (e) { el.textContent = 'Could not build the preview.'; }
   });
@@ -1885,7 +1910,7 @@ const AI = (function () {
     if (!confirm('Delete every AI label and album?\n\nYour photos, videos and messages are not touched. You can run the sorting again afterwards.')) return;
     await fetch('/api/ai/wipe', { method: 'POST' });
     state.labels = new Map(); state.groups = []; state.chatGroups = new Map();
-    album = 'all'; renderAlbumBar(); render(allItems); refreshEstimate();
+    F.album = ''; renderAlbumBar(); render(allItems); refreshEstimate();
   });
 
   /* --- correcting the AI, from the lightbox --- */
@@ -1903,7 +1928,7 @@ const AI = (function () {
     const sel = document.getElementById('lb-album');
     if (!sel) return;
     sel.addEventListener('change', async () => {
-      const kind = r.kind === 'video' ? 'video' : 'image';
+      const kind = r.kind === 'document' ? 'document' : r.kind === 'video' ? 'video' : 'image';
       await fetch('/api/ai/group/assign', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ kind, refId: r.id, groupId: sel.value || null }),
@@ -1925,10 +1950,11 @@ const AI = (function () {
 maybeRunWizard();
 loadState();
 if (typeof bindFilters === 'function') bindFilters();
-setInterval(loadState, 3000);
-setInterval(() => { if (currentView === 'media') loadItems(false); }, 4000);
-setInterval(() => Convo.pollActive(), 4000);
-setInterval(() => { if (currentView === 'convo') Convo.refreshChats(); }, 9000);
+setInterval(() => { if (!document.hidden) loadState(); }, 5000);
+setInterval(() => { if (!document.hidden && currentView === 'media') loadItems(false); }, 6000);
+setInterval(() => { if (!document.hidden) Convo.pollActive(); }, 6000);
+setInterval(() => { if (!document.hidden && currentView === 'convo') Convo.refreshChats(); }, 12000);
+document.addEventListener('visibilitychange', () => { if (document.hidden) document.querySelectorAll('video,audio').forEach(media => media.pause()); else loadState(); });
 
 /* ---------- Quick play ---------------------------------------------------
    A vertical feed of the videos currently on screen. Scroll-snap does the
@@ -2204,7 +2230,9 @@ function renderActiveBar() {
     + '<span class="count">showing ' + filteredCache.length + ' of ' + allItems.length + '</span>';
 }
 function clearAll() {
-  Object.assign(F, { q: '', source: '', kind: '', exact: '', dir: '', album: '', project: '', tag: '', backup: '', from: '', to: '', favorite: false });
+  Object.assign(F, { q: '', contentScope: 'all', source: '', kind: '', exact: '', dir: '', album: '', project: '', tag: '', backup: '', from: '', to: '', favorite: false });
+  if (fEl('content-scope')) fEl('content-scope').value = 'all';
+  if (window.ContentSearch) window.ContentSearch.query('');
   if (els.search) els.search.value = '';
   for (const id of ['f-exact', 'f-dir', 'f-album', 'f-project', 'f-tag', 'f-backup', 'f-from', 'f-to']) { const e = fEl(id); if (e) e.value = ''; }
   syncKindUi();
@@ -2215,7 +2243,7 @@ function clearAll() {
 function clearOne(k) {
   if (k === '*') return clearAll();
   F[k] = '';
-  if (k === 'q' && els.search) els.search.value = '';
+  if (k === 'q' && els.search) { els.search.value = ''; if (window.ContentSearch) window.ContentSearch.query(''); }
   const ids = { exact: 'f-exact', dir: 'f-dir', album: 'f-album', project: 'f-project', tag: 'f-tag', backup: 'f-backup', from: 'f-from', to: 'f-to' };
   if (ids[k]) { const e = fEl(ids[k]); if (e) e.value = ''; }
   if (k === 'kind') syncKindUi();
@@ -2258,6 +2286,7 @@ function matchesAdvanced(r) {
 }
 
 function sortRecords(list) {
+  if (F.q && window.ContentSearch?.current(F.q) && F.sort === 'new') return list.sort((a, b) => window.ContentSearch.score(b.id) - window.ContentSearch.score(a.id) || b.ts - a.ts);
   const by = {
     new: (a, b) => b.ts - a.ts,
     old: (a, b) => a.ts - b.ts,
@@ -2539,6 +2568,7 @@ const StatusView = (function () {
     const nexts = (sum.slots || []).filter((s) => s.enabled && s.next_run_at).map((s) => s.next_run_at).sort();
     els2.pillNext.textContent = nexts.length ? 'next: ' + new Date(nexts[0]).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' }) : 'no schedule yet';
     els2.dryrun.checked = !!sum.dryRun;
+    els2.postNow.textContent = sum.dryRun ? 'Test without posting' : 'Post now';
     els2.paused.checked = !!sum.paused;
     els2.folderLine.textContent = 'Drop folder: ' + sum.folder + ' — anything saved there becomes the next folder-post.';
     loadLimits();
@@ -2925,10 +2955,15 @@ const Backup = (function () {
   async function refresh() {
     try { st = await requestJson('/api/backup/status'); statusError = false; }
     catch (e) { statusError = true; renderPill(); if (typeof Overview !== 'undefined') Overview.renderBackup(); return; }
-    only = new Set(st.onlyHereIds || []);
+    const next = new Set(st.onlyHereIds || []);
+    const changed = next.size !== only.size || [...next].some(id => !only.has(id));
+    only = next;
     renderPill(); renderBanner();
     if (typeof Overview !== 'undefined') Overview.renderBackup();
-    if (currentView === 'media') render(allItems);
+    if (currentView === 'media' && changed) {
+      if (F.backup) render(allItems);
+      else document.querySelectorAll('#gallery .tile').forEach(tile => { const rec = allItems.find(item => item.id === tile.dataset.id); if(rec && window.Workspace) window.Workspace.decorateTile(tile, rec); });
+    }
   }
   function noteState(s) { lastStateSeen = s; renderPill(); renderBanner(); }
   function describe() {
@@ -3180,12 +3215,14 @@ const SourceOverview = (() => {
       const [wa, cg, gm] = await Promise.all(['/api/state', '/api/chatgpt/state', '/api/gemini/state'].map((url) => requestJson(url).catch(() => null)));
       const ready = wa && wa.status === 'ready';
       const broken = wa && wa.health && !wa.health.ok;
+      const syncing = wa && ['starting', 'authenticated'].includes(wa.status);
       update(root, card('WhatsApp', !wa ? 'Unavailable' : broken ? 'Needs attention' : ready ? 'Capturing' : wa.status === 'qr' ? 'Scan QR code' : 'Not connected',
         !wa ? 'The capture engine is unavailable. Check the app or try again.' : broken ? 'Downloads are failing. Open Sources to check the connection.' : ready ? 'New messages and selected media are saved while this app runs.' : 'Link your phone to start saving WhatsApp messages and media.', !wa ? 'app' : ready || broken ? 'connection' : 'link', ready && !broken ? 'ok' : 'warn') + source('ChatGPT', cg) + source('Gemini', gm));
       let title, detail, action, button;
       if (!wa) { title = 'The capture engine is unavailable'; detail = 'Open App settings to restart capture. Your saved files remain in their folders.'; action = 'app'; button = 'Open app settings'; }
       else if (broken) { title = 'WhatsApp capture needs attention'; detail = 'Some downloads are failing. Check the connection before relying on new captures.'; action = 'connection'; button = 'Check connection'; }
-      else if (!ready) { title = 'Start by linking WhatsApp'; detail = 'Have your phone ready. The Gallery shows the QR code and linking instructions.'; action = 'link'; button = 'Link WhatsApp'; }
+      else if (syncing) { title = wa.status === 'authenticated' ? 'WhatsApp is signed in and syncing' : 'Connecting to WhatsApp'; detail = 'Your saved library and content search are available now. New captures begin when the connection is ready.'; action = 'connection'; button = 'View connection'; }
+      else if (!ready) { title = 'Start by linking WhatsApp'; detail = 'Have your phone ready. The Library shows the QR code and linking instructions.'; action = 'link'; button = 'Link WhatsApp'; }
       else if (wa.backfill && wa.backfill.running) { title = 'Importing WhatsApp history'; detail = (wa.backfill.doneChats || 0) + ' of ' + (wa.backfill.totalChats || 0) + ' chats checked. You can keep browsing.'; action = 'history'; button = 'View import'; }
       else if (!(wa.backfill && wa.backfill.lastImportAt)) { title = 'Bring in your older WhatsApp chats'; detail = 'Live capture is running. Import history once to save older messages and media that WhatsApp still makes available.'; action = 'history'; button = 'Import older chats'; }
       else { title = 'Your archive is ready to explore'; detail = 'Browse your media, read saved conversations, or connect another source below. AI sorting is optional.'; action = 'gallery'; button = 'Browse gallery'; }

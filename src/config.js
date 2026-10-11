@@ -86,11 +86,15 @@ function applyCloud(wait) {
 // (re)appears, so the UI reflects reality. Does not relocate the session's video
 // folder (kept stable to avoid split storage); the video route falls back to the
 // local folder when serving.
-function recheckCloud() {
+let cloudCheck = null;
+async function recheckCloud() {
+  if (cloudCheck) return false;
   const before = config.CLOUD_AVAILABLE;
-  const ok = cloudWritable();
-  config.CLOUD_AVAILABLE = ok;
-  return before !== ok;
+  cloudCheck = config.CLOUD_ROOT
+    ? fs.promises.mkdir(path.join(config.CLOUD_ROOT, 'Videos'), { recursive: true }).then(() => true, () => false)
+    : Promise.resolve(false);
+  try { config.CLOUD_AVAILABLE = await cloudCheck; return before !== config.CLOUD_AVAILABLE; }
+  finally { cloudCheck = null; }
 }
 
 applyCloud(true);

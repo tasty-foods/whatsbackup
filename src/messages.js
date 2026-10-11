@@ -5,6 +5,8 @@ const { DatabaseSync } = require('node:sqlite');
 const path = require('path');
 const fs = require('fs');
 const cfg = require('./config');
+const readableBody = require('./content/message-text');
+const readableRows = rows => rows.map(row => ({ ...row, body: readableBody(row.body) }));
 
 let db = null;
 
@@ -38,7 +40,7 @@ function addMessage(m) {
       (id, chat_id, chat_name, ts, from_me, author, type, body, media_kind, media_serve)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
       m.id, m.chatId, m.chatName || null, m.ts, m.fromMe ? 1 : 0,
-      m.author || null, m.type || 'chat', m.body || '', m.mediaKind || null, m.mediaServe || null
+      m.author || null, m.type || 'chat', readableBody(m.body), m.mediaKind || null, m.mediaServe || null
     );
     return true;
   } catch (e) { return false; }
@@ -55,7 +57,7 @@ function addMany(list) {
   try {
     for (const m of list) {
       const r = stmt.run(m.id, m.chatId, m.chatName || null, m.ts, m.fromMe ? 1 : 0,
-        m.author || null, m.type || 'chat', m.body || '', m.mediaKind || null, m.mediaServe || null);
+        m.author || null, m.type || 'chat', readableBody(m.body), m.mediaKind || null, m.mediaServe || null);
       if (r.changes) n++;
     }
     db.exec('COMMIT');
@@ -73,7 +75,7 @@ function listChats() {
              ROW_NUMBER() OVER (PARTITION BY chat_id ORDER BY ts DESC, id DESC) AS rn
       FROM messages
     ) WHERE rn = 1
-    ORDER BY lastTs DESC`).all();
+    ORDER BY lastTs DESC`).all().map(row => ({ ...row, lastBody: readableBody(row.lastBody) }));
 }
 
 // Most recent `limit` messages in a chat older than the cursor, returned
@@ -89,7 +91,7 @@ function getThread(chatId, before, limit, beforeId) {
     FROM messages WHERE chat_id = ? AND (ts < ? OR (ts = ? AND id < ?))
     ORDER BY ts DESC, id DESC LIMIT ?`).all(chatId, b, b, beforeId || '', limit || 200);
   rows.reverse();
-  return rows;
+  return readableRows(rows);
 }
 
 // Messages at or after `after` (for live thread updates), oldest-first.
@@ -98,20 +100,20 @@ function getThread(chatId, before, limit, beforeId) {
 // dedupes by id, exactly as the media gallery does.
 function getNewer(chatId, after, limit) {
   init();
-  return db.prepare(`
+  return readableRows(db.prepare(`
     SELECT id, chat_id AS chatId, chat_name AS chatName, ts, from_me AS fromMe,
            author, type, body, media_kind AS mediaKind, media_serve AS mediaServe
     FROM messages WHERE chat_id = ? AND ts >= ?
-    ORDER BY ts ASC, id ASC LIMIT ?`).all(chatId, after || 0, limit || 200);
+    ORDER BY ts ASC, id ASC LIMIT ?`).all(chatId, after || 0, limit || 200));
 }
 
 function search(q, limit) {
   init();
-  return db.prepare(`
+  return readableRows(db.prepare(`
     SELECT id, chat_id AS chatId, chat_name AS chatName, ts, from_me AS fromMe,
            type, body, media_kind AS mediaKind, media_serve AS mediaServe
     FROM messages WHERE body LIKE ? AND body != ''
-    ORDER BY ts DESC LIMIT ?`).all('%' + q + '%', limit || 200);
+    ORDER BY ts DESC LIMIT ?`).all('%' + q + '%', limit || 200)).filter(row => row.body);
 }
 
 function counts() {
@@ -123,10 +125,10 @@ function counts() {
 
 function allForExport() {
   init();
-  return db.prepare(`
+  return readableRows(db.prepare(`
     SELECT chat_id AS chatId, chat_name AS chatName, ts, from_me AS fromMe,
            author, type, body, media_kind AS mediaKind
-    FROM messages ORDER BY chat_name, ts`).all();
+    FROM messages ORDER BY chat_name, ts`).all());
 }
 
 // The AI tables live in this same database file — one file, one WAL, one thing
@@ -145,10 +147,10 @@ function digest(chatId, { recent = 30, spread = 30, chars = 200 } = {}) {
       SELECT id FROM messages WHERE chat_id = ? AND COALESCE(body,'') != '' ORDER BY ts DESC LIMIT ?)
     ORDER BY RANDOM() LIMIT ?`).all(chatId, chatId, recent, spread);
   const rows = [...sampled, ...newest.reverse()].sort((a, b) => a.ts - b.ts);
-  return rows.map((r) => {
+  return rows.filter(r => readableBody(r.body)).map((r) => {
     const who = r.from_me ? 'me' : (r.author || 'them');
     const when = new Date(r.ts).toISOString().slice(0, 10);
-    return `[${when} ${who}] ${String(r.body).replace(/\s+/g, ' ').slice(0, chars)}`;
+    return `[${when} ${who}] ${readableBody(r.body).replace(/\s+/g, ' ').slice(0, chars)}`;
   }).join('\n');
 }
 
@@ -161,9 +163,9 @@ function recentDigest({ hours = 48, limit = 60, chars = 160 } = {}) {
   const rows = db.prepare(`SELECT chat_name, from_me, author, body, ts FROM messages
     WHERE ts >= ? AND COALESCE(body,'') != '' ORDER BY ts DESC LIMIT ?`).all(since, limit);
   rows.reverse();
-  return rows.map((r) => {
+  return rows.filter(r => readableBody(r.body)).map((r) => {
     const who = r.from_me ? 'me' : (r.author || r.chat_name || 'them');
-    return `[${r.chat_name || '?'} · ${who}] ${String(r.body).replace(/\s+/g, ' ').slice(0, chars)}`;
+    return `[${r.chat_name || '?'} · ${who}] ${readableBody(r.body).replace(/\s+/g, ' ').slice(0, chars)}`;
   }).join('\n');
 }
 

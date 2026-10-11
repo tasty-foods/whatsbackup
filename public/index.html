@@ -445,7 +445,7 @@
         <button data-t="capture">What to save</button>
         <button data-t="storage">Where</button>
         <button data-t="history">Import older</button>
-        <button data-t="ai">Albums &amp; projects</button>
+        <button data-t="ai">AI &amp; search</button>
         <button data-t="app">App</button>
         <button data-t="advanced">Advanced</button>
       </div>
@@ -646,21 +646,21 @@
         <!-- AI sorting -->
         <div class="pane hidden" data-pane="ai">
           <div class="sec">
-            <div class="sec-title">Sort with AI</div>
-            <p class="muted small">Groups your photos into albums by what's in them, and your chats into projects by what they're about. It needs an AI service — your own account, your own key — and it is the only part of this app that sends anything off this PC.</p>
+            <div class="sec-title">Find files by what is inside them</div>
+            <p class="muted small">Describe a photo, search text inside a document, or find a moment in a video. The index saves those details on your PC. Your chosen AI service reads photos and sampled video frames, and transcribes scanned document pages. Text documents are read locally.</p>
             <label class="row toggle"><input type="checkbox" id="set-aiEnabled" /><span class="switch"></span><span>Use AI to sort my media and conversations</span></label>
           </div>
 
           <div class="sec" id="ai-consent-sec">
             <div class="sec-title">What leaves this PC</div>
-            <p class="muted small">Before anything is sent, look at exactly what would go. This is the literal content of the first request.</p>
+            <p class="muted small">Preview examples of the data used. Visual indexing sends resized photos, sampled video frames or scanned pages. AI search sends your query and short excerpts from candidate matches; album sorting sends brief descriptions.</p>
             <div class="row wrap">
-              <button class="btn" id="btn-ai-preview">Show me exactly what leaves my PC</button>
+              <button class="btn" id="btn-ai-preview">Preview what AI receives</button>
             </div>
             <pre id="ai-preview" class="payload hidden"></pre>
             <p class="muted small hidden" id="ai-local-note"><b>This one runs on your own PC.</b> With a local model the data below is handed to a program on this machine — nothing goes over the internet, and it costs nothing.</p>
             <label class="row toggle"><input type="checkbox" id="set-aiConsent" /><span class="switch"></span>
-              <span>I understand my photos and message text will be sent to the service I choose below</span></label>
+              <span>I understand photos, sampled video frames, scanned pages, search queries, matching excerpts and selected message text are sent to my chosen AI service</span></label>
           </div>
 
           <div class="sec">
@@ -708,7 +708,9 @@
 
           <div class="sec">
             <div class="sec-title">What to sort, and when</div>
-            <label class="row toggle"><input type="checkbox" id="set-aiAnalyseImages" /><span class="switch"></span><span>Photos and videos → albums</span></label>
+            <label class="row toggle"><input type="checkbox" id="set-aiAnalyseImages" /><span class="switch"></span><span>Photos: objects, colours, details and visible text</span></label>
+            <label class="row toggle"><input type="checkbox" id="set-aiAnalyseVideos" /><span class="switch"></span><span>Videos: sampled scenes with timestamps</span></label>
+            <label class="row toggle"><input type="checkbox" id="set-aiAnalyseDocuments" /><span class="switch"></span><span>Documents: PDF, Office and text files</span></label>
             <label class="row toggle"><input type="checkbox" id="set-aiAnalyseChats" /><span class="switch"></span><span>Conversations → projects</span></label>
             <div class="row">
               <label class="lbl">Run</label>
@@ -728,12 +730,20 @@
           </div>
 
           <div class="sec">
-            <div class="sec-title">Sort now</div>
+            <div class="sec-title">Speed &amp; detail</div>
+            <label class="row toggle"><input type="checkbox" id="set-aiResumeOnLaunch"><span class="switch"></span><span>Resume unfinished indexing after restarting the app</span></label>
+            <label class="preference-row"><span><b>Background workload</b><small>Quiet keeps one item in flight and leaves more room for other apps.</small></span><select id="set-performanceMode" class="txt"><option value="quiet">Quiet · 1 at a time</option><option value="balanced">Balanced · 2 at a time</option><option value="fast">Faster · 3 at a time</option></select></label>
+            <label class="preference-row"><span><b>Frames per video</b><small>Evenly sampled across the clip. More frames find more scenes. Audio is not transcribed.</small></span><input id="set-aiVideoFrames" type="number" min="2" max="12" class="num"></label>
+            <label class="preference-row"><span><b>Pages per document</b><small>Maximum pages read from each PDF. Longer files are marked partial.</small></span><input id="set-aiDocumentPages" type="number" min="1" max="200" class="num"></label>
+            <label class="preference-row"><span><b>Scanned pages per document</b><small>AI transcription limit. Set 0 to keep document processing entirely local.</small></span><input id="set-aiOcrPages" type="number" min="0" max="12" class="num"></label>
+          </div>
+          <div class="sec">
+            <div class="sec-title">Build or resume the index</div>
             <div class="row"><span id="ai-estimate" class="muted small">…</span></div>
             <div class="row wrap">
               <button class="btn primary" id="btn-ai-run">Analyse and sort</button>
               <button class="btn" id="btn-ai-arrange">Re-sort only</button>
-              <button class="btn" id="btn-ai-cancel">Stop</button>
+              <button class="btn" id="btn-ai-cancel">Pause indexing</button>
             </div>
             <div class="progress hidden" id="ai-progress"><div class="bar" id="ai-bar"></div></div>
             <div class="row"><span id="ai-run-status" class="muted small"></span></div>
@@ -774,6 +784,7 @@
             <div class="row wrap">
               <button id="btn-open-logs" class="btn">Open log folder</button>
               <button id="btn-copy-diag" class="btn">Copy diagnostic report</button>
+              <a class="btn" href="/third-party.html" target="_blank" rel="noopener">Third-party software</a>
               <button id="btn-restart" class="btn">Restart capture</button>
             </div>
             <p class="muted small" id="restart-note"></p>
@@ -783,6 +794,7 @@
         <div class="pane hidden" data-pane="appearance"><div class="settings-intro"><span class="workspace-eyebrow">MAKE YOURSELF AT HOME</span><h3>A workspace that fits you.</h3><p>These choices apply immediately and stay with this archive.</p></div><div class="sec"><div class="sec-title">Colour &amp; comfort</div><label class="preference-row"><span><b>Colour theme</b><small>Follow Windows, or choose your own.</small></span><select id="set-uiTheme" class="txt"><option value="system">Match system</option><option value="light">Light</option><option value="dark">Dark</option></select></label><label class="preference-row"><span><b>Interface density</b><small>More breathing room, or more files on screen.</small></span><select id="set-uiDensity" class="txt"><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></label><label class="row toggle"><input type="checkbox" id="set-uiReduceMotion"><span class="switch"></span><span>Reduce interface motion</span></label></div><div class="sec"><div class="sec-title">Your library</div><label class="preference-row"><span><b>Default layout</b><small>A tidy grid, original proportions or a detailed list.</small></span><select id="set-uiLayout" class="txt"><option value="grid">Grid</option><option value="masonry">Masonry</option><option value="list">List</option></select></label><label class="row toggle"><input type="checkbox" id="set-uiShowCaptions"><span class="switch"></span><span>Show file names and details below thumbnails</span></label><label class="row toggle"><input type="checkbox" id="set-uiVideoPreview"><span class="switch"></span><span>Play muted video previews on hover</span></label><label class="preference-row"><span><b>Open the app on</b><small>Choose your starting point.</small></span><select id="set-uiStartView" class="txt"><option value="overview">Overview</option><option value="media">Library</option><option value="convo">Conversations</option></select></label></div><div class="sec"><div class="sec-title">Keyboard shortcuts</div><dl class="shortcut-list"><div><dt>Search your media</dt><dd>Ctrl K</dd></div><div><dt>Open settings</dt><dd>Ctrl ,</dd></div><div><dt>Close a preview or dialog</dt><dd>Esc</dd></div><div><dt>Previous / next media</dt><dd>← / →</dd></div></dl></div></div>
 <!-- Advanced -->
         <div class="pane hidden" data-pane="advanced">
+          <div class="sec"><div class="sec-title">Responsiveness</div><p class="muted small">Check whether capture is responding and how much memory Windows has available. Background workload can be adjusted under AI settings.</p><button class="btn" id="performance-check">Check performance</button><p id="performance-result" role="status" class="muted small"></p></div>
           <div class="sec">
             <div class="sec-title">Dashboard</div>
             <div class="row">
@@ -824,5 +836,6 @@
   <div id="workspace-toast" class="workspace-toast hidden" role="status" aria-live="polite"></div><div id="save-view-dialog" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="save-view-title"><form class="modal-card save-view-card" id="save-view-form"><div class="modal-head"><h2 id="save-view-title">Keep this view handy.</h2><button type="button" class="btn icon" id="save-view-cancel" aria-label="Close saved view dialog">×</button></div><p>Your search, filters and sort order will be saved in the sidebar.</p><label for="save-view-name">Name this view</label><input id="save-view-name" class="txt" maxlength="60" required placeholder="e.g. Supplier documents"><p id="save-view-error" class="bad-text" role="status"></p><div class="modal-foot"><button class="btn primary" type="submit">Save view</button></div></form></div>
 <script src="/app.js"></script>
 <script src="/workspace.js"></script>
+<script src="/content-search.js"></script>
 </body>
 </html>

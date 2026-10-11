@@ -147,6 +147,9 @@ function status() {
     mode: s.aiMode || 'assist',
     analyseImages: s.aiAnalyseImages !== false,
     analyseChats: s.aiAnalyseChats !== false,
+    paused: !!s.aiPaused,
+    localDocuments: require('../content/documents').status(),
+    coverage: census(),
     ...state,
     jobs: counts,
     spendThisMonth: ai.spendSince(monthStart.getTime()),
@@ -184,13 +187,14 @@ function estimate() {
   const vidTodo = c.videos.todo;
   const chatTodo = c.chats.todo;
 
-  const tokensIn = imgTodo * 1100 + vidTodo * 300 + chatTodo * 1600 + 14000;   // + the arrange calls
-  const tokensOut = imgTodo * 200 + vidTodo * 150 + chatTodo * 150 + 5000;
+  const docTodo = c.documents.todo;
+  const tokensIn = imgTodo * 1600 + vidTodo * (s.aiVideoFrames || 6) * 1100 + docTodo * (s.aiOcrPages || 4) * 1600 + chatTodo * 1600 + 14000;
+  const tokensOut = imgTodo * 800 + vidTodo * 1600 + docTodo * (s.aiOcrPages || 4) * 1600 + chatTodo * 150 + 5000;
   const cost = costOf(cfg.provider, cfg.model, tokensIn, tokensOut);
 
   return {
     census: c,
-    todo: { images: imgTodo, videos: vidTodo, chats: chatTodo },
+    todo: { images: imgTodo, videos: vidTodo, documents: docTodo, chats: chatTodo },
     tokensIn, tokensOut,
     cost,
     costKnown: cost !== null,
@@ -201,43 +205,48 @@ function estimate() {
   };
 }
 
-const census = () => label.census({
-  analyseImages: settings.read().aiAnalyseImages !== false,
-  analyseChats: settings.read().aiAnalyseChats !== false,
-});
+let censusCache = null;
+const census = () => {
+  const s = settings.read();
+  const options = { analyseImages: s.aiAnalyseImages !== false, analyseVideos: s.aiAnalyseVideos !== false, analyseDocuments: s.aiAnalyseDocuments !== false, analyseChats: s.aiAnalyseChats !== false };
+  const key = `${ai.revision()}:${store.listRecords({}).length}:${JSON.stringify(options)}:${s.aiVideoFrames}:${s.aiDocumentPages}:${s.aiOcrPages}`;
+  if (!censusCache || censusCache.key !== key || Date.now() - censusCache.at > 10000) censusCache = { key, at: Date.now(), value: label.census(options) };
+  return censusCache.value;
+};
 
 /* ---------------- queueing ---------------- */
-function queueBacklog() {
+function queueBacklog(ids, { includeChats = true } = {}) {
   const s = settings.read();
-  let queued = 0;
-  if (s.aiAnalyseImages !== false) {
+  const jobs = [];
+  if (s.aiAnalyseImages !== false || s.aiAnalyseVideos !== false || s.aiAnalyseDocuments !== false) {
     // Same walk the estimate uses, so what gets queued is exactly what was priced.
     label.eachCandidate((rec, kind, reason) => {
       if (reason) return;
-      if (ai.getLabel(kind, rec.id)) return;
-      ai.enqueue(kind === 'video' ? 'label_video' : 'label_image', rec.id);
-      queued++;
+      if (ids && !ids.has(rec.id)) return;
+      if ((kind === 'image' && !s.aiAnalyseImages) || (kind === 'video' && !s.aiAnalyseVideos) || (kind === 'document' && !s.aiAnalyseDocuments)) return;
+      if (label.currentLabel(ai.getLabel(kind, rec.id), s)) return;
+      jobs.push({ type: 'label_' + kind, refId: rec.id });
     });
   }
-  if (s.aiAnalyseChats !== false) {
+  if (!ids && includeChats && s.aiAnalyseChats !== false) {
     const withText = messages.chatsWithText();
     for (const c of messages.listChats()) {
       if (!withText.has(c.chatId)) continue;      // nothing to read, nothing to charge for
       if (ai.getLabel('chat', c.chatId)) continue;
-      ai.enqueue('label_chat', c.chatId);
-      queued++;
+      jobs.push({ type: 'label_chat', refId: c.chatId });
     }
   }
-  return queued;
+  ai.enqueueMany(jobs);
+  return jobs.length;
 }
 
 // Called by the capture path when something new arrives.
 function noteNewMedia(rec) {
   const s = settings.read();
-  if (!s.aiEnabled || !s.aiConsent || s.aiMode === 'manual') return;
-  if (s.aiAnalyseImages === false) return;
-  if (rec.kind === 'video') ai.enqueue('label_video', rec.id);
-  else if (!label.skipReason(rec, null)) ai.enqueue('label_image', rec.id);
+  if (!s.aiEnabled || !s.aiConsent || s.aiPaused || s.aiMode === 'manual') return;
+  if (rec.kind === 'video' && s.aiAnalyseVideos !== false) ai.enqueue('label_video', rec.id);
+  else if (rec.kind === 'document' && s.aiAnalyseDocuments !== false) ai.enqueue('label_document', rec.id);
+  else if (s.aiAnalyseImages !== false && !label.skipReason(rec, null)) ai.enqueue('label_image', rec.id);
   kick();
 }
 
@@ -259,7 +268,7 @@ const recordById = (id) => store.get(id);
 // Errors that are about the item rather than the provider (a corrupt file, a
 // reply that isn't JSON) are not worth walking the chain for, and are thrown.
 async function runJobOnChain(job) {
-  const needsVision = job.type === 'label_image';
+  const needsVision = ['label_image', 'label_video', 'label_document'].includes(job.type);
   const tried = [];
   for (;;) {
     const cfg = pickProvider({ needsVision });
@@ -270,7 +279,7 @@ async function runJobOnChain(job) {
     if (tried.includes(cfg.provider)) return { skipped: 'no provider left to try' };
     tried.push(cfg.provider);
     try {
-      const r = await runOneJob(cfg, job);
+      const r = await runOneJob({ ...cfg, onUsage: recordUsage }, job);
       return { ...r, provider: cfg.provider };
     } catch (e) {
       const status = e instanceof AiError ? e.status : 0;
@@ -291,6 +300,12 @@ async function runJobOnChain(job) {
 }
 
 async function runOneJob(cfg, job) {
+  const s = settings.read();
+  if ((job.type === 'label_image' && !s.aiAnalyseImages) || (job.type === 'label_video' && !s.aiAnalyseVideos) || (job.type === 'label_document' && !s.aiAnalyseDocuments) || (job.type === 'label_chat' && !s.aiAnalyseChats)) return { skipped: 'This content type is switched off in AI settings.' };
+  if (job.type === 'label_document') {
+    const rec = recordById(job.ref_id);
+    return rec ? label.labelDocument(cfg, rec) : { skipped: 'record no longer exists' };
+  }
   if (job.type === 'label_image') {
     if (visionIsOff(cfg)) return { skipped: 'this model cannot read images' };
     const rec = recordById(job.ref_id);
@@ -314,19 +329,28 @@ async function runOneJob(cfg, job) {
 // unlisted model would quietly buy an unlimited budget. Unpriced work is
 // charged against the cap at the dearest rate we know; what gets *reported* as
 // spent stays honest and only counts what we can actually price.
+function recordUsage(r) {
+  if (r.usage) { state.tokensIn += r.usage.in; state.tokensOut += r.usage.out; }
+  state.cost += r.cost || 0;
+  state.costCap += r.costCap || 0;
+  // Record each paid response, including pages in a document that later fails.
+  if (state.runId) ai.updateRun(state.runId, { tokens_in: state.tokensIn, tokens_out: state.tokensOut, cost_usd: state.cost, cost_cap_usd: state.costCap });
+}
+
 function budgetExceeded() {
   const s = settings.read();
   if (!s.aiMonthlyBudget) return false;
   const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
-  return ai.spendCapSince(monthStart.getTime()) + Math.max(state.cost, state.costCap) >= s.aiMonthlyBudget;
+  return ai.spendCapSince(monthStart.getTime(), state.running ? state.runId : -1) + Math.max(state.cost, state.costCap) >= s.aiMonthlyBudget;
 }
 
-async function drainQueue(cfg) {
+async function drainQueue(cfg, selection = {}) {
   state.phase = 'labelling';
   for (;;) {
-    if (cancelRequested) return 'cancelled';
+    if (cancelRequested || settings.read().aiPaused || !settings.read().aiEnabled || !settings.read().aiConsent) return 'cancelled';
     if (budgetExceeded()) return 'budget';
-    const batch = ai.claim(cfg && cfg.local ? LOCAL_CONCURRENCY : CONCURRENCY);
+    const profile = settings.read().performanceMode;
+    const batch = ai.claim(cfg && cfg.local ? LOCAL_CONCURRENCY : profile === 'fast' ? CONCURRENCY : profile === 'balanced' ? 2 : 1, selection);
     if (!batch.length) return 'done';
 
     await Promise.all(batch.map(async (job) => {
@@ -337,9 +361,6 @@ async function drainQueue(cfg) {
           ai.finishJob(job.id, 'done');
           state.done++;
           if (job.type === 'label_image') imageRejects = 0;
-          if (r.usage) { state.tokensIn += r.usage.in; state.tokensOut += r.usage.out; }
-          if (r.cost) state.cost += r.cost;
-          if (r.costCap) state.costCap += r.costCap;
         }
       } catch (e) {
         const retryable = e instanceof AiError ? e.retryable : true;
@@ -383,6 +404,10 @@ async function drainQueue(cfg) {
       }
       state.total = state.done + state.failed + state.skipped + ai.jobCounts().queued;
     }));
+    // Persist completed work during long runs; a restart must not reset the budget.
+    if (state.runId) ai.updateRun(state.runId, { items: state.done + state.failed + state.skipped, ok: state.done, failed: state.failed, skipped: state.skipped, tokens_in: state.tokensIn, tokens_out: state.tokensOut, cost_usd: state.cost, cost_cap_usd: state.costCap });
+    // Give capture, search and UI requests a turn between batches.
+    await new Promise(resolve => setTimeout(resolve, settings.read().performanceMode === 'quiet' ? 250 : 20));
   }
 }
 
@@ -390,7 +415,7 @@ function entriesFor(kind) {
   const out = [];
   if (kind === 'media') {
     const byId = new Map(store.listRecords({}).map((r) => [r.id, r]));
-    for (const e of ai.labelsOfKinds(['image', 'video'])) {
+    for (const e of ai.labelsOfKinds(['image', 'video', 'document'])) {
       const rec = byId.get(e.refId);
       out.push({ kind: e.kind, refId: e.refId, label: e.label, chat: rec && rec.chat, when: rec ? new Date(rec.ts).toISOString().slice(0, 7) : '' });
     }
@@ -403,15 +428,18 @@ function entriesFor(kind) {
   return out;
 }
 
-async function run({ arrangeOnly = false } = {}) {
+async function run({ arrangeOnly = false, indexOnly = false, ids = null } = {}) {
+  if (require('../content/documents').status().running) return { ok: false, message: 'Local document indexing is finishing. Please try again when it completes.' };
   if (state.running) return { ok: false, message: 'Already running.' };
   const s = settings.read();
   if (!s.aiEnabled) return { ok: false, message: 'AI sorting is switched off.' };
   if (!s.aiConsent) return { ok: false, message: 'The AI notice has not been accepted yet.' };
   const cfg = config();
   if (cfg.keyRequired && !hasKey()) return { ok: false, message: 'No API key has been set.' };
+  const selection = { ids: ids ? new Set(ids) : null, types: indexOnly || ids ? ['label_image', 'label_video', 'label_document'] : null };
 
   cancelRequested = false;
+  settings.write({ aiPaused: false });
   state = {
     running: true, phase: 'labelling', done: 0, total: 0, failed: 0, skipped: 0,
     cost: 0, costCap: 0, tokensIn: 0, tokensOut: 0, message: '', error: null, startedAt: Date.now(), runId: null,
@@ -421,12 +449,12 @@ async function run({ arrangeOnly = false } = {}) {
   (async () => {
     try {
       if (!arrangeOnly) {
-        const queued = queueBacklog();
+        const queued = queueBacklog(selection.ids, { includeChats: !indexOnly });
         state.total = ai.jobCounts().queued;
         console.log(`[ai] labelling ${state.total} items (${queued} newly queued) with ${cfg.provider}/${cfg.model}`);
-        const why = await drainQueue(cfg);
+        const why = await drainQueue(cfg, selection);
         if (why === 'budget') state.message = 'Stopped: the monthly budget cap was reached.';
-        if (why === 'cancelled') state.message = state.error || 'Stopped.';
+        if (why === 'cancelled') state.message = state.error || 'Paused. Queued work is saved for Resume.';
       }
 
       // The two arrange calls are the largest of the whole run. Announcing that
@@ -435,7 +463,7 @@ async function run({ arrangeOnly = false } = {}) {
       // cap is checked here too, not only in the labelling loop.
       if (budgetExceeded()) {
         state.message = 'Stopped: the monthly budget cap was reached.';
-      } else if (!cancelRequested) {
+      } else if (!cancelRequested && !indexOnly && !ids) {
         state.phase = 'arranging';
         if (s.aiAnalyseImages !== false) {
           const r = await arrange.arrange(cfg, 'media', entriesFor('media'));
@@ -473,13 +501,14 @@ async function run({ arrangeOnly = false } = {}) {
       state.cost = 0; state.costCap = 0; state.tokensIn = 0; state.tokensOut = 0;
       state.running = false;
       state.phase = 'idle';
+      if (ids && s.aiPaused) settings.write({ aiPaused: true });
     }
   })();
 
   return { ok: true, started: true };
 }
 
-const cancel = () => { cancelRequested = true; return { ok: true }; };
+const cancel = () => { cancelRequested = true; settings.write({ aiPaused: true }); state.message = 'Paused. The current item finishes; queued work is kept for Resume.'; return { ok: true }; };
 
 // Background trickle for newly captured items in assist/auto mode.
 //
@@ -491,7 +520,7 @@ const cancel = () => { cancelRequested = true; return { ok: true }; };
 let kicking = false;
 async function kick() {
   const s = settings.read();
-  if (kicking || state.running || !s.aiEnabled || !s.aiConsent || s.aiMode === 'manual') return;
+  if (kicking || state.running || require('../content/documents').status().running || s.aiPaused || !s.aiEnabled || !s.aiConsent || (s.aiMode === 'manual' && !s.aiResumeOnLaunch)) return;
   if (!ai.jobCounts().queued) return;
   const cfg = config();
   if (cfg.keyRequired && !hasKey()) return;
@@ -514,7 +543,7 @@ async function kick() {
     const unplaced = ai.db().prepare(`SELECT l.kind, l.ref_id FROM ai_labels l
       LEFT JOIN ai_group_members m ON m.kind = l.kind AND m.ref_id = l.ref_id
       WHERE m.ref_id IS NULL`).all();
-    if (unplaced.length >= 25 && s.aiMode === 'auto' && !budgetExceeded()) {
+    if (unplaced.length >= 25 && s.aiMode === 'auto' && !cancelRequested && !settings.read().aiPaused && !budgetExceeded()) {
       state.phase = 'arranging';
       for (const kind of ['media', 'chat']) {
         if (kind === 'media' && s.aiAnalyseImages === false) continue;
@@ -542,6 +571,32 @@ async function kick() {
   }
 }
 
+let searching = false;
+async function searchCompletion(request) {
+  const s = settings.read();
+  if (!s.aiEnabled || !s.aiConsent) throw new Error('Enable AI and accept its notice in Settings to interpret natural language.');
+  if (searching) throw new Error('Another AI search is finishing.');
+  if (budgetExceeded()) throw new Error('The monthly AI budget is reached.');
+  searching = true;
+  const tried = new Set();
+  try {
+    for (;;) {
+      const cfg = pickProvider();
+      if (!cfg || tried.has(cfg.provider)) throw new Error('No configured AI provider is available. Check AI settings.');
+      tried.add(cfg.provider);
+      try {
+        const r = await require('./provider').complete(cfg, request);
+        const id = ai.startRun('search', cfg.model, cfg.provider);
+        ai.updateRun(id, { items: 1, ok: 1, tokens_in: r.usage.in, tokens_out: r.usage.out, cost_usd: r.cost || 0, cost_cap_usd: r.costCap || 0, finished_at: Date.now() });
+        return r;
+      } catch (e) {
+        if (['rate','auth','model','down'].includes(e.kind)) { benchProvider(cfg.provider, REST_AFTER_DOWN, e.kind); continue; }
+        throw e;
+      }
+    }
+  } finally { searching = false; }
+}
+
 module.exports = {
   setKey, setKeys, hasKey, config, configFor, status, estimate, census, chainProviders,
   run, cancel, kick, queueBacklog, noteNewMedia, noteNewMessages,
@@ -566,6 +621,6 @@ module.exports = {
     if (r.vision && r.vision.ok) noteVisionOk(cfg); else if (r.reachable && r.reachable.ok) noteVisionOff(cfg);
     return r;
   },
-  entriesFor,
+  entriesFor, searchCompletion,
   store: ai, arrange, PRESETS,
 };

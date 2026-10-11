@@ -25,7 +25,7 @@ test('the desktop preload reaches the main-process check, status and restart han
   };
   updater.quitAndInstall = (...args) => installs.push(args);
   const electron = {
-    app: { isPackaged: true, getVersion: () => '1.5.1', setPath() {}, setAppUserModelId() {}, requestSingleInstanceLock: () => false, quit() {} },
+    app: { isPackaged: true, getVersion: () => '1.5.1', setPath() {}, setAppUserModelId() {}, requestSingleInstanceLock: () => false, quit() {}, exit() {} },
     ipcMain: { handle: (name, callback) => handlers.set(name, callback) },
     Notification: { isSupported: () => false },
     dialog: { showMessageBox: () => { throw Error('Quiet checks must not open a dialog'); } },

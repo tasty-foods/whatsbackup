@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const paths = require('./paths');
 const FILE = path.join(paths.DATA_DIR, 'library.json');
-const FILTER_KEYS = ['q', 'source', 'kind', 'exact', 'dir', 'album', 'project', 'tag', 'backup', 'from', 'to', 'sort', 'favorite'];
+const FILTER_KEYS = ['q', 'contentScope', 'source', 'kind', 'exact', 'dir', 'album', 'project', 'tag', 'backup', 'from', 'to', 'sort', 'favorite'];
 
 function read() {
   try {

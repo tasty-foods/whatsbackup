@@ -46,9 +46,10 @@ window.Workspace = (() => {
       const open=document.createElement('button');open.type='button';open.textContent=view.name;open.title=view.name;
       open.addEventListener('click',()=>{
         clearAll(); Object.assign(F,view.filters); els.search.value=F.q || '';
+        if(node('content-scope'))node('content-scope').value=['all','content','names'].includes(F.contentScope)?F.contentScope:'all';
         const ids={exact:'f-exact',dir:'f-dir',album:'f-album',project:'f-project',tag:'f-tag',backup:'f-backup',from:'f-from',to:'f-to',sort:'f-sort'};
         Object.entries(ids).forEach(([key,id])=>{if(node(id))node(id).value=F[key]||'';});
-        syncKindUi();renderSourceBar();setView('media');render(allItems);
+        syncKindUi();renderSourceBar();setView('media');if(window.ContentSearch && F.q)window.ContentSearch.query(F.q);else render(allItems);
       });
       const remove=document.createElement('button');remove.type='button';remove.textContent='×';remove.setAttribute('aria-label','Remove saved view '+view.name);
       remove.addEventListener('click',async()=>{
@@ -193,5 +194,5 @@ window.Workspace = (() => {
     }catch(error){toast('Some workspace preferences could not load: '+error.message);}
   }
   init();
-  return {applyPreferences,onRender,onView,decorateTile,viewer,isFavorite:id=>favoriteIds.has(id),videoPreview:()=>preferences.uiVideoPreview&&!preferences.uiReduceMotion,ready:()=>ready};
+  return {toast,applyPreferences,onRender,onView,decorateTile,viewer,isFavorite:id=>favoriteIds.has(id),videoPreview:()=>preferences.uiVideoPreview&&!preferences.uiReduceMotion,ready:()=>ready};
 })();

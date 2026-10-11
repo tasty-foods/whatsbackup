@@ -31,7 +31,7 @@ function fixture(t) {
 test('rejects a partial cloud copy and repairs it on demand', async t => {
   const f = fixture(t), rec = f.add('one');
   fs.writeFileSync(f.cloud(rec), 'part');
-  assert.equal(f.api.onCloud(rec), false);
+  assert.equal(await f.api.onCloud(rec), false);
   const result = await f.api.sweep();
   assert.equal(result.copied, 1);
   assert.equal(result.failed, 0);
@@ -43,9 +43,9 @@ test('positive checks expire and a manual sweep rechecks immediately', async t =
   const f = fixture(t), rec = f.add('one');
   await f.api.sweep();
   fs.unlinkSync(f.cloud(rec));
-  assert.equal(f.api.onCloud(rec), true);
+  assert.equal(await f.api.onCloud(rec), true);
   f.advance(121000);
-  assert.equal(f.api.onCloud(rec), false);
+  assert.equal(await f.api.onCloud(rec), false);
   await f.api.sweep();
   fs.unlinkSync(f.cloud(rec));
   assert.equal((await f.api.sweep()).copied, 1);
@@ -56,20 +56,29 @@ test('reports a missing original rather than silently succeeding', async t => {
   fs.unlinkSync(path.join(f.cfg.IMAGES_DIR, rec.filename));
   const result = await f.api.sweep();
   assert.equal(result.failed, 1);
-  assert.equal(f.api.status().onlyHere, 1);
+  assert.equal((await f.api.status()).onlyHere, 1);
 });
 
-test('cloud membership includes every missing item beyond 2000 records', t => {
+test('cloud membership includes every missing item beyond 2000 records', async t => {
   const f = fixture(t);
   for (let i = 0; i < 2005; i++) f.records.push({ id: String(i), filename: i + '.jpg', kind: 'image', size: 20 });
-  const result = f.api.status();
+  let yielded = false; setImmediate(() => { yielded = true; });
+  const result = await f.api.status();
+  assert.equal(yielded, true, 'Cloud checks must let the capture engine handle other events');
   assert.equal(result.onlyHere, 2005);
   assert.equal(result.onlyHereIds.length, 2005);
 });
 
-test('an unavailable cloud folder is not created by a status read', t => {
+test('concurrent backup requests share the sweep lock before any disk operation', async t => {
+  const f = fixture(t); f.add('one');
+  const results = await Promise.all([f.api.sweep(), f.api.sweep()]);
+  assert.equal(results.filter(r => r.copied === 1).length, 1);
+  assert.equal(results.filter(r => r.error === 'already running').length, 1);
+});
+
+test('an unavailable cloud folder is not created by a status read', async t => {
   const f = fixture(t);
   f.cfg.CLOUD_ROOT = path.join(f.cfg.CLOUD_ROOT, 'unmounted');
-  assert.equal(f.api.available(), false);
+  assert.equal(await f.api.available(), false);
   assert.equal(fs.existsSync(f.cfg.CLOUD_ROOT), false);
 });

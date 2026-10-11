@@ -89,8 +89,8 @@ const server = app.listen(cfg.PORT, '127.0.0.1', () => {
   }, 600000);
 
   // Reflect cloud-drive drops/reappearance in the UI health status.
-  setInterval(() => {
-    if (cfg.recheckCloud && cfg.recheckCloud()) {
+  setInterval(async () => {
+    if (cfg.recheckCloud && await cfg.recheckCloud()) {
       console.log('[cloud] availability changed → ' + (cfg.CLOUD_AVAILABLE ? 'available' : 'UNAVAILABLE'));
     }
   }, 15000);

@@ -6,7 +6,7 @@ const archiver = require('archiver');
 
 function failure(status, message) { return Object.assign(new Error(message), { status }); }
 
-function planSelection(ids, { getRecord, hiddenIds, pathsFor }) {
+async function planSelection(ids, { getRecord, hiddenIds, pathsFor }) {
   if (!Array.isArray(ids) || !ids.length || ids.length > 10000 || ids.some(id => typeof id !== 'string' || !id || id.length > 500)) {
     throw failure(400, 'Select between 1 and 10,000 files.');
   }
@@ -15,9 +15,10 @@ function planSelection(ids, { getRecord, hiddenIds, pathsFor }) {
   for (const id of new Set(ids)) {
     const record = getRecord(id);
     if (!record || hidden.has(id)) { unavailable++; continue; }
-    const file = pathsFor(record).filter(Boolean).find(candidate => {
-      try { return fs.statSync(candidate).isFile(); } catch (_) { return false; }
-    });
+    let file;
+    for (const candidate of (await pathsFor(record)).filter(Boolean)) {
+      try { if ((await fs.promises.stat(candidate)).isFile()) { file = candidate; break; } } catch (_) {}
+    }
     if (!file) { unavailable++; continue; }
     const original = String(record.docName || record.filename || path.basename(file));
     // Flatten names from both Windows and Unix; never create folders in the ZIP.
@@ -37,10 +38,10 @@ function register(app, { sameOrigin, getRecord, hiddenIds, pathsFor, now = Date.
   const tickets = new Map(), ttl = 2 * 60 * 1000;
   const options = { getRecord, hiddenIds, pathsFor };
   function sendError(res, error) { res.status(error.status || 500).json({ error: error.status ? error.message : 'Could not prepare your export. Try again.' }); }
-  app.post('/api/export/prepare', sameOrigin, (req, res) => {
+  app.post('/api/export/prepare', sameOrigin, async (req, res) => {
     try {
       const ids = req.body && req.body.ids;
-      const entries = planSelection(ids, options);
+      const entries = await planSelection(ids, options);
       for (const [key, value] of tickets) if (value.until < now()) tickets.delete(key);
       // Bound retained selections even if a client never starts its download.
       while (tickets.size >= 20) tickets.delete(tickets.keys().next().value);
@@ -49,12 +50,12 @@ function register(app, { sameOrigin, getRecord, hiddenIds, pathsFor, now = Date.
       res.json({ ok: true, ticket, count: entries.length });
     } catch (error) { sendError(res, error); }
   });
-  app.get('/api/export/media', (req, res) => {
+  app.get('/api/export/media', async (req, res) => {
     const ticket = tickets.get(req.query.ticket);
     if (!ticket || ticket.until < now()) return res.status(410).json({ error: 'This export has expired. Select Export again.' });
     tickets.delete(req.query.ticket);
     let entries;
-    try { entries = planSelection(ticket.ids, options); } catch (error) { return sendError(res, error); }
+    try { entries = await planSelection(ticket.ids, options); } catch (error) { return sendError(res, error); }
     res.attachment('WhatsBackUp-selection-' + new Date(now()).toISOString().slice(0, 10) + '.zip');
     res.setHeader('Cache-Control', 'no-store');
     const zip = archiver('zip', { zlib: { level: 1 } });

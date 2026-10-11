@@ -250,7 +250,7 @@ function buildMsgRow(msg, chat, mediaRec) {
     id, chatId, chatName, ts, fromMe: !!msg.fromMe,
     author: authorName(msg, chat),
     type: msg.type || 'chat',
-    body: msg.body || '',
+    body: require('./content/message-text')(msg.body),
     mediaKind: existing ? existing.kind : (msg.type === 'image' ? 'image' : msg.type === 'video' ? 'video' : null),
     mediaServe: existing ? existing.serve : null,
   };
@@ -362,7 +362,7 @@ async function saveMediaMessage(msg, chatObj) {
 
   const rec = {
     id, ts, dir, kind, chat: chatName, number, mimetype: media.mimetype,
-    filename, serve, size: buf.length, caption: msg.body || '',
+    filename, serve, size: buf.length, caption: require('./content/message-text')(msg.body),
     docName: msg.type === 'document' ? (msg._data && msg._data.filename) || '' : '',
     cloud: area === 'videos' ? cfg.CLOUD_AVAILABLE : false,
   };
@@ -564,6 +564,9 @@ function buildClient() {
 
   const c = new Client({
     authStrategy: new LocalAuth({ dataPath: cfg.AUTH_DIR }),
+    // A stale cached WhatsApp bundle can authenticate but never finish syncing.
+    // Keep the linked session, but fetch the current web application on startup.
+    webVersionCache: { type: 'none' },
     puppeteer: puppeteerOpts,
   });
 
@@ -581,6 +584,7 @@ function buildClient() {
   c.on('ready', () => {
     clearTimeout(startWatchdog); startAttempts = 0;
     state.status = 'ready';
+    state.lastError = null;
     state.qrDataUrl = null;
     state.needsRelink = false;
     reconnecting = false;
@@ -650,7 +654,8 @@ function watchStart() {
     console.error(`[link] not ready after ${Math.round(START_WATCHDOG_MS / 60000)} min (stuck at ${state.status}) — ${again ? 'restarting the link (attempt ' + startAttempts + ')' : 'giving up until the app is restarted'}`);
     clearTimeout(reconnectTimer); reconnectTimer = null;
     const old = client; client = null;                  // nothing may reconnect the old one now
-    try { if (old) await old.destroy(); } catch (_) {}
+    try { if (old) await withTimeout(old.destroy(), 15000, 'closing stalled WhatsApp'); }
+    catch (_) { try { old?.pupBrowser?.process()?.kill(); } catch (_) {} }
     if (!again) { state.status = 'error'; state.lastError = 'WhatsApp did not start after several tries. Restart the app.'; return; }
     setTimeout(() => startClient({ retry: true }), Math.min(60000, 5000 * startAttempts));
   }, START_WATCHDOG_MS);
@@ -694,7 +699,7 @@ async function unlink() {
 
 // Ask for a reconnect now instead of waiting out the backoff.
 function reconnectNow() {
-  if (!client) return { ok: false, message: 'Not running' };
+  if (!client) { startClient({ retry: true }); return { ok: true }; }
   if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
   reconnecting = false;
   reconnectAttempts = 0;

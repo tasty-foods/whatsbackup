@@ -55,6 +55,7 @@ const SETTING_SPEC = {
   uiReduceMotion: { type: 'bool' },
   uiVideoPreview: { type: 'bool' },
   uiShowCaptions: { type: 'bool' },
+  performanceMode: { type: 'enum', values: ['quiet', 'balanced', 'fast'] },
   port: { type: 'int', min: 1, max: 65535, restart: true },
   mediaRoot: { type: 'path', restart: true },
   cloudRoot: { type: 'path', restart: true },
@@ -87,9 +88,16 @@ const SETTING_SPEC = {
   aiProvider: { type: 'path', restart: false },
   aiModel: { type: 'path' },
   aiBaseUrl: { type: 'path' },
-  aiMode: { type: 'path' },
+  aiMode: { type: 'enum', values: ['manual', 'assist', 'auto'] },
   aiAnalyseImages: { type: 'bool' },
   aiAnalyseChats: { type: 'bool' },
+  aiAnalyseVideos: { type: 'bool' },
+  aiAnalyseDocuments: { type: 'bool' },
+  aiVideoFrames: { type: 'int', min: 2, max: 12 },
+  aiDocumentPages: { type: 'int', min: 1, max: 200 },
+  aiOcrPages: { type: 'int', min: 0, max: 12 },
+  aiPaused: { type: 'bool' },
+  aiResumeOnLaunch: { type: 'bool' },
   aiMonthlyBudget: { type: 'int', min: 0, max: 10000 },
   aiJsonSchema: { type: 'bool' },
   aiChain: { type: 'list' },
@@ -143,21 +151,21 @@ function coerce(spec, value) {
 // Folder sizes for the storage readout. Walks are bounded and cached — the
 // cloud folder can sit on a slow network drive.
 const sizeCache = new Map();
-function folderSize(dir, ttlMs = 60000) {
+async function folderSize(dir, ttlMs = 60000) {
   const hit = sizeCache.get(dir);
   if (hit && Date.now() - hit.at < ttlMs) return hit.value;
   let bytes = 0, files = 0;
-  const walk = (d, depth) => {
+  const walk = async (d, depth) => {
     if (depth > 4) return;
     let entries = [];
-    try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch (_) { return; }
+    try { entries = await fs.promises.readdir(d, { withFileTypes: true }); } catch (_) { return; }
     for (const e of entries) {
       const p = path.join(d, e.name);
-      if (e.isDirectory()) walk(p, depth + 1);
-      else { try { bytes += fs.statSync(p).size; files++; } catch (_) {} }
+      if (e.isDirectory()) await walk(p, depth + 1);
+      else { try { bytes += (await fs.promises.stat(p)).size; files++; } catch (_) {} }
     }
   };
-  walk(dir, 0);
+  await walk(dir, 0);
   const value = { bytes, files };
   sizeCache.set(dir, { at: Date.now(), value });
   return value;
@@ -165,6 +173,8 @@ function folderSize(dir, ttlMs = 60000) {
 
 function createApp() {
   const app = express();
+  const performance = require('./performance');
+  app.get('/api/performance', localHostOnly, (req, res) => res.json(performance()));
   app.disable('x-powered-by');
   app.use(localHostOnly);
   app.use(['/api/export/prepare', '/api/library/favorites'], express.json({ limit: '6mb' }));
@@ -174,15 +184,25 @@ function createApp() {
   // from the current folder and fall back to the local folder if the cloud
   // drive isn't reachable — instead of a silent 404.
   app.use('/media/images', express.static(cfg.IMAGES_DIR, { maxAge: '1h' }));
-  const serveFrom = (dirs) => (req, res) => {
+  const serveFrom = (dirs) => async (req, res) => {
     const name = safeName(req.params.name); // express already URL-decodes params
     if (!name) return res.status(400).end();
-    const candidate = dirs.map((d) => path.join(d, name))
-      .find((p) => { try { return fs.existsSync(p); } catch (_) { return false; } });
+    let candidate;
+    for (const dir of [...new Set(dirs)]) { const p = path.join(dir, name); try { await fs.promises.access(p); candidate = p; break; } catch (_) {} }
     if (!candidate) return res.status(404).end();
     res.sendFile(candidate, (err) => { if (err && !res.headersSent) res.status(404).end(); });
   };
-  app.get('/media/videos/:name', (req, res) => serveFrom([cfg.VIDEO_DIR, cfg.LOCAL_VIDEO_DIR])(req, res));
+  app.get('/media/videos/:name', (req, res) => serveFrom([cfg.LOCAL_VIDEO_DIR, cfg.VIDEO_DIR])(req, res));
+  app.get('/api/thumbnail/:id', async (req, res) => {
+    const rec = store.get(req.params.id);
+    if (!rec || !['image', 'sticker', 'video'].includes(rec.kind)) return res.status(404).end();
+    try {
+      const file = await require('./content/files').thumbnail(rec);
+      if (!file) return res.type('svg').set('Cache-Control', 'no-cache').send('<svg xmlns="http://www.w3.org/2000/svg" width="440" height="300"><rect width="440" height="300" fill="#20392e"/><path d="m202 117 53 33-53 33z" fill="#acc5b5"/></svg>');
+      res.set('Cache-Control', 'private, max-age=86400').sendFile(file);
+    }
+    catch (_) { res.redirect('/media/images/' + encodeURIComponent(rec.filename)); }
+  });
   app.get('/media/files/:name', (req, res) => serveFrom([cfg.FILES_DIR])(req, res));
   app.get('/media/status/:name', (req, res) => serveFrom([require('./status/renderer').STATUS_DIR])(req, res));
 
@@ -224,9 +244,9 @@ function createApp() {
     sameOrigin,
     getRecord: id => store.get(id),
     hiddenIds: () => store.hiddenIds(),
-    pathsFor: record => {
+    pathsFor: async record => {
       const backup = require('./backup');
-      return [backup.localPathFor(record), backup.cloudPathFor(record)];
+      return [await backup.localPathFor(record), backup.cloudPathFor(record)];
     },
   });
 
@@ -334,11 +354,8 @@ function createApp() {
     });
   });
 
-  app.get('/api/storage', (req, res) => {
-    const images = folderSize(cfg.IMAGES_DIR);
-    const files = folderSize(cfg.FILES_DIR);
-    const videos = folderSize(cfg.VIDEO_DIR);
-    const data = folderSize(cfg.DATA_DIR);
+  app.get('/api/storage', async (req, res) => {
+    const [images, files, videos, data] = await Promise.all([cfg.IMAGES_DIR, cfg.FILES_DIR, cfg.VIDEO_DIR, cfg.DATA_DIR].map(dir => folderSize(dir)));
     res.json({
       images: { ...images, dir: cfg.IMAGES_DIR },
       files: { ...files, dir: cfg.FILES_DIR },
@@ -491,12 +508,12 @@ function createApp() {
 
   // ---- Backup: what is actually on pCloud ----
   const backup = require('./backup');
-  app.get('/api/backup/status', (req, res) => { try { res.json(backup.status({ ids: req.query.ids !== '0' })); } catch (e) { res.status(500).json({ error: e.message }); } });
+  app.get('/api/backup/status', async (req, res) => { try { res.json(await backup.status({ ids: req.query.ids !== '0' })); } catch (e) { res.status(500).json({ error: e.message }); } });
   app.post('/api/backup/sweep', sameOrigin, async (req, res) => res.json(await backup.sweep({ reason: 'manual' })));
 
   // ---- Clean up ----
   const cleanup = require('./cleanup');
-  app.get('/api/cleanup/suggest', (req, res) => { try { res.json(cleanup.suggest()); } catch (e) { res.status(500).json({ error: e.message }); } });
+  app.get('/api/cleanup/suggest', async (req, res) => { try { res.json(await cleanup.suggest()); } catch (e) { res.status(500).json({ error: e.message }); } });
   app.get('/api/cleanup/list', (req, res) => res.json(cleanup.list()));
   // Quarantined files are still shown, so a choice can be checked before it is final.
   app.use('/quarantine', express.static(cleanup.QUARANTINE_DIR, { index: false, dotfiles: 'ignore' }));
@@ -527,8 +544,21 @@ function createApp() {
     catch (e) { res.status(500).json({ reachable: { ok: false, detail: e.message } }); }
   });
   app.post('/api/ai/run', sameOrigin, async (req, res) => {
-    res.json(await ai.run({ arrangeOnly: !!(req.body && req.body.arrangeOnly) }));
+    const body = req.body || {};
+    res.json(await ai.run({ arrangeOnly: !!body.arrangeOnly, indexOnly: !!body.indexOnly, ids: Array.isArray(body.ids) ? body.ids.filter(x => typeof x === 'string').slice(0, 10000) : null }));
   });
+  app.post('/api/content/search', sameOrigin, async (req, res) => {
+    try { res.json(await require('./content/search').search({ query: req.body?.query, understand: req.body?.understand === true, scope: ['content', 'names'].includes(req.body?.scope) ? req.body.scope : 'all' })); }
+    catch (e) { res.status(500).json({ error: e.message }); }
+  });
+  app.post('/api/content/read-documents', sameOrigin, (req, res) => res.json(require('./content/documents').run()));
+  app.get('/api/content/item/:id', (req, res) => {
+    const rec = store.get(req.params.id);
+    if (!rec) return res.status(404).json({ error: 'File not found.' });
+    const row = ai.store.getLabel(rec.kind === 'document' ? 'document' : rec.kind === 'video' ? 'video' : 'image', rec.id);
+    res.json({ label: row?.label || null, current: require('./ai/label').currentLabel(row) });
+  });
+  app.get('/api/content/issues', (req, res) => res.json([...require('./content/documents').status().issues, ...ai.store.db().prepare("SELECT type,ref_id,state,error FROM ai_jobs WHERE state IN ('error','skipped') ORDER BY updated_at DESC LIMIT 25").all().map(row => ({ ...row, name: store.get(row.ref_id)?.docName || store.get(row.ref_id)?.chat || 'Archived item' }))].slice(0, 25)));
   app.post('/api/ai/cancel', sameOrigin, (req, res) => res.json(ai.cancel()));
   app.post('/api/ai/wipe', sameOrigin, (req, res) => { ai.store.wipe(); res.json({ ok: true }); });
 
@@ -565,7 +595,7 @@ function createApp() {
   });
   app.post('/api/ai/group/assign', sameOrigin, (req, res) => {
     const { kind, refId, groupId } = req.body || {};
-    if (kind !== 'image' && kind !== 'video' && kind !== 'chat') return res.status(400).json({ ok: false, message: 'unknown kind' });
+    if (!['image', 'video', 'document', 'chat'].includes(kind)) return res.status(400).json({ ok: false, message: 'unknown kind' });
     if (!refId) return res.status(400).json({ ok: false });
     const groups = ai.store.listGroups(kind === 'chat' ? 'chat' : 'media');
     const g = groupId ? groups.find((x) => x.id === groupId) : null;
@@ -590,7 +620,7 @@ function createApp() {
   // The labels themselves, for the gallery and the chat list.
   app.get('/api/ai/labels', (req, res) => {
     const kind = req.query.kind;
-    const kinds = kind === 'chat' ? ['chat'] : ['image', 'video'];
+    const kinds = kind === 'chat' ? ['chat'] : ['image', 'video', 'document'];
     const groups = new Map(ai.store.listGroups(kind === 'chat' ? 'chat' : 'media').map((g) => [g.id, g]));
     // Chat labels are keyed by chat id, but a media record only knows the chat's
     // display name — so send the name too and the two can be matched up.
@@ -602,7 +632,7 @@ function createApp() {
       const m = ai.store.groupOf(e.kind, e.refId);
       const g = m && groups.get(m.group_id);
       return {
-        kind: e.kind, refId: e.refId, label: e.label,
+        kind: e.kind, refId: e.refId, label: e.kind === 'document' ? { ...e.label, chunks: undefined } : e.label,
         ...(names ? { chatName: names.get(e.refId) || null } : {}),
         groupId: g ? g.id : null, groupName: g ? g.name : null, groupEmoji: g ? g.emoji : null,
         placedBy: m ? m.source : null,

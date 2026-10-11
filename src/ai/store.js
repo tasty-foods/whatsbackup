@@ -6,6 +6,7 @@ const crypto = require('crypto');
 const messages = require('../messages');
 
 let ready = false;
+let revision = 0;
 
 function db() {
   const handle = messages.handle();
@@ -63,6 +64,7 @@ function db() {
         started_at INTEGER, finished_at INTEGER, error TEXT
       );
     `);
+    handle.exec('CREATE INDEX IF NOT EXISTS idx_labels_hash ON ai_labels(kind, content_hash)');
     // Databases written before albums could be renamed.
     const cols = handle.prepare('PRAGMA table_info(ai_groups)').all().map((c) => c.name);
     if (!cols.includes('prev_names')) handle.exec('ALTER TABLE ai_groups ADD COLUMN prev_names TEXT');
@@ -100,6 +102,12 @@ function putLabel({ kind, refId, contentHash, label, model, provider, usage, cos
       cost_usd=excluded.cost_usd, created_at=excluded.created_at`)
     .run(kind, refId, contentHash, JSON.stringify(label), model || '', provider || '',
       (usage && usage.in) || 0, (usage && usage.out) || 0, cost == null ? null : cost, Date.now());
+  revision++;
+}
+function labelByHash(kind, hash) {
+  const row = db().prepare('SELECT label_json, model, provider FROM ai_labels WHERE kind=? AND content_hash=? LIMIT 1').get(kind, hash);
+  if (!row) return null;
+  try { return { ...row, label: JSON.parse(row.label_json) }; } catch (_) { return null; }
 }
 
 const labelsOfKinds = (kinds) => db()
@@ -211,11 +219,26 @@ function enqueue(type, refId) {
     WHERE ai_jobs.state NOT IN ('queued', 'running')`).run(type, refId, Date.now());
 }
 
+function enqueueMany(jobs) {
+  const handle = db();
+  handle.exec('BEGIN IMMEDIATE');
+  try { for (const job of jobs) enqueue(job.type, job.refId); handle.exec('COMMIT'); }
+  catch (e) { handle.exec('ROLLBACK'); throw e; }
+}
+
 // Claiming marks the rows as taken in the same synchronous turn it reads them.
 // node:sqlite is synchronous, so nothing can interleave between the SELECT and
 // the UPDATE — which is what keeps two drains from paying for the same job.
-function claim(n) {
-  const rows = db().prepare(`SELECT * FROM ai_jobs WHERE state = 'queued' ORDER BY id LIMIT ?`).all(n);
+function claim(n, { ids = null, types = null } = {}) {
+  const where = ["state = 'queued'"], args = [];
+  for (const [column, values] of [['ref_id', ids], ['type', types]]) {
+    if (!values) continue;
+    const list = [...values];
+    if (!list.length) return [];
+    where.push(`${column} IN (${list.map(() => '?').join(',')})`);
+    args.push(...list);
+  }
+  const rows = db().prepare(`SELECT * FROM ai_jobs WHERE ${where.join(' AND ')} ORDER BY id LIMIT ?`).all(...args, n);
   const mark = db().prepare(`UPDATE ai_jobs SET state = 'running', updated_at = ? WHERE id = ?`);
   const now = Date.now();
   for (const r of rows) mark.run(now, r.id);
@@ -261,20 +284,21 @@ const lastRun = () => db().prepare('SELECT * FROM ai_runs ORDER BY id DESC LIMIT
 const spendSince = (ts) => (db().prepare('SELECT SUM(cost_usd) s FROM ai_runs WHERE started_at >= ?').get(ts) || {}).s || 0;
 // What the budget cap counts: the same figure, except that a model with no
 // published price is charged at the dearest rate we know rather than as free.
-const spendCapSince = (ts) => (db().prepare('SELECT SUM(MAX(COALESCE(cost_usd,0), COALESCE(cost_cap_usd,0))) s FROM ai_runs WHERE started_at >= ?').get(ts) || {}).s || 0;
+const spendCapSince = (ts, excludeRunId = -1) => (db().prepare('SELECT SUM(MAX(COALESCE(cost_usd,0), COALESCE(cost_cap_usd,0))) s FROM ai_runs WHERE started_at >= ? AND id != ?').get(ts, excludeRunId || -1) || {}).s || 0;
 
 function wipe() {
+  revision++;
   db().exec(`DELETE FROM ai_labels; DELETE FROM ai_group_members; DELETE FROM ai_groups;
              DELETE FROM ai_corrections; DELETE FROM ai_jobs; DELETE FROM ai_runs;`);
 }
 
 module.exports = {
   db, sha1, newId, UNFILED,
-  getLabel, isLabelled, putLabel, labelsOfKinds,
+  getLabel, isLabelled, putLabel, labelsOfKinds, labelByHash, revision: () => revision,
   listGroups, groupOf, membersOf, createGroup, renameGroup, aliasesOf, setMember, clearAiMembers,
   pruneEmptyGroups, mergeDuplicateNames,
   addCorrection, recentCorrections,
-  enqueue, claim, requeueStale, finishJob, retryJob, jobCounts, clearJobs,
+  enqueue, enqueueMany, claim, requeueStale, finishJob, retryJob, jobCounts, clearJobs,
   startRun, updateRun, lastRun, spendSince, spendCapSince,
   wipe,
 };

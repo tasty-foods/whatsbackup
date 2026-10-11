@@ -31,6 +31,9 @@ async function verify(directory = path.resolve(__dirname, '../dist')) {
   assert.equal(feed.provider, 'github');
   assert.equal(feed.owner, 'tasty-foods');
   assert.equal(feed.repo, 'whatsbackup');
+  for (const relative of ['src/content/worker.js', 'public/content-search.js', 'public/third-party.html', 'node_modules/ffmpeg-static/ffmpeg.exe', 'node_modules/ffmpeg-static/ffmpeg.exe.LICENSE', 'node_modules/sharp/package.json', 'node_modules/pdfjs-dist/legacy/build/pdf.mjs']) {
+    assert.ok(fs.existsSync(path.join(resources, 'app', relative)), `Missing content-search runtime: ${relative}`);
+  }
   return { version, installer, bytes: file.size, sha512, feed: 'tasty-foods/whatsbackup', assets: [filename, filename + '.blockmap', 'latest.yml'] };
 }
 

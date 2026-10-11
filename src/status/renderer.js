@@ -60,12 +60,31 @@ const TEMPLATES = {
 };
 const TEMPLATE_NAMES = Object.keys(TEMPLATES);
 
+let previewBrowser = null, previewStarting = null, previewUsers = 0, previewIdle = null;
 async function withPage(fn) {
-  const browser = wa.getBrowser();
-  if (!browser) throw new Error('The WhatsApp browser is not running yet.');
-  const page = await browser.newPage();
-  try { return await fn(page); }
-  finally { try { await page.close(); } catch (_) {} }
+  let browser = wa.getBrowser();
+  const ownBrowser = !browser;
+  if (ownBrowser) {
+    clearTimeout(previewIdle); previewUsers++;
+    try {
+      if (!previewBrowser) {
+        previewStarting ||= require('puppeteer').launch({ headless: true, ...(cfg.CHROME_PATH ? { executablePath: cfg.CHROME_PATH } : {}) }).then(b => {
+          previewBrowser = b; b.once('disconnected', () => { if (previewBrowser === b) previewBrowser = null; }); return b;
+        }).finally(() => { previewStarting = null; });
+        await previewStarting;
+      }
+      browser = previewBrowser;
+    } catch (e) { previewUsers--; throw new Error('The local preview renderer could not start. Restart the desktop app. ' + e.message); }
+  }
+  let page;
+  try { page = await browser.newPage(); return await fn(page); }
+  finally {
+    try { await page?.close(); } catch (_) {}
+    if (ownBrowser && --previewUsers === 0) {
+      previewIdle = setTimeout(() => { const b = previewBrowser; previewBrowser = null; b?.close().catch(() => {}); }, 15000);
+      previewIdle.unref?.();
+    }
+  }
 }
 
 // Renders one card and returns its file path (kept under data/status — these

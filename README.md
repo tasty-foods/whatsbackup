@@ -2,11 +2,11 @@
 
 A Windows desktop app that saves every photo, video and message from your WhatsApp — to a local folder, and to a cloud folder if you point it at one.
 
-The 1.5.0 desktop workspace adds a sidebar, a searchable Library, favourites, saved filter views, selected-file ZIP exports and persistent appearance preferences. Personal organisation lives in `data/library.json`; display choices live in `data/settings.json`. Capture, cloud copying and source sessions keep their existing configuration.
+The 1.6.0 desktop workspace searches photo details, document text and sampled video scenes. The Library includes favourites, saved searches, selected-file ZIP exports and persistent appearance preferences. Personal organisation lives in `data/library.json`; display choices live in `data/settings.json`.
 
 For installing and using it, see **[INSTALL.md](INSTALL.md)**. This file is about how it's built.
 
-The [1.4.9 usability audit](AUDIT.md) records the reviewed flows, shipped changes and remaining product limits. Current additions include ChatGPT and Gemini image imports (`src/chatgpt/`, `src/gemini/`), media copy verification (`src/backup.js`), reversible cleanup (`src/cleanup/`), and opt-in status scheduling (`src/status/`). Import summaries are persisted in `data/*-import.json`. Run `npm test` for backup regression checks.
+The [desktop audit](AUDIT.md) records the reviewed flows, shipped changes and remaining product limits. Other features include ChatGPT and Gemini image imports (`src/chatgpt/`, `src/gemini/`), media copy verification (`src/backup.js`), reversible cleanup (`src/cleanup/`), and opt-in status scheduling (`src/status/`). Import summaries are persisted in `data/*-import.json`. Run `npm test` for regression checks.
 
 ---
 
@@ -56,14 +56,32 @@ copy is alive (a live SQLite `-wal` holds writes the `.db` doesn't have yet),
 copies rather than moves, and verifies row and file counts before reporting
 success.
 
-## AI sorting (`src/ai/`)
+## Content search and AI sorting (`src/content/`, `src/ai/`)
 
 Off by default; needs the user's own key. Two passes:
 
-**label** — one cheap call per item, cached in `ai_labels` by content hash, so
-re-running the whole library costs nothing. Images go to a vision model; videos
-are labelled from text context only (no vision API takes video) and marked as
-such; chats send a digest of 30 newest + 30 sampled messages at 200 chars each.
+**label** — detailed descriptions, object states and visible text are cached in
+`ai_labels`. Photos are resized before a vision request; identical photo bytes
+reuse a current label. FFmpeg samples video frames with timestamps for a vision
+request. Video audio is not transcribed, and sampling can miss brief scenes.
+PDF, Office and text document contents are extracted locally; scanned pages can
+be transcribed by the chosen AI provider. Chats send a digest of 30 newest +
+30 sampled messages at 200 chars each. Old labels or changed detail settings
+may require fresh indexing and additional provider usage.
+
+**search** — typing searches the saved index locally. “Interpret search with AI”
+expands the query and verifies candidate excerpts against it. The provider sees
+the query and short matching excerpts. Results identify their document page or
+video timestamp. Names/captions can be included or excluded. Saved views retain
+that scope. Existing archives need **Library → Manage index → Build content
+index** to add the new detail; **Read document text locally** needs no AI key.
+
+Expensive decoding runs in bounded worker threads, with one thumbnail lane and
+one indexing lane. Quiet/Balanced/Faster controls limit concurrent AI requests.
+Indexing can pause and resume across restarts. Paid responses are recorded even
+when a later operation fails; the monthly budget stops new batches once reached
+(an already-running batch may finish). Changing detail limits invalidates only
+the corresponding content profile.
 
 **arrange** — one text-only call over all the labels. Three things keep the
 result stable instead of reshuffled on every run:

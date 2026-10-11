@@ -17,6 +17,7 @@ const DEFAULTS = {
   uiReduceMotion: false,
   uiVideoPreview: true,
   uiShowCaptions: true,
+  performanceMode: 'quiet',
 
   // Where things are kept. Empty mediaRoot means "<appHome>\media"; empty
   // cloudRoot means no cloud copy at all — a fresh PC has no pCloud drive.
@@ -74,6 +75,13 @@ const DEFAULTS = {
   aiMode: 'assist',          // manual | assist (manual, then auto for new items) | auto
   aiAnalyseImages: true,
   aiAnalyseChats: true,
+  aiAnalyseVideos: true,
+  aiAnalyseDocuments: true,
+  aiVideoFrames: 6,
+  aiDocumentPages: 30,
+  aiOcrPages: 4,
+  aiPaused: false,
+  aiResumeOnLaunch: true,
   aiMonthlyBudget: 5,        // USD; 0 = no cap
   aiJsonSchema: true,        // set from the connection probe
 

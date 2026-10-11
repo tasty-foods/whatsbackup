@@ -131,7 +131,7 @@ async function completeOpenAi(cfg, req) {
   for (const img of req.images || []) {
     // `detail: low` keeps image cost predictable on providers that honour it
     // and is ignored harmlessly by those that don't.
-    parts.push({ type: 'image_url', image_url: { url: `data:${img.mediaType};base64,${img.data}`, detail: 'low' } });
+    parts.push({ type: 'image_url', image_url: { url: `data:${img.mediaType};base64,${img.data}`, detail: req.imageDetail || 'low' } });
   }
 
   // OpenAI's own reasoning models reject `max_tokens` outright and want
@@ -228,6 +228,7 @@ async function complete(cfg, req) {
   out.ms = Date.now() - started;
   out.cost = costOf(cfg.provider, cfg.model, out.usage.in, out.usage.out);
   out.costCap = capCostOf(cfg.provider, cfg.model, out.usage.in, out.usage.out);
+  if (cfg.onUsage) cfg.onUsage(out);
   return out;
 }
 

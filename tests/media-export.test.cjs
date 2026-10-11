@@ -33,11 +33,11 @@ function zipNames(bytes) {
   return names;
 }
 
-test('selected exports deduplicate IDs and preserve colliding file names safely', t => {
+test('selected exports deduplicate IDs and preserve colliding file names safely', async t => {
   const f = fixture(t);
   f.add('one', '../invoice.pdf'); f.add('two', 'C:\\files\\INVOICE.pdf');
   f.add('three', 'invoice (2).pdf'); f.add('four', '...'); f.add('five', 'CON.pdf');
-  const entries = planSelection(['one', 'one', 'two', 'three', 'four', 'five'], f);
+  const entries = await planSelection(['one', 'one', 'two', 'three', 'four', 'five'], f);
   assert.equal(entries.length, 5);
   assert.equal(new Set(entries.map(e => e.name.toLowerCase())).size, 5);
   assert.ok(entries.every(e => !/[\\/]/.test(e.name)));
@@ -45,19 +45,19 @@ test('selected exports deduplicate IDs and preserve colliding file names safely'
   assert.equal(entries[4].name, '_CON.pdf');
 });
 
-test('unknown, quarantined and missing files reject the whole selection', t => {
+test('unknown, quarantined and missing files reject the whole selection', async t => {
   const f = fixture(t); f.add('one'); f.add('hidden'); f.hidden.add('hidden');
   const missing = f.add('missing'); fs.unlinkSync(path.join(f.root, missing.filename));
-  for (const id of ['unknown', 'hidden', 'missing']) assert.throws(() => planSelection(['one', id], f), error => error.status === 409);
-  assert.throws(() => planSelection([], f), error => error.status === 400);
-  assert.throws(() => planSelection([null], f), error => error.status === 400);
+  for (const id of ['unknown', 'hidden', 'missing']) await assert.rejects(() => planSelection(['one', id], f), error => error.status === 409);
+  await assert.rejects(() => planSelection([], f), error => error.status === 400);
+  await assert.rejects(() => planSelection([null], f), error => error.status === 400);
 });
 
-test('an available cloud copy is exported when its local original is unavailable', t => {
+test('an available cloud copy is exported when its local original is unavailable', async t => {
   const f = fixture(t), record = f.add('cloud-only');
   const source = path.join(f.root,record.filename);
   const cloud = path.join(f.root,'cloud-copy.pdf');fs.renameSync(source,cloud);
-  const entries=planSelection([record.id],{...f,pathsFor:()=>[source,cloud]});
+  const entries=await planSelection([record.id],{...f,pathsFor:()=>[source,cloud]});
   assert.equal(entries[0].file,cloud);
   assert.equal(fs.readFileSync(cloud,'utf8'),'contents of cloud-only');
 });
@@ -77,7 +77,7 @@ test('download tickets stream the selected ZIP once and expire without retaining
   const download = await fetch(base+'/api/export/media?ticket='+ticket.ticket);
   assert.equal(download.status,200);
   assert.match(download.headers.get('content-disposition'),/attachment;.*\.zip/);
-  assert.deepEqual(zipNames(Buffer.from(await download.arrayBuffer())),['invoice.pdf','invoice (2).pdf']);
+  assert.deepEqual(zipNames(Buffer.from(await download.arrayBuffer())).sort(),['invoice (2).pdf','invoice.pdf']); // ZIP entry order follows asynchronous filesystem reads.
   assert.equal((await fetch(base+'/api/export/media?ticket='+ticket.ticket)).status,410);
   const expired = await (await prepare(['one'])).json(); time += 120001;
   assert.equal((await fetch(base+'/api/export/media?ticket='+expired.ticket)).status,410);
