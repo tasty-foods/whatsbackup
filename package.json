@@ -1,7 +1,7 @@
 {
   "name": "whatsbackup",
   "productName": "WhatsBackUp",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "private": true,
   "description": "Saves WhatsApp media and messages, imports ChatGPT and Gemini images, and copies media to your cloud folder.",
   "author": {
@@ -18,6 +18,7 @@
     "prepack": "npm run icons && npm run fetch-chrome",
     "dist": "npm run prepack && electron-builder --win --publish never",
     "release": "npm run prepack && electron-builder --win --publish always",
+    "verify-release": "node tools/verify-desktop-release.cjs",
     "backfill": "node src/backfill.js",
     "reset": "node src/reset.js",
     "test": "node --test tests/*.test.cjs"

@@ -10,6 +10,14 @@ WhatsBackUp saves WhatsApp messages and media on Windows. It can also import ima
 
 ## Save your first items
 
+For an existing installation, use **Check for updates** in the desktop app's
+header or **Settings → App**. Wait for **Install [version] and restart**, then
+choose it. Your linked accounts, media and settings are kept. Automatic checks
+run on startup and every four hours; closing to the tray does not install an
+update, while a full quit does. Settings → App shows the last successful check.
+If a check fails, choose **Retry update check**; the log folder contains
+`updates.log` for diagnosis.
+
 The **Overview** shows your next step and the state of each source.
 
 - **WhatsApp:** choose **Link WhatsApp**. On your phone, open WhatsApp → Settings → Linked devices → Link a device and scan the QR code. New messages and selected media are captured while the app runs. Choose **Import older chats** to retrieve available history; expired media cannot always be recovered.
@@ -19,7 +27,7 @@ The app depends on these services' web clients. A completed import may still inc
 
 ## Find and organise
 
-In the 1.5.0 workspace, **Library** searches chats, captions and filenames. Source, type, date and other filters narrow the results; **Clear all** removes the filters. Expand **Albums & tags** to explore groups. **Conversations** reads and searches saved WhatsApp message text.
+In the redesigned workspace, **Library** searches chats, captions and filenames. Source, type, date and other filters narrow the results; **Clear all** removes the filters. Expand **Albums & tags** to explore groups. **Conversations** reads and searches saved WhatsApp message text.
 
 Use the star on a file to add it to **Favourites**. **Save view** keeps your current search, filters and sort order in the sidebar. Choose **Select files**, mark the files you need and use **Export selected** for a ZIP of that selection. **Export view** includes all matching files, including videos and documents. If a selected file is unavailable, the app explains the problem before starting the download.
 

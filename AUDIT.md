@@ -1,3 +1,27 @@
+# Desktop updates — 1.5.1
+
+The installed app and public feed were still 1.4.9 while the workspace redesign
+existed only as a local 1.5.0 installer. Installed clients cannot discover an
+unpublished installer. Release validation now checks the version, installer
+size and SHA-512, blockmap, and packaged GitHub feed configuration together.
+
+The updater now handles initialization failures, rejected requests, unavailable
+updaters and download errors as visible retryable failures. Checks are deduplicated;
+ready downloads cannot be overwritten by another check. Automatic checks repeat
+every four hours, with 15-minute retries after errors. Both update buttons show
+the same state, Settings shows the last successful check, and the header button
+stays visible at the desktop app's minimum window size. Desktop update logs are
+retained separately from capture logs. Explicit installs wait for the capture
+engine to stop; an installer failure resumes capture. Older published versions
+are displayed without falsely claiming they are being downloaded.
+
+35 automated checks pass, including the actual main-process/preload IPC contract,
+updater failures, retry, concurrent checks, download progress, install recovery
+and recurring checks. Installer execution
+on the user's existing installation is not part of the isolated updater test.
+
+---
+
 # Desktop workspace redesign — 1.5.0
 
 The desktop app now separates navigation from the archive: a persistent sidebar, global media search, a dedicated Library toolbar and expandable albums/tags. Overview, Conversations, Status Studio, Clean up, setup and Settings use the same light/dark workspace styles. Settings has a vertical task list and a dedicated Appearance pane.

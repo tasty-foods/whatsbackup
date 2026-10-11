@@ -966,10 +966,6 @@ $('btn-unlink').addEventListener('click', async () => {
 });
 
 /* ---------- App actions ---------- */
-$('btn-check-updates').addEventListener('click', () => {
-  if (bridge) bridge.checkUpdates();
-  else alert('Updates are handled by the bridge app.');
-});
 $('btn-open-logs').addEventListener('click', async () => {
   if (!bridge) return;
   const info = appInfo || (appInfo = await bridge.info());
@@ -2391,7 +2387,9 @@ function describeUpdate(u) {
   if (u.status === 'checking') return 'Checking for updates…';
   if (u.status === 'downloading') return `Downloading ${u.version || 'an update'}… ${u.percent || 0}%`;
   if (u.status === 'ready') return `Version ${u.version} is downloaded and installs when you quit.`;
+  if (u.status === 'installing') return `Installing ${u.version}… The app will reopen automatically.`;
   if (u.status === 'error') return 'Could not check for updates: ' + (u.error || 'unknown');
+  if (u.status === 'current' && u.latestVersion && u.latestVersion !== u.current) return `Installed: ${u.current}. Latest release: ${u.latestVersion}. No compatible update is available.`;
   if (u.status === 'current') return `You're on the latest version (${u.current}).`;
   return `Version ${u.current}`;
 }
@@ -2408,6 +2406,8 @@ async function refreshUpdateStatus() {
   let u = null;
   try { u = await bridge.updateStatus(); } catch (e) { return; }
   if (line) line.textContent = describeUpdate(u);
+  const checked = document.getElementById('update-checked-at');
+  if (checked) checked.textContent = u.checkedAt ? 'Last successful check: ' + new Date(u.checkedAt).toLocaleString() : 'No successful update check yet.';
   if (install) install.classList.toggle('hidden', u.status !== 'ready');
   if (badge && u.current) {
     // An update waiting is the one thing worth colouring; everything else is
@@ -2434,6 +2434,7 @@ async function refreshUpdateStatus() {
       const msg = 'Install the update now?' + String.fromCharCode(10,10) + 'The app closes and reopens. Capture resumes straight after.';
       if (confirm(msg)) {
         await bridge.installUpdate();
+        await refreshUpdateStatus();
       }
       return;
     }
@@ -2443,7 +2444,7 @@ async function refreshUpdateStatus() {
   });
   const install = document.getElementById('btn-install-update');
   if (install) install.addEventListener('click', async () => {
-    if (bridge && bridge.installUpdate) await bridge.installUpdate();
+    if (bridge && bridge.installUpdate) { await bridge.installUpdate(); await refreshUpdateStatus(); }
   });
   refreshUpdateStatus();
   setInterval(refreshUpdateStatus, 15000);
@@ -2452,37 +2453,50 @@ async function refreshUpdateStatus() {
   // and installs from here. States are read from the shell, so what it says
   // is what the updater is doing.
   const ub = document.getElementById('update-btn');
+  const settingsCheck = document.getElementById('btn-check-updates');
   if (ub) {
     let watching = null;
     const paint = (u) => {
       if (!u) return;
-      ub.classList.remove('ready', 'busy');
-      ub.disabled = false;
-      if (!u.packaged) { ub.textContent = 'Updates apply to the installed app'; ub.disabled = true; return; }
-      if (u.status === 'checking') { ub.textContent = 'Checking…'; ub.classList.add('busy'); ub.disabled = true; }
-      else if (u.status === 'downloading') { ub.textContent = 'Downloading ' + (u.version || '') + ' ' + (u.percent || 0) + '%'; ub.classList.add('busy'); ub.disabled = true; }
-      else if (u.status === 'ready') { ub.textContent = 'Install ' + u.version + ' and restart'; ub.classList.add('ready'); }
-      else if (u.status === 'error') { ub.textContent = 'Update check failed — try again'; ub.title = u.error || ''; }
-      else if (u.status === 'current' && u.checkedAt && Date.now() - u.checkedAt < 60000) { ub.textContent = 'Up to date (v' + u.current + ')'; }
-      else ub.textContent = 'Check for updates';
+      const busy = ['checking', 'downloading', 'installing'].includes(u.status);
+      for (const button of [ub, settingsCheck].filter(Boolean)) {
+        button.classList.toggle('busy', busy);
+        button.classList.toggle('ready', u.status === 'ready');
+        button.disabled = busy || !u.packaged;
+        button.title = describeUpdate(u);
+        button.setAttribute('aria-busy', String(busy));
+        if (!u.packaged) button.textContent = 'Desktop app updates';
+        else if (u.status === 'checking') button.textContent = 'Checking…';
+        else if (u.status === 'downloading') button.textContent = 'Downloading ' + (u.percent || 0) + '%';
+        else if (u.status === 'installing') button.textContent = 'Installing…';
+        else if (u.status === 'ready') button.textContent = 'Install ' + u.version + ' and restart';
+        else if (u.status === 'error') button.textContent = 'Retry update check';
+        else if (u.status === 'current' && (!u.latestVersion || u.latestVersion === u.current) && u.checkedAt && Date.now() - u.checkedAt < 60000) button.textContent = 'Up to date · v' + u.current;
+        else button.textContent = 'Check for updates';
+      }
     };
     const poll = async () => {
       if (!bridge || !bridge.updateStatus) return;
       let u = null; try { u = await bridge.updateStatus(); } catch (e) { return; }
       paint(u);
+      await refreshUpdateStatus();
       if (u && (u.status === 'checking' || u.status === 'downloading')) { clearTimeout(watching); watching = setTimeout(poll, 1500); }
     };
-    ub.addEventListener('click', async () => {
+    const checkOrInstall = async () => {
       if (!bridge) { alert('Open the WhatsBackUp window to check for updates.'); return; }
       let u = null; try { u = await bridge.updateStatus(); } catch (e) {}
       if (u && u.status === 'ready' && bridge.installUpdate) {
-        if (confirm('Install ' + u.version + ' now?' + String.fromCharCode(10, 10) + 'The app closes and reopens. Capture resumes straight after.')) await bridge.installUpdate();
+        if (confirm('Install ' + u.version + ' now?' + String.fromCharCode(10, 10) + 'The app closes and reopens. Capture resumes straight after.')) { await bridge.installUpdate(); await poll(); }
         return;
       }
-      ub.textContent = 'Checking…'; ub.classList.add('busy'); ub.disabled = true;
-      try { await bridge.checkUpdates(true); } catch (e) {}
-      clearTimeout(watching); watching = setTimeout(poll, 1200);
-    });
+      paint({ ...u, packaged: true, status: 'checking' });
+      try { await bridge.checkUpdates(true); }
+      catch (e) { paint({ ...u, packaged: true, status: 'error', error: e.message || 'The desktop updater did not respond.' }); return; }
+      clearTimeout(watching);
+      await poll();
+    };
+    ub.addEventListener('click', checkOrInstall);
+    if (settingsCheck) settingsCheck.addEventListener('click', checkOrInstall);
     poll();
     setInterval(poll, 20000);
   }

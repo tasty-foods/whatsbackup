@@ -111,6 +111,17 @@ npm run dist          # icons + Chrome + NSIS installer into dist/
 
 `npm run release` does the same and publishes to GitHub Releases (needs `GH_TOKEN`).
 
+For a manually published release, run `npm run verify-release` after building.
+Publish the installer, its `.exe.blockmap`, and `latest.yml` together in a stable
+GitHub release. Keep it as a draft until all three uploads finish, then mark it
+as latest. A locally built installer alone does not update the public feed.
+
+Installed copies check on startup and every four hours when automatic checks
+are enabled, retry network failures after 15 minutes, and also support manual
+checks from the header, Settings → App, or the tray. A ready update can be
+installed immediately or on a full quit; closing to the tray is not quitting.
+Desktop updater diagnostics are saved under `<appHome>/logs/updates.log`.
+
 - `npm start` — run the desktop app from source
 - `npm run server` — run only the capture engine + dashboard (no Electron)
 - `npm run icons` — regenerate app and tray icons

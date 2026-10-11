@@ -33,7 +33,6 @@ let quitting = false;
 let suspended = false;      // engine deliberately stopped (migration) — don't auto-restart
 let serverPort = null;
 let lastHealthy = true;
-let updater = null;
 let restartTimer = null;    // pending crash-restart backoff timer, so it can be cancelled
 let portConflict = false;   // engine can't bind the port — surface the dialog only once
 
@@ -402,48 +401,38 @@ function watchHealth() {
 }
 
 // ---------- updates ----------
-// What the updater is doing, in a shape the dashboard can render. Updating
-// silently is right; being unable to find out is not — "am I on the current
-// version" was previously answerable only by comparing two numbers by hand.
-let updateState = { status: 'idle', version: null, percent: 0, error: null, checkedAt: 0 };
-const setUpdateState = (patch) => { updateState = { ...updateState, ...patch }; };
-
-function checkForUpdates(interactive) {
+// Persist desktop updater diagnostics; these requests run outside the capture
+// engine, so its log cannot explain an update failure.
+const updateLog = path.join(HOME, 'logs', 'updates.log');
+const updateLogger = Object.fromEntries(['info', 'warn', 'error', 'debug'].map(level => [level, (...args) => {
   try {
-    if (!updater) {
-      const { autoUpdater } = require('electron-updater');
-      updater = autoUpdater;
-      updater.autoDownload = true;
-      updater.autoInstallOnAppQuit = true;
-      updater.on('checking-for-update', () => setUpdateState({ status: 'checking', error: null }));
-      updater.on('update-available', (info) => setUpdateState({ status: 'downloading', version: info && info.version, percent: 0 }));
-      updater.on('update-not-available', () => setUpdateState({ status: 'current', version: null, checkedAt: Date.now() }));
-      updater.on('download-progress', (p) => setUpdateState({ status: 'downloading', percent: Math.round(p.percent || 0) }));
-      updater.on('update-downloaded', (info) => {
-        setUpdateState({ status: 'ready', version: info && info.version, percent: 100, checkedAt: Date.now() });
-        notify(`${APP_NAME} ${info.version} is ready`, 'It will be installed when you quit the app.', true);
-      });
-      updater.on('error', (e) => {
-        setUpdateState({ status: 'error', error: (e && e.message) || 'update check failed' });
-        console.error('[update] ' + (e && e.message));
-      });
+    fs.mkdirSync(path.dirname(updateLog), { recursive: true });
+    if (fs.existsSync(updateLog) && fs.statSync(updateLog).size > 1024 * 1024) {
+      fs.copyFileSync(updateLog, updateLog + '.previous');
+      fs.writeFileSync(updateLog, '');
     }
-    if (!isPackaged) {
-      if (interactive) dialog.showMessageBox({ message: 'Updates only apply to installed builds.', buttons: ['OK'] });
-      return;
-    }
-    updater.checkForUpdates().then((r) => {
-      setUpdateState({ checkedAt: Date.now() });
-      if (interactive) {
-        const v = r && r.updateInfo && r.updateInfo.version;
-        dialog.showMessageBox({
-          title: APP_NAME,
-          message: v && v !== app.getVersion() ? `Version ${v} is downloading. It installs when you quit.` : `You're on the latest version (${app.getVersion()}).`,
-          buttons: ['OK'],
-        });
-      }
-    }).catch((e) => { if (interactive) dialog.showErrorBox(APP_NAME, 'Could not check for updates: ' + e.message); });
-  } catch (e) { console.error('[update] setup failed:', e.message); }
+    fs.appendFileSync(updateLog, new Date().toISOString() + ' [' + level + '] ' + args.map(String).join(' ') + '\n');
+  } catch (_) {} // A locked log must not break updates.
+}]));
+const updates = require('./updates').createUpdates({
+  getUpdater: () => require('electron-updater').autoUpdater,
+  packaged: isPackaged,
+  current: app.getVersion(),
+  logger: updateLogger,
+  notify: version => notify(`${APP_NAME} ${version} is ready`, 'Choose Install and restart in the app, or quit to install it.', true),
+  onInstallError: () => { quitting = false; suspended = false; startEngine(); },
+});
+
+async function checkForUpdates(interactive) {
+  const u = await updates.check();
+  if (!interactive) return;
+  if (u.status === 'error') return dialog.showErrorBox(APP_NAME, 'Could not check for updates: ' + u.error);
+  const message = !u.packaged ? 'Updates apply to the installed Windows app.'
+    : u.status === 'ready' ? `Version ${u.version} is ready. Choose Install and restart in the app, or quit to install it.`
+    : u.status === 'downloading' ? `Version ${u.version} is downloading (${u.percent}%). The app will show when it is ready.`
+    : u.status === 'current' ? `No newer compatible update is available. Installed version: ${u.current}. Latest release: ${u.latestVersion}.`
+    : 'An update is being installed.';
+  return dialog.showMessageBox({ title: APP_NAME, message, buttons: ['OK'] });
 }
 
 // ---------- IPC exposed to the dashboard ----------
@@ -500,16 +489,16 @@ function registerIpc() {
   ipcMain.handle('wb:restart', () => { restartEngine(); return true; });
   // The header button reads the result itself; only the tray asks for a dialog.
   ipcMain.handle('wb:checkUpdates', (_e, quiet) => { checkForUpdates(!quiet); return true; });
-  ipcMain.handle('wb:updateStatus', () => ({ ...updateState, current: app.getVersion(), packaged: isPackaged }));
+  ipcMain.handle('wb:updateStatus', () => updates.status());
   // Waiting for the next quit is fine by default, but someone who has just been
   // told an update is ready should be able to take it now.
-  ipcMain.handle('wb:installUpdate', () => {
-    if (!updater || updateState.status !== 'ready') return false;
-    quitting = true;
-    // Silent: the person pressed Install in the app; a second wizard asking
-    // the same question is the thing that made it look like nothing happened.
-    setImmediate(() => { try { updater.quitAndInstall(true, true); } catch (e) { console.error('[update] install failed:', e.message); } });
-    return true;
+  ipcMain.handle('wb:installUpdate', async () => {
+    if (updates.status().status !== 'ready') return false;
+    if (await updates.install(async () => { await stopEngine(); quitting = true; })) return true;
+    quitting = false;
+    suspended = false;
+    startEngine();
+    return false;
   });
   ipcMain.handle('wb:quit', () => { quitting = true; app.quit(); return true; });
 
@@ -569,13 +558,14 @@ if (!app.requestSingleInstanceLock()) {
     startEngine();
     watchHealth();
     setInterval(updateTray, 15000);
-    if (s.autoUpdate) setTimeout(() => checkForUpdates(false), 20000);
+    updates.startAutomatic(() => settings.read().autoUpdate);
   });
 
   app.on('window-all-closed', (e) => { /* tray app: keep running */ });
 
   app.on('before-quit', () => {
     quitting = true;
+    updates.stopAutomatic();
     if (child) { try { child.kill(); } catch (_) {} }
   });
 }
