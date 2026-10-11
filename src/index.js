@@ -22,6 +22,7 @@ const server = app.listen(cfg.PORT, '127.0.0.1', () => {
   console.log('  Videos:  ' + cfg.VIDEO_DIR + (cfg.CLOUD_AVAILABLE ? '  (cloud folder)' : cfg.CLOUD_CONFIGURED ? '  (LOCAL — cloud drive not found)' : '  (local)'));
   console.log('====================================================');
   startClient();
+  try { require('./maintenance').fixDocNamesOnce(); } catch (e) { console.warn('[files]', e.message); }
 
   // Tell the Electron shell we're up, so it can show the window on the right port.
   if (process.parentPort) {
