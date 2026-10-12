@@ -3024,7 +3024,12 @@ const Chain = (function () {
       const r = await requestJson('/api/ai/probe-chain', { method: 'POST' });
       for (const p of r.results || []) {
         if (p.missingKey) { lastProbe[p.provider] = { ok: false, text: 'No key yet — paste one in the box under this row.' }; continue; }
-        if (p.allResting) { lastProbe[p.provider] = { ok: false, text: 'Every model is ' + restLabel(p.restingUntil, p.why) + '. It is used again then, by itself.' }; continue; }
+        if (p.allResting) {
+          lastProbe[p.provider] = /key was refused|no credit/i.test(p.why || '')
+            ? { ok: false, text: (/no credit/i.test(p.why) ? '✗ This account has no credit left. Top it up, or remove ' : '✗ The key was refused. Paste a new key in the box below, or remove ') + p.provider + ' from the chain.' }
+            : { ok: false, text: 'Every model is ' + restLabel(p.restingUntil, p.why) + '. It is used again then, by itself.' };
+          continue;
+        }
         const ok = !!(p.reachable && p.reachable.ok);
         lastProbe[p.provider] = ok
           ? { ok: true, text: '✓ answers' + (p.vision && p.vision.ok ? ' and reads photos' : ' — but cannot read photos, so only conversations go to it') + ' (' + p.model + (p.fallback ? ', a spare model' : '') + ')' }
