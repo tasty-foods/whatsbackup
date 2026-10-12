@@ -69,4 +69,18 @@ function fixDocNamesOnce() {
   return r;
 }
 
-module.exports = { clearGallery, fixDocNames, fixDocNamesOnce };
+// Sent messages filed under your own number, moved back to their chats, once
+// per install. Run after the chat list is written, so the chats are known.
+function refileSentOnce() {
+  const marker = path.join(cfg.DATA_DIR, 'sent-refiled');
+  if (fs.existsSync(marker)) return null;
+  let r = null;
+  try {
+    r = require('./messages').refileSentMessages({ backupDir: cfg.DATA_DIR });
+    if (r.moved) console.log(`[chats] moved ${r.moved} sent message${r.moved === 1 ? '' : 's'} back to the ${r.chats} chat${r.chats === 1 ? '' : 's'} they were sent in`);
+    fs.writeFileSync(marker, new Date().toISOString());
+  } catch (e) { console.warn('[chats] could not refile sent messages:', e.message); }
+  return r;
+}
+
+module.exports = { clearGallery, fixDocNames, fixDocNamesOnce, refileSentOnce };

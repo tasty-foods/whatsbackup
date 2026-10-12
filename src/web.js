@@ -1027,6 +1027,14 @@ function createApp() {
     res.json(require('./maintenance').fixDocNames({ dryRun: !!(req.body && req.body.dryRun) }));
   });
 
+  // Sent messages filed under your own number, moved back (see messages.js).
+  app.post('/api/maintenance/refile-sent', sameOrigin, (req, res) => {
+    try {
+      const dry = !!(req.body && req.body.dryRun);
+      res.json(messages.refileSentMessages({ dryRun: dry, backupDir: dry ? null : cfg.DATA_DIR }));
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
   app.get('/healthz', (req, res) => res.json({ ok: true }));
   return app;
 }

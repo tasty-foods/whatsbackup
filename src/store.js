@@ -85,6 +85,21 @@ function counts() {
 // The index is append-only, so a name learned later is written by rewriting
 // the file once. Only records still called "unknown" that belong to the chat
 // are touched; the id carries the chat id between its underscores.
+// Every photo of a chat shown under its current name, whatever it was saved
+// as. The chat id sits between underscores in a record's id.
+function retitleChat(chatId, name) {
+  if (!chatId || !name) return 0;
+  const needle = '_' + chatId + '_';
+  let changed = 0;
+  for (const r of records) {
+    if (r.chat !== name && String(r.id).includes(needle) && (!r.source || r.source === 'whatsapp')) { r.chat = name; changed++; }
+  }
+  if (!changed) return 0;
+  const tmp = cfg.INDEX_FILE + '.tmp';
+  fs.writeFileSync(tmp, records.slice().sort((a, b) => a.ts - b.ts).map((r) => JSON.stringify(r)).join('\n') + '\n');
+  fs.renameSync(tmp, cfg.INDEX_FILE);
+  return changed;
+}
 function renameChat(chatId, name) {
   const needle = '_' + chatId + '_';
   let changed = 0;
@@ -147,4 +162,4 @@ function renameFile(id, newName, dir) {
   return true;
 }
 
-module.exports = { renameChat, ensureDirs, loadAll, has, get, addRecord, removeRecords, clearCaptions, renameFile, listRecords, counts, hide, unhide, hiddenIds };
+module.exports = { renameChat, retitleChat, ensureDirs, loadAll, has, get, addRecord, removeRecords, clearCaptions, renameFile, listRecords, counts, hide, unhide, hiddenIds };

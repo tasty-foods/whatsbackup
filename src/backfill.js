@@ -2,6 +2,7 @@
 // Optional: pull RECENT media already sitting in your chats (best-effort).
 // WhatsApp only lets a linked device see a limited history, so this grabs
 // what it can from your most active chats. Run: npm run backfill
+require('./wwebjs-patches');
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const fs = require('fs');
 const path = require('path');

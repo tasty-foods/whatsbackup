@@ -1,4 +1,5 @@
 'use strict';
+require('./wwebjs-patches');                 // before the library: it takes its helpers at load time
 const { Client, LocalAuth, Chat } = require('whatsapp-web.js');
 const qrcode = require('qrcode');
 const fs = require('fs');
@@ -266,9 +267,57 @@ async function repairUnknownChats(c, { reason = 'startup' } = {}) {
   return { checked: ids.length, fixed };
 }
 
+// WhatsApp Web's October 2026 build stopped filling in `_serialized` on its
+// message keys (fromMe, remote, id and $1 are there; 0 of 231 keys had it on
+// 2026-10-12). The library looks messages up by that field, so asking it for a
+// chat ended in IndexedDB "No key or key range specified": msg.getChat(),
+// getChatById() and fetchMessages() failed for 231 of 238 chats. Names came out
+// as "unknown", sent messages had no chat to go to, and catch-up read nothing.
+// The key's own toString() is the serialized form, so the field is given back
+// on the class, as a getter, where an own property would still take precedence.
+async function installKeyShim(c) {
+  try {
+    return await c.pupPage.evaluate(() => {
+      const C = window.require('WAWebCollections');
+      let sample = null;
+      for (const ch of C.Chat.getModelsArray()) { if (ch.lastReceivedKey) { sample = ch.lastReceivedKey; break; } }
+      if (!sample) { const m = C.Msg.getModelsArray()[0]; sample = m && m.id; }
+      if (!sample) return 'no key yet';
+      if (typeof sample._serialized === 'string') return 'not needed';
+      const proto = Object.getPrototypeOf(sample);
+      if (!proto || Object.prototype.hasOwnProperty.call(proto, '_serialized')) return 'already there';
+      Object.defineProperty(proto, '_serialized', {
+        configurable: true, enumerable: false,
+        get() { try { return this.toString(); } catch (_) { return undefined; } },
+      });
+      return typeof sample._serialized === 'string' ? 'installed' : 'did not take';
+    });
+  } catch (e) { return 'failed: ' + describeError(e); }
+}
+
 // The address book, read from the phone and written down.
 async function syncContacts(c, { reason = 'startup' } = {}) {
   const cs = await withTimeout(c.getContacts(), 120000, 'getContacts');
+  // The library files a hidden-number (@lid) contact under its phone number
+  // when it knows one and drops the lid, so a chat or group author that only
+  // ever appears as @lid finds no name. WhatsApp's own list has both.
+  try {
+    const lids = await withTimeout(c.pupPage.evaluate(() => {
+      const out = [];
+      for (const ct of window.require('WAWebCollections').Contact.getModelsArray()) {
+        try {
+          const id = ct.id && ct.id._serialized;
+          if (!id || !/@lid$/.test(id)) continue;
+          const name = ct.name || '', push = ct.pushname || '', biz = ct.verifiedName || '';
+          if (!name && !push && !biz) continue;
+          const pn = ct.phoneNumber ? (ct.phoneNumber._serialized || String(ct.phoneNumber)) : '';
+          out.push({ id, lid: id, name: name || biz, pushname: push, number: pn.replace(/@.*$/, ''), isMyContact: !!ct.isMyContact, isBusiness: !!biz });
+        } catch (_) {}
+      }
+      return out;
+    }), 60000, 'lid contacts');
+    if (lids.length) cs.push(...lids.map((x) => ({ ...x, id: x.id })));
+  } catch (e) { console.warn('[contacts] hidden-number contacts not read:', describeError(e)); }
   const n = contacts.load(cs);
   console.log(`[contacts] ${reason}: ${n} names (${cs.length} contacts read)`);
   return n;
@@ -276,17 +325,50 @@ async function syncContacts(c, { reason = 'startup' } = {}) {
 
 // The chat list as WhatsApp reports it, written down with each chat's own
 // last-activity time — which is how a catch-up knows where to look.
+//
+// Read from the page's own rows. The library's Chat object keeps neither `t`
+// nor `formattedTitle` (they become `timestamp` and `name`), so reading them
+// off it gave every chat a last-activity time of 0 — and catch-up, which only
+// reads chats whose activity is newer than what it last saw, read nothing.
 async function syncChatList(c) {
-  const rows = await listChatsTolerant(c);
-  const flat = rows.map((ch) => ({
-    id: ch.id && ch.id._serialized,
-    name: (ch.formattedTitle && !/^\d+$/.test(ch.formattedTitle) ? ch.formattedTitle : '') || contacts.resolve(ch.id && ch.id._serialized) || '',
-    isGroup: !!ch.isGroup,
-    lastTs: (ch.t || 0) * 1000,
-    archived: !!ch._wbArchived,
+  const rows = await readChatRows(c);
+  const flat = rows.map((r) => ({
+    id: r.id,
+    name: chatTitle(r) || contacts.resolve(r.id) || '',
+    isGroup: !!r.isGroup,
+    lastTs: (r.t || 0) * 1000,
+    archived: !!r.archived,
   })).filter((x) => x.id && x.id !== 'status@broadcast');
   messages.upsertChats(flat);
+  healChatNames(flat);
   return flat.length;
+}
+
+// The name a person sees for a chat in WhatsApp. A saved contact or a group
+// has a real title; an unsaved number's title is just the number, and then a
+// business's verified name or the name they gave themselves says more.
+const numberish = (s) => /^[+\d][\d\s()+\-]{5,}$/.test(String(s || '').trim());
+function chatTitle(r) {
+  const title = String(r.title || '').trim();
+  if (title && !numberish(title)) return title;
+  return r.verifiedName || r.pushname || title || '';
+}
+
+// Old messages and photos keep the name a chat had when they arrived — a
+// number, or "unknown" while WhatsApp could not be asked. Once WhatsApp gives
+// a real name, everything from that chat is shown under it.
+function healChatNames(flat) {
+  let chats = 0;
+  for (const ch of flat) {
+    if (!ch.name || numberish(ch.name)) continue;
+    try {
+      const n = messages.retitleChat(ch.id, ch.name);
+      const g = store.retitleChat(ch.id, ch.name);
+      if (n || g) chats++;
+    } catch (_) {}
+  }
+  if (chats) console.log(`[names] ${chats} chat${chats === 1 ? '' : 's'} now shown under the name WhatsApp gives ${chats === 1 ? 'it' : 'them'}`);
+  return chats;
 }
 
 // Reads back the recent messages of every chat that moved since we last
@@ -298,6 +380,7 @@ async function catchUp(c, { reason = 'startup', chatIds = null, limit = CATCHUP_
   if (backfill.running) return { ok: false, error: 'history import is running' };
   Object.assign(sync, { running: true, reason, chats: 0, done: 0, newMessages: 0, newMedia: 0, startedAt: Date.now(), finishedAt: null, lastError: null });
   try {
+    await installKeyShim(c);                     // a page reload would have taken it away
     if (!chatIds) await syncChatList(c);
     const targets = chatIds
       ? chatIds.map((id) => ({ id, synced_ts: 0 }))
@@ -334,6 +417,7 @@ async function catchUp(c, { reason = 'startup', chatIds = null, limit = CATCHUP_
       sync.done++;
     }
     if (sync.newMedia) { try { require('./backup').nudge(); } catch (_) {} }
+    if (sync.lastError && sync.done) console.warn(`[sync] ${reason}: last problem — ${sync.lastError}`);
     if (sync.newMessages || sync.newMedia) console.log(`[sync] ${reason}: ${sync.done} chats checked, ${sync.newMessages} messages and ${sync.newMedia} files that were missing`);
     else console.log(`[sync] ${reason}: ${sync.done} chats checked, nothing was missing`);
     return { ok: true, chats: sync.done, newMessages: sync.newMessages, newMedia: sync.newMedia };
@@ -361,8 +445,13 @@ function buildMsgRow(msg, chat, mediaRec) {
   const id = msgKey(msg);
   if (!id) return null;
   const ts = msg.timestamp ? msg.timestamp * 1000 : Date.now();
-  const chatId = (chat && chat.id && chat.id._serialized) || msg.from || 'unknown';
-  const chatName = (chat && (chat._wbName || chat.name)) || cachedChatName(chat) || 'unknown';
+  // When the chat could not be read, the message itself says where it
+  // belongs — but for one you sent, `from` is you and the chat is `to`.
+  const chatId = (chat && chat.id && chat.id._serialized) || (msg.fromMe ? msg.to : msg.from) || 'unknown';
+  let known = null;
+  if (!chat) { try { known = messages.getChat(chatId); } catch (_) {} }
+  const chatName = (chat && (chat._wbName || chat.name)) || cachedChatName(chat)
+    || (known && known.name) || contacts.resolve(chatId) || 'unknown';
   // Link to the saved media file: the fresh record, or an already-captured one.
   const existing = mediaRec || store.get(id);
   const rawAuthor = msg.fromMe ? 'me' : (chat && chat.isGroup ? (msg.author ? String(msg.author) : '') : null);
@@ -548,31 +637,32 @@ let client = null;
 // few fields the import needs and skipping any chat we can't read. Unlike the
 // library's getChats(), this touches no group metadata / LID / last-message
 // code, so one chat WhatsApp changed under us can't sink the whole import.
-async function listChatsTolerant(c) {
-  const rows = await withTimeout(c.pupPage.evaluate(() => {
+async function readChatRows(c) {
+  return withTimeout(c.pupPage.evaluate(() => {
     const out = [];
     for (const chat of window.require('WAWebCollections').Chat.getModelsArray()) {
       try {
         const id = chat && chat.id && chat.id._serialized;
         if (!id) continue;
-        let title = '';
-        try { title = chat.formattedTitle || chat.name || ''; } catch (_) {}
-        let isGroup = false;
-        try { isGroup = !!chat.groupMetadata || chat.id.server === 'g.us'; } catch (_) {}
-        let archived = false;
-        try { archived = !!chat.archive; } catch (_) {}
-        out.push({
-          id: { _serialized: id, user: chat.id.user || '', server: chat.id.server || '' },
-          formattedTitle: title || chat.id.user || '',
-          isGroup,
-          t: chat.t || 0,
-          _wbArchived: archived,
-        });
+        const r = { id, user: chat.id.user || '', server: chat.id.server || '', title: '', pushname: '', verifiedName: '', isGroup: false, archived: false, t: 0 };
+        try { r.title = chat.formattedTitle || chat.name || ''; } catch (_) {}
+        try { const ct = chat.contact; if (ct) { r.pushname = ct.pushname || ''; r.verifiedName = ct.verifiedName || ''; } } catch (_) {}
+        try { r.isGroup = !!chat.groupMetadata || chat.id.server === 'g.us'; } catch (_) {}
+        try { r.archived = !!chat.archive; } catch (_) {}
+        try { r.t = chat.t || 0; } catch (_) {}
+        out.push(r);
       } catch (_) {}
     }
     return out;
-  }), 60000, 'listChatsTolerant');
-  return rows.map((r) => new Chat(c, r));
+  }), 60000, 'readChatRows');
+}
+async function listChatsTolerant(c) {
+  const rows = await readChatRows(c);
+  return rows.map((r) => new Chat(c, {
+    id: { _serialized: r.id, user: r.user, server: r.server },
+    formattedTitle: r.title || r.user || '',
+    isGroup: r.isGroup, t: r.t, _wbArchived: r.archived,
+  }));
 }
 
 // Prefer the library's own listing; fall back when a new WhatsApp Web build
@@ -724,7 +814,7 @@ function buildClient() {
   // synced, then the library hung hooking into its events and never said ready —
   // so the watchdog stays armed until ready, and a link stuck between the two is
   // restarted like one that never started.
-  c.on('authenticated', () => { state.status = 'authenticated'; state.qrDataUrl = null; if (c === client) watchStart(); });
+  c.on('authenticated', () => { state.status = 'authenticated'; state.qrDataUrl = null; if (c === client) watchStart(ACCEPTED_TO_READY_MS); });
   c.on('ready', () => {
     clearTimeout(startWatchdog); startAttempts = 0;
     state.status = 'ready';
@@ -739,8 +829,11 @@ function buildClient() {
     // chats that moved while we were away.
     readyClient = c;
     (async () => {
+      const shim = await installKeyShim(c);
+      if (shim !== 'not needed') console.log('[link] message keys: ' + shim);
       try { await syncContacts(c, { reason: 'connected' }); } catch (e) { console.warn('[contacts] load failed:', e.message); }
       try { await syncChatList(c); } catch (e) { console.warn('[chats] list failed:', e.message); }
+      try { require('./maintenance').refileSentOnce(); } catch (_) {}
       try { await repairUnknownChats(c); } catch (_) {}
       scheduleCatchUp(c, CATCHUP_DELAY_MS);
     })();
@@ -793,26 +886,28 @@ function scheduleReconnect(c) {
 // that had timed out and been killed. Nothing is captured while it waits.
 // So a start is watched: make no progress for this long and it is torn
 // down and begun again, a few times, with the wait growing each time.
-const START_WATCHDOG_MS = 4 * 60 * 1000;
+const START_WATCHDOG_MS = 4 * 60 * 1000;          // launch to accepted: a QR or a slow load can take a while
+const ACCEPTED_TO_READY_MS = 90 * 1000;           // accepted to ready is about a second when it works
 let startAttempts = 0;
 let startWatchdog = null;
 
-function watchStart() {
+function watchStart(ms = START_WATCHDOG_MS) {
   clearTimeout(startWatchdog);
   startWatchdog = setTimeout(async () => {
     if (state.status === 'ready') return;               // it got there
     if (state.status === 'qr') return;                  // waiting on a person, not stuck
     if (state.status === 'error' && state.needsRelink) return;
     startAttempts++;
-    const again = startAttempts <= 5;
-    console.error(`[link] not ready after ${Math.round(START_WATCHDOG_MS / 60000)} min (stuck at ${state.status}) — ${again ? 'restarting the link (attempt ' + startAttempts + ')' : 'giving up until the app is restarted'}`);
+    // Never give up: a stall is WhatsApp's page misbehaving for a moment, and
+    // giving up meant no capture until someone restarted the app. The wait
+    // between tries grows to five minutes instead.
+    console.error(`[link] not ready after ${Math.round(ms / 1000)}s (stuck at ${state.status}) — restarting the link (attempt ${startAttempts})`);
     clearTimeout(reconnectTimer); reconnectTimer = null;
     const old = client; client = null;                  // nothing may reconnect the old one now
     try { if (old) await withTimeout(old.destroy(), 15000, 'closing stalled WhatsApp'); }
     catch (_) { try { old && old.pupBrowser && old.pupBrowser.process() && old.pupBrowser.process().kill(); } catch (_) {} }
-    if (!again) { state.status = 'error'; state.lastError = 'WhatsApp did not start after several tries. Restart the app.'; return; }
-    setTimeout(() => startClient({ retry: true }), Math.min(60000, 5000 * startAttempts));
-  }, START_WATCHDOG_MS);
+    setTimeout(() => startClient({ retry: true }), Math.min(5 * 60000, 5000 * startAttempts));
+  }, ms);
   if (startWatchdog.unref) startWatchdog.unref();
 }
 

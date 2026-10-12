@@ -380,6 +380,51 @@ function chatFingerprint(chatId) {
 function unknownChatIds() {
   return init().prepare("SELECT DISTINCT chat_id AS id FROM messages WHERE chat_name IS NULL OR chat_name = '' OR chat_name = 'unknown'").all().map((r) => r.id);
 }
+// Messages you sent while WhatsApp could not be asked which chat they were in
+// (2026-08 to 2026-10, see installKeyShim in whatsapp.js) were filed under
+// `from` — which, for a message you sent, is you. Each message's own id still
+// says where it belongs: true_<chat>_<id>. Moved back, to chats we know, with
+// a copy of the database taken first. Search indexes the text, not the chat,
+// so it needs nothing; AI topics built for a chat this leaves empty are dropped.
+function refileSentMessages({ dryRun = false, backupDir = null } = {}) {
+  init();
+  const remoteOf = (id) => { const m = /^true_([^_]+@(?:c\.us|lid|g\.us))_/.exec(String(id || '')); return m ? m[1] : null; };
+  const known = db.prepare('SELECT name FROM chats WHERE id = ?');
+  const moves = [];
+  for (const r of db.prepare('SELECT id, chat_id FROM messages WHERE from_me = 1').all()) {
+    const to = remoteOf(r.id);
+    if (!to || to === r.chat_id) continue;
+    const k = known.get(to);
+    if (!k) continue;                                   // a chat we have never seen: leave it be
+    moves.push({ id: r.id, from: r.chat_id, to, name: k.name || '' });
+  }
+  const out = { dryRun, found: moves.length, moved: 0, chats: new Set(moves.map((m) => m.to)).size, emptied: [], backup: null };
+  if (dryRun || !moves.length) return out;
+  if (backupDir) {
+    const file = require('path').join(backupDir, 'messages.before-refile-' + Date.now() + '.db');
+    db.exec("VACUUM INTO '" + file.replace(/'/g, "''") + "'");
+    out.backup = file;
+  }
+  const upd = db.prepare("UPDATE messages SET chat_id = ?, chat_name = COALESCE(NULLIF(?, ''), chat_name) WHERE id = ?");
+  db.exec('BEGIN');
+  try {
+    for (const m of moves) out.moved += upd.run(m.to, m.name, m.id).changes;
+    db.exec('COMMIT');
+  } catch (e) { try { db.exec('ROLLBACK'); } catch (_) {} throw e; }
+  for (const from of new Set(moves.map((m) => m.from))) {
+    if (db.prepare('SELECT COUNT(*) n FROM messages WHERE chat_id = ?').get(from).n) continue;
+    for (const tbl of ['ai_topics', 'ai_topic_cursor']) { try { db.prepare('DELETE FROM ' + tbl + ' WHERE chat_id = ?').run(from); } catch (_) {} }
+    out.emptied.push(from);
+  }
+  return out;
+}
+
+// Every message of a chat shown under its current name, whatever it was
+// saved as. Returns how many rows changed.
+function retitleChat(chatId, name) {
+  if (!chatId || !name) return 0;
+  return init().prepare('UPDATE messages SET chat_name = ? WHERE chat_id = ? AND (chat_name IS NULL OR chat_name <> ?)').run(name, chatId, name).changes;
+}
 function renameChat(chatId, name) {
   const n = init().prepare('UPDATE messages SET chat_name = ? WHERE chat_id = ?').run(name, chatId).changes;
   if (n) dirty();
@@ -507,7 +552,7 @@ function chatsNeedingSync(limit = 60) {
   return db.prepare(`SELECT * FROM chats WHERE last_ts > synced_ts AND archived = 0 ORDER BY last_ts DESC LIMIT ?`).all(limit);
 }
 
-module.exports = { unknownChatIds, renameChat, bestNameFor, selfHealNames,
+module.exports = { unknownChatIds, renameChat, retitleChat, refileSentMessages, bestNameFor, selfHealNames,
   init, close, addMessage, addMany, updateBody, markRevoked, linkMedia, listChats, getThread, getNewer, around, windowFrom, getById,
   search, ftsQuery, counts, allForExport,
   handle, digest, recentDigest, chatFingerprint, chatsWithText,
