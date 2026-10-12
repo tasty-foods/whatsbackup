@@ -138,7 +138,10 @@ test('pacing spaces requests, widens on "too many", and narrows back', async () 
   const t0 = Date.now(), at = [];
   await Promise.all([1, 2, 3].map(async () => { await L.pace('p|m', 60); at.push(Date.now() - t0); }));
   at.sort((x, y) => x - y);
-  assert.ok(at[1] - at[0] >= 50 && at[2] - at[1] >= 50, 'about 60 ms apart: ' + at.join(','));
+  // Each request goes no earlier than its slot (0, 60, 120 ms). Timers fire
+  // late under load, so the gap between two neighbours can shrink a little;
+  // the slots are what pacing promises.
+  at.forEach((ms, i) => assert.ok(ms >= i * 60 - 5, `request ${i + 1} at ${ms} ms, before its ${i * 60} ms slot (${at.join(',')})`));
   L.slower('p|m');
   assert.equal(L.intervalOf('p|m'), 96);
   for (let i = 0; i < 40; i++) L.faster('p|m');
