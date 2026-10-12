@@ -56,6 +56,10 @@
 <p>Opens a separate browser profile for each source. You sign in directly, then the app reads available images from that source. Imported images join your archive.</p>
 </div>
 <div class="data-table-row">
+<h2>Google Photos imports (preview)</h2>
+<p>Uses a separate local browser profile where you sign in with Google. Reads your main timeline and downloads photos and videos into your archive. Optional scheduled imports are off by default. It does not upload media or change your Google Photos library.</p>
+</div>
+<div class="data-table-row">
 <h2>Cloud or network copies</h2>
 <p>Writes media to the destination folder you choose. Your cloud client or network storage controls onward upload and storage. Copy checks do not confirm remote upload completion.</p>
 </div>
@@ -86,7 +90,7 @@
 <p>Media is saved in the folders you choose. Message text, settings, logs and source browser profiles are kept in the app’s local data directory, normally <code>%LOCALAPPDATA%\WhatsBackUp\</code>.</p>
 <p>Your message database is SQLite. You can export readable HTML transcripts. Images and videos remain normal files.</p>
 <h3>Treat browser profiles like passwords</h3>
-<p>WhatsApp, ChatGPT and Gemini profiles contain active sign-in sessions. Someone with access to these profiles may gain access to the connected accounts. Keep the app’s data folder private.</p>
+<p>WhatsApp, ChatGPT, Gemini and Google Photos profiles contain active sign-in sessions. Someone with access to these profiles may gain access to the connected accounts. Keep the app’s data folder private.</p>
 <h3>Provider keys</h3>
 <p>The Windows app uses Windows data protection to protect API keys on disk. Keys are used with the endpoint you configure. The diagnostic report is designed to omit secrets; review any report before sharing it.</p>
 </div>
@@ -103,7 +107,7 @@
 <div class="prose">
 <p>Saving and browsing do not require AI. If you enable sorting, requests go from your PC to the provider you select. Images may be sent with their source chat name, caption and direction; conversation sorting sends sampled message text and chat context.</p>
 <p>The app provides a data preview and requires consent before the first use. Review this in <strong>Settings → Albums &amp; projects</strong>, alongside the provider, model and budget. Free tiers and fallback providers have their own limits and data policies.</p>
-<p>Images imported from ChatGPT or Gemini can be processed by the same optional sorting feature. Demo mode creates illustrative labels locally; it does not perform real image analysis.</p>
+<p>Media imported from ChatGPT, Gemini or Google Photos can be processed by the same optional sorting feature. Demo mode creates illustrative labels locally; it does not perform real image analysis.</p>
 </div>
 </div>
 </section>

@@ -127,6 +127,8 @@ const SETTING_SPEC = {
   chatgptSearchChats: { type: 'bool' },
   geminiEnabled: { type: 'bool' },
   geminiScanHours: { type: 'int', min: 1, max: 168 },
+  googlePhotosEnabled: { type: 'bool' },
+  googlePhotosScanHours: { type: 'int', min: 1, max: 168 },
 };
 
 function coerce(spec, value) {
@@ -301,6 +303,7 @@ function createApp() {
         data: cfg.DATA_DIR, settingsFile: cfg.SETTINGS_FILE, indexFile: cfg.INDEX_FILE,
         log: logger.FILE, auth: cfg.AUTH_DIR,
         chatgptProfile: paths.CHATGPT_DIR, geminiProfile: paths.GEMINI_DIR,
+        googlePhotosProfile: paths.GOOGLE_PHOTOS_DIR,
         cloudImages: cfg.CLOUD_ROOT ? path.join(cfg.CLOUD_ROOT, 'Images') : null, cloudVideos: cfg.CLOUD_ROOT ? path.join(cfg.CLOUD_ROOT, 'Videos') : null,
       },
       port: cfg.PORT,
@@ -326,6 +329,7 @@ function createApp() {
     // change to it has to re-arm it or it would wait out the old interval.
     if ('chatgptEnabled' in patch || 'chatgptScanHours' in patch) { try { require('./chatgpt').schedule(); } catch (_) {} }
     if ('geminiEnabled' in patch || 'geminiScanHours' in patch) { try { require('./gemini').schedule(); } catch (_) {} }
+    if ('googlePhotosEnabled' in patch || 'googlePhotosScanHours' in patch) { try { require('./google-photos').schedule(); } catch (_) {} }
     res.json({ ok: true, settings: publicSettings(), restartRequired, rejected });
   });
 
@@ -349,19 +353,20 @@ function createApp() {
   // Per source: how many, how much, where — so Settings can say it.
   app.get('/api/sources/summary', (req, res) => {
     const hidden = store.hiddenIds();
-    const out = { whatsapp: { count: 0, bytes: 0 }, chatgpt: { count: 0, bytes: 0 }, gemini: { count: 0, bytes: 0 } };
+    const out = { whatsapp: { count: 0, bytes: 0 }, chatgpt: { count: 0, bytes: 0 }, gemini: { count: 0, bytes: 0 }, googlephotos: { count: 0, bytes: 0 } };
     for (const r of store.listRecords({})) {
       if (hidden.has(r.id) || r.sample) continue;
-      const k = r.source === 'chatgpt' || r.source === 'gemini' ? r.source : 'whatsapp';
+      const k = Object.hasOwn(out, r.source) ? r.source : 'whatsapp';
       out[k].count++; out[k].bytes += r.size || 0;
     }
     res.json({
       ...out,
       dirs: {
-        images: cfg.IMAGES_DIR, videos: cfg.VIDEO_DIR, files: cfg.FILES_DIR,
+        images: cfg.IMAGES_DIR, videos: cfg.VIDEO_DIR, localVideos: cfg.LOCAL_VIDEO_DIR, files: cfg.FILES_DIR,
         cloudImages: cfg.CLOUD_ROOT ? path.join(cfg.CLOUD_ROOT, 'Images') : null,
         cloudVideos: cfg.CLOUD_ROOT ? path.join(cfg.CLOUD_ROOT, 'Videos') : null,
         chatgptProfile: paths.CHATGPT_DIR, geminiProfile: paths.GEMINI_DIR,
+        googlePhotosProfile: paths.GOOGLE_PHOTOS_DIR,
       },
     });
   });
@@ -517,6 +522,28 @@ function createApp() {
   app.post('/api/gemini/scan', sameOrigin, (req, res) => { gemini.scan({ reason: 'manual' }); res.json({ ok: true, started: true }); });
   app.post('/api/gemini/disconnect', sameOrigin, async (req, res) => res.json(await gemini.disconnect()));
   app.post('/api/gemini/check', sameOrigin, async (req, res) => res.json({ linked: await gemini.checkLink() }));
+
+  // ---- Google Photos as a source ----
+  const googlePhotos = require('./google-photos');
+  app.get('/api/google-photos/state', (req, res) => res.json(googlePhotos.getState()));
+  for (const action of ['connect', 'scan']) {
+    app.post('/api/google-photos/' + action, sameOrigin, (req, res) => {
+      const current = googlePhotos.getState();
+      if (current.busy) return res.status(409).json({ error: 'Google Photos is already busy.' });
+      if (action === 'scan' && !current.linked) return res.status(409).json({ error: 'Connect Google Photos first.' });
+      googlePhotos[action]({ reason: 'manual' }).catch(error => console.error('[google-photos]', error.message));
+      res.json({ ok: true, started: true });
+    });
+  }
+  app.post('/api/google-photos/cancel', sameOrigin, (req, res) => {
+    const result = googlePhotos.cancel();
+    res.status(result.ok ? 200 : 409).json(result);
+  });
+  app.post('/api/google-photos/disconnect', sameOrigin, async (req, res) => {
+    try { const result = await googlePhotos.disconnect(); res.status(result.ok ? 200 : 409).json(result); }
+    catch (error) { res.status(500).json({ error: error.message }); }
+  });
+  app.post('/api/google-photos/check', sameOrigin, async (req, res) => res.json({ linked: await googlePhotos.checkLink() }));
 
   // ---- Backup: what is actually on pCloud ----
   const backup = require('./backup');

@@ -6,7 +6,34 @@ The 2.0 release makes the archive understood rather than just stored. The AI rea
 
 For installing and using it, see **[INSTALL.md](INSTALL.md)**. This file is about how it's built.
 
-The [desktop audit](AUDIT.md) records the reviewed flows, shipped changes and remaining product limits. Other features include ChatGPT and Gemini image imports (`src/chatgpt/`, `src/gemini/`), media copy verification (`src/backup.js`), reversible cleanup (`src/cleanup/`), and opt-in status scheduling (`src/status/`). Import summaries are persisted in `data/*-import.json`. Run `npm test` for regression checks.
+The [desktop audit](AUDIT.md) records the reviewed flows, shipped changes and remaining product limits. Other features include ChatGPT and Gemini image imports (`src/chatgpt/`, `src/gemini/`), Google Photos imports (`src/google-photos/`), media copy verification (`src/backup.js`), reversible cleanup (`src/cleanup/`), and opt-in status scheduling (`src/status/`). Import summaries are persisted in `data/*-import.json`. Run `npm test` for regression checks.
+
+### Google Photos
+
+**Settings → Sources → Google Photos** connects a separate browser profile in
+`<appHome>/google-photos-session`. The person signs in themselves. Import now
+walks the main timeline, collecting each viewport before the virtual grid
+recycles it, and downloads photos and videos using the website's Download
+action. Stable photo IDs and SHA-256 file hashes avoid repeat imports; duplicate
+aliases live in `data/googlephotos-seen.json`. Originals enter the existing
+media index, AI queue and cloud-copy sweep. Videos are kept in the local video
+folder and served through the existing fallback, even when cloud storage is
+configured. Automatic scans are off by default; intervals are 1–168 hours.
+
+Stop import closes the scan browser and retains completed downloads. A later
+scan starts at the top and skips saved items. Every attempt, including stops
+and failures, persists an import summary. Google photo-label dates are used
+when readable; otherwise the gallery uses the import date. Original file bytes
+and embedded metadata are preserved. Archive, Locked Folder, trash and media
+only in shared albums are outside the main timeline and are not imported.
+
+Google removed full-library access from its Library API in its
+[2025 API changes](https://developers.googleblog.com/google-photos-picker-api-launch-and-library-api-updates/); the Picker
+requires manual selections. This connector depends on the Google Photos web
+interface, so sign-in restrictions or website changes can interrupt it. It does
+not upload or propagate deletions. ZIP/motion-photo bundle downloads and unknown
+file types are reported as failures, rather than saved as thumbnail substitutes.
+For a complete bulk export, Google Takeout remains Google's supported route.
 
 ---
 

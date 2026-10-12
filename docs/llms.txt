@@ -6,7 +6,7 @@
 
 Site: https://whatsbackup.cc/
 Source: https://github.com/tasty-foods/whatsbackup
-Current application version: 2.0.2
+Current application version: 2.1.0
 Website updated: 12 October 2026
 Primary audience: small businesses that use WhatsApp for daily work, with dedicated
 paths for personal memories and creators collecting AI images. The homepage uses
@@ -23,7 +23,11 @@ Price: the app is free. Optional AI provider charges and limits apply.
 - ChatGPT: imports uploaded and generated images from conversations. Reads chats
   before downloading, reports progress, and retries temporary failures with backoff.
 - Gemini: imports generated images from the account's Library.
-- Each source has a separate connection. ChatGPT and Gemini use separate local
+- Google Photos (preview): imports photos and videos from the main timeline,
+  with duplicate detection, optional scheduled scans and Stop import. Uses the
+  website; live account sign-in and downloads have not yet been verified.
+  Archive, Locked Folder, trash and media only in shared albums are excluded.
+- Each source has a separate connection. ChatGPT, Gemini and Google Photos use separate local
   browser profiles; the user signs in directly with the respective service.
 
 ## Tools
@@ -42,8 +46,11 @@ Price: the app is free. Optional AI provider charges and limits apply.
   consent and initially in dry run, with quiet hours and posting limits.
 - Search saved conversations and export readable HTML transcripts.
 
-## Latest improvements in 2.0.2
+## Latest improvements in 2.1.0
 
+- Google Photos is a new optional source for photos and videos. Scheduled imports
+  are off by default. Imported media joins the existing library, AI queue and
+  cloud-copy checks; stopping an import keeps completed files.
 - The ChatGPT and Gemini sign-in windows open with one tab: tabs left by an
   interrupted import are no longer reopened.
 - 2.0 reads what is kept: one search over messages, photo descriptions,

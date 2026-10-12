@@ -54,10 +54,11 @@ function get(id) { return byId.get(id) || null; }
 
 function addRecord(rec) {
   if (seen.has(rec.id)) return false;
+  // A failed append must remain retryable; never mark an unsaved row as held.
+  fs.appendFileSync(cfg.INDEX_FILE, JSON.stringify(rec) + '\n');
   seen.add(rec.id);
   byId.set(rec.id, rec);
   records.push(rec);
-  fs.appendFileSync(cfg.INDEX_FILE, JSON.stringify(rec) + '\n');
   return true;
 }
 

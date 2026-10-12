@@ -1,6 +1,6 @@
 # Install and use WhatsBackUp
 
-WhatsBackUp saves WhatsApp messages and media on Windows. It can also import images from ChatGPT and Gemini and copy media to a folder managed by pCloud, OneDrive, Dropbox or another cloud client.
+WhatsBackUp saves WhatsApp messages and media on Windows. It can also import images from ChatGPT and Gemini, import photos and videos from Google Photos, and copy media to a folder managed by pCloud, OneDrive, Dropbox or another cloud client.
 
 ## Install
 
@@ -22,6 +22,7 @@ The **Overview** shows your next step and the state of each source.
 
 - **WhatsApp:** choose **Link WhatsApp**. On your phone, open WhatsApp → Settings → Linked devices → Link a device and scan the QR code. New messages and selected media are captured while the app runs. Choose **Import older chats** to retrieve available history; expired media cannot always be recovered.
 - **ChatGPT or Gemini:** open **Settings → Sources**, connect the account in the sign-in window, then choose **Import now**. ChatGPT reads conversations before downloading their images. Gemini imports generated images from its Library. You can keep browsing during imports. Turn on the schedule if you want periodic imports.
+- **Google Photos:** open **Settings → Sources → Google Photos**, choose **Connect Google Photos**, sign in, then choose **Import now**. Photos and videos from the main timeline are copied into your library and included in cloud-folder backups. Turn on the schedule for periodic imports. Large libraries can take hours; **Stop import** keeps completed files, and another import skips them. This uses Google's website and can stop working when it changes. Archived photos, Locked Folder, trash and media only in shared albums are excluded. Gallery dates fall back to the import date when Google's photo date cannot be read. Original file metadata is preserved. Nothing is uploaded or deleted in Google Photos.
 
 The app depends on these services' web clients. A completed import may still include failed requests; Sources shows failures so you can retry missing items. Previously saved items are skipped.
 

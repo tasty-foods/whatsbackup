@@ -24,4 +24,5 @@ module.exports = {
   // account can never cost the other its session.
   CHATGPT_DIR: path.join(APP_HOME, 'chatgpt-session'),
   GEMINI_DIR: path.join(APP_HOME, 'gemini-session'),
+  GOOGLE_PHOTOS_DIR: path.join(APP_HOME, 'google-photos-session'),
 };

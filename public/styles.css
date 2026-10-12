@@ -25,6 +25,7 @@
   --src-whatsapp: var(--accent);
   --src-chatgpt: #d9ccff;
   --src-gemini: #cfe0ff;
+  --src-googlephotos: #ffd68a;
   --r-sm: 8px;
   --r-md: 12px;
   --r-lg: 16px;
@@ -721,6 +722,7 @@ table.paths td.v { color: var(--text); font-family: ui-monospace, Consolas, mono
 .tile .cap .bk.local { color: var(--warn); font-size: 12px; margin-left: auto; margin-right: 6px; }
 .tile .badge[data-source=chatgpt] { color: var(--src-chatgpt); }
 .tile .badge[data-source=gemini] { color: var(--src-gemini); }
+.tile .badge[data-source=googlephotos] { color: var(--src-googlephotos); }
 
 /* Conversations head: chips and a sort. */
 /* One scrollable line: eighteen projects stacked one per line in a 300px pane
@@ -743,7 +745,7 @@ table.paths td.v { color: var(--text); font-family: ui-monospace, Consolas, mono
 .next-step:empty { display: none; }
 .next-step h2 { font-size: 17px; margin: 0 0 5px; }
 .next-step p { margin: 0; color: var(--text-dim); max-width: 76ch; font-size: 14px; }
-.source-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 12px 0 24px; }
+.source-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 12px 0 24px; }
 .source-card { border: 1px solid var(--line); border-radius: var(--r-md); padding: 16px; display: flex; flex-direction: column; align-items: flex-start; }
 .source-heading { display: flex; align-items: center; gap: 10px; justify-content: space-between; flex-wrap: wrap; width: 100%; }
 .source-heading h3 { font-size: 15px; margin: 0; }

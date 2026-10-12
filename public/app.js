@@ -24,6 +24,7 @@ const SOURCES = [
   { id: 'whatsapp', label: 'WhatsApp', glyph: '💬', badgeIn: '↓ Received', badgeOut: '↑ Sent' },
   { id: 'chatgpt', label: 'ChatGPT', glyph: '✦', badgeIn: '✦ ChatGPT', badgeOut: '↑ To ChatGPT' },
   { id: 'gemini', label: 'Gemini', glyph: '✦', badgeIn: '✦ Gemini', badgeOut: '✦ Gemini' },
+  { id: 'googlephotos', label: 'Google Photos', glyph: '▧', badgeIn: '↓ Google Photos', badgeOut: '↓ Google Photos' },
 ];
 const srcOf = (r) => r.source || 'whatsapp';
 let allItems = [];         // full list, newest first
@@ -530,7 +531,7 @@ if (exitBtn) exitBtn.addEventListener("click", async () => {
 });
 
 /* ---------- Linked sources -----------------------------------------------
-   One card per outside account (ChatGPT, Gemini), all the same shape: a
+   One card per outside account, all the same shape: a
    status line, what the last look found, connect / back up / forget. State
    is polled while Settings is open, because a connect or a scan runs in the
    engine for minutes and the card should say so rather than go quiet. */
@@ -538,8 +539,10 @@ function makeSourceCard(prefix, api, label) {
   const el = (id) => document.getElementById(id);
   const status = el(prefix + "-status"), last = el(prefix + "-last");
   const bConnect = el(prefix + "-connect"), bScan = el(prefix + "-scan"), bForget = el(prefix + "-disconnect");
+  const bStop = el(prefix + '-stop');
+  const mediaNoun = prefix === 'gp' ? 'media files' : 'photos';
   if (!status) return { refresh() {}, start() {}, stop() {} };
-  let timer = null;
+  let timer = null, lastImport = null;
 
   const ago = (ms) => { const m = Math.round((Date.now() - ms) / 60000); return m < 1 ? "just now" : m < 60 ? m + " min ago" : Math.round(m / 60) + " h ago"; };
   const inWhen = (ms) => { const m = Math.round((ms - Date.now()) / 60000); return m < 60 ? "in " + Math.max(1, m) + " min" : "in " + Math.round(m / 60) + " h"; };
@@ -551,7 +554,8 @@ function makeSourceCard(prefix, api, label) {
     catch (e) { status.textContent = 'Source status unavailable — try again shortly.'; return; }
     const busy = !!s.busy;
     let line;
-    if (s.status === "connecting") line = span("warn-text", "● A window is open — sign in there");
+    if (s.stopping) line = span('warn-text', '● Stopping import…');
+    else if (s.status === "connecting") line = span("warn-text", "● A window is open — sign in there");
     else if (s.status === "scanning") {
       const pr = s.progress || {};
       const bits = [];
@@ -562,23 +566,27 @@ function makeSourceCard(prefix, api, label) {
         bits.push("looking for older photos: " + pr.conversations + " of " + pr.of + " chats");
         if (pr.unchanged) bits.push(pr.unchanged + " already searched");
       } else if (pr.of) bits.push(pr.conversations + " of " + pr.of);
-      if (pr.phase !== 'made' && pr.images) bits.push(pr.images + " photos found");
+      if (pr.phase !== 'made' && pr.images) bits.push(pr.images + ' ' + mediaNoun + ' found');
       if (pr.saved) bits.push(pr.saved + " saved");
+      if (pr.phase === 'photos' && pr.skipped) bits.push(pr.skipped + ' already saved');
+      if (pr.phase === 'photos' && pr.failed) bits.push(pr.failed + ' failed');
       if (pr.waitingUntil && pr.waitingUntil > Date.now()) bits.push("paused " + Math.max(1, Math.round((pr.waitingUntil - Date.now()) / 1000)) + "s — " + escapeHtml(pr.waitReason || "waiting"));
       line = span("warn-text", "● Importing…" + (bits.length ? " " + bits.join(" · ") : ""));
     }
     else if (s.status === "error") line = span("bad-text", "● " + escapeHtml(s.lastError || "Something went wrong"));
     else if (s.lastRun && s.lastRun.failed) line = span('warn-text', '● Import incomplete');
+    else if (s.lastRun && s.lastRun.cancelled) line = span('warn-text', '● Import stopped — saved files kept');
     else if (s.linked) line = span("ok-text", "● Connected");
     else line = span("muted", "● Not connected");
     status.innerHTML = line;
 
     const bits = [];
-    if (s.lastRun) bits.push((s.lastRun.saved ? s.lastRun.saved + " new" : "nothing new") + " of " + s.lastRun.images + " photos" + (s.lastRun.conversations ? " in " + s.lastRun.conversations + " chats" : "") + ", " + ago(s.lastRun.at));
+    if (s.lastRun) bits.push((s.lastRun.saved ? s.lastRun.saved + " new" : "nothing new") + " of " + s.lastRun.images + ' ' + mediaNoun + (s.lastRun.conversations ? " in " + s.lastRun.conversations + " chats" : "") + ", " + ago(s.lastRun.at));
     else if (s.linked) bits.push("No completed import recorded on this installation");
     if (s.status === 'scanning' && s.progress && s.progress.phase === 'chats') bits.push('Only photos are kept. Stopping loses nothing; it picks up where it left off.');
     if (s.lastRun && s.lastRun.failed) bits.push(s.lastRun.failed + ' failed — import again to retry missing items');
     if (s.lastRun && s.lastRun.firstError) bits.push(escapeHtml(s.lastRun.firstError));
+    if (s.lastRun && s.lastRun.cancelled) bits.push('Choose Import now to continue; files already saved are skipped.');
     if (s.enabled && s.nextScanAt && !busy) bits.push("next look " + inWhen(s.nextScanAt));
     if (!s.enabled && s.linked) bits.push("schedule off — use Import now");
     if (s.lastError && s.status !== "error") bits.push(escapeHtml(s.lastError));
@@ -588,6 +596,14 @@ function makeSourceCard(prefix, api, label) {
     bConnect.textContent = s.linked ? "Sign in again…" : "Connect " + label + "…";
     bScan.disabled = busy || !s.linked;
     bForget.disabled = busy || !s.linked;
+    if (bStop) { bStop.classList.toggle('hidden', s.status !== 'scanning'); bStop.disabled = !!s.stopping; }
+    // Older photos may predate the incremental gallery cursor. Reload the
+    // archive when an import finishes so those pictures become visible too.
+    const importAt = s.lastRun && (s.lastRun.finishedAt || s.lastRun.at);
+    if (!busy && importAt && importAt !== lastImport) {
+      if (prefix === 'gp' && s.lastRun.saved) { loadItems(true); fillSourceWhere(); }
+      lastImport = importAt;
+    }
     clearTimeout(timer); timer = null;
     if (busy) timer = setTimeout(refresh, 2500);
   }
@@ -598,6 +614,7 @@ function makeSourceCard(prefix, api, label) {
   };
   bConnect.addEventListener("click", async () => { bConnect.disabled = true; await post(api + "/connect"); refresh(); });
   bScan.addEventListener("click", async () => { bScan.disabled = true; await post(api + "/scan"); refresh(); });
+  if (bStop) bStop.addEventListener('click', async () => { bStop.disabled = true; await post(api + '/cancel'); refresh(); });
   bForget.addEventListener("click", async () => {
     if (!confirm("Forget the " + label + " account on this PC?" + String.fromCharCode(10, 10) + "The pictures already saved stay. To back up again you would sign in again.")) return;
     await post(api + "/disconnect"); refresh();
@@ -610,6 +627,7 @@ function makeSourceCard(prefix, api, label) {
 }
 const ChatGptSource = makeSourceCard("cgpt", "/api/chatgpt", "ChatGPT");
 const GeminiSource = makeSourceCard("gem", "/api/gemini", "Gemini");
+const GooglePhotosSource = makeSourceCard('gp', '/api/google-photos', 'Google Photos');
 // The pCloud card: the same shape as the account cards, fed by the backup
 // module rather than a login.
 const CloudCard = (function () {
@@ -646,7 +664,7 @@ const CloudCard = (function () {
   const stop = () => { clearInterval(modalTimer); modalTimer = null; clearTimeout(timer); timer = null; };
   return { refresh, start, stop };
 })();
-const SourceCards = [ChatGptSource, GeminiSource, CloudCard];
+const SourceCards = [ChatGptSource, GeminiSource, GooglePhotosSource, CloudCard];
 
 // Where each source's photos live and how much of them there is — said on
 // the card, in the same words the Where tab uses.
@@ -655,11 +673,13 @@ async function fillSourceWhere() {
   try { s = await (await fetch('/api/sources/summary')).json(); } catch (e) { return; }
   const line = (k) => {
     const n = s[k] ? s[k].count : 0, b = s[k] ? s[k].bytes : 0;
-    return (n ? n + ' photo' + (n === 1 ? '' : 's') + ' · ' + fmtBytes(b) : 'Nothing imported yet') + ' · saved to ' + escapeHtml(s.dirs.images)
+    return (n ? n + (k === 'googlephotos' ? ' media file' : ' photo') + (n === 1 ? '' : 's') + ' · ' + fmtBytes(b) : 'Nothing imported yet') + ' · saved to ' + escapeHtml(s.dirs.images)
+      + (k === 'googlephotos' ? ' (photos) and ' + escapeHtml(s.dirs.localVideos || s.dirs.videos) + ' (videos)' : '')
       + (s.dirs.cloudImages ? ' · copied to ' + escapeHtml(s.dirs.cloudImages) : '');
   };
   const c = document.getElementById('cgpt-where'); if (c) c.innerHTML = line('chatgpt');
   const g = document.getElementById('gem-where'); if (g) g.innerHTML = line('gemini');
+  const gp = document.getElementById('gp-where'); if (gp) gp.innerHTML = line('googlephotos');
   return s;
 }
 /* ---------- Clean up ------------------------------------------------------
@@ -819,6 +839,7 @@ const FIELDS = {
   aiProvider: 'text', aiModel: 'text', aiBaseUrl: 'text', aiMode: 'text', aiMonthlyBudget: 'int',
   chatgptEnabled: 'bool', chatgptScanHours: 'int', chatgptUploads: 'bool', chatgptGenerated: 'bool', chatgptSearchChats: 'bool',
   geminiEnabled: 'bool', geminiScanHours: 'int',
+  googlePhotosEnabled: 'bool', googlePhotosScanHours: 'int',
 };
 
 const S = {
@@ -939,6 +960,7 @@ async function loadSettings() {
       ['App data folder', p.home], ['Images', p.images], ['Videos', p.videos], ['Files', p.files],
       ['Message database', p.data], ['Settings file', p.settingsFile], ['Log file', p.log],
       ['WhatsApp link', p.auth], ['ChatGPT sign-in', p.chatgptProfile || '—'], ['Gemini sign-in', p.geminiProfile || '—'],
+      ['Google Photos sign-in', p.googlePhotosProfile || '—'],
       ['Cloud copies', p.cloudImages ? p.cloudImages + '  and  ' + p.cloudVideos : 'no cloud folder set'],
       ['Dashboard address', 'http://localhost:' + d.port],
     ].map(([k, v]) => `<tr><td class="k">${k}</td><td class="v">${escapeHtml(v)}</td></tr>`).join('');
@@ -959,11 +981,12 @@ async function loadStorage() {
     const s = await (await fetch('/api/storage')).json();
     let src = null;
     try { src = await (await fetch('/api/sources/summary')).json(); } catch (e) {}
-    const per = (k, label) => src && src[k] ? [label, `${fmtBytes(src[k].bytes)} · ${src[k].count} photos`] : null;
+    const per = (k, label) => src && src[k] ? [label, `${fmtBytes(src[k].bytes)} · ${src[k].count} ${k === 'googlephotos' ? 'media files' : 'photos'}`] : null;
     S.storage.innerHTML = [
       ['Images', `${fmtBytes(s.images.bytes)} · ${s.images.files} files`],
       per('whatsapp', '   from WhatsApp'), per('chatgpt', '   from ChatGPT'), per('gemini', '   from Gemini'),
       ['Videos', `${fmtBytes(s.videos.bytes)} · ${s.videos.files} files${s.videos.cloud ? ' (cloud folder)' : ''}`],
+      per('googlephotos', 'Google Photos (photos and videos)'),
       ['Voice, audio, documents', `${fmtBytes(s.files.bytes)} · ${s.files.files} files`],
       ['Messages & index', fmtBytes(s.data.bytes)],
       ['Total', fmtBytes(s.total)],
@@ -3785,7 +3808,8 @@ const SourceOverview = (() => {
   function source(name, s) {
     if (!s) return card(name, 'Unavailable', 'Could not read this source. Open Sources to retry.', 'connection', 'warn');
     let status = s.linked ? 'Connected' : 'Not connected';
-    let detail = s.linked ? 'Import images to keep a copy in your archive.' : 'Optional: sign in once to import your images.';
+    const noun = name === 'Google Photos' ? 'photos and videos' : 'images';
+    let detail = s.linked ? 'Import ' + noun + ' to keep a copy in your archive.' : 'Optional: sign in once to import your ' + noun + '.';
     let tone = s.linked ? 'ok' : '';
     if (s.status === 'error') { status = 'Needs attention'; detail = s.lastError || 'Open Sources to retry.'; tone = 'bad'; }
     else if (s.busy) {
@@ -3793,10 +3817,11 @@ const SourceOverview = (() => {
       status = s.status === 'connecting' ? 'Sign-in window open' : 'Importing'; tone = 'warn';
       detail = s.status === 'connecting' ? 'Complete sign-in in the window that opened.' : p.of && p.conversations < p.of
         ? 'Reading chat ' + p.conversations + ' of ' + p.of + '. ' + (p.images || 0) + ' images found; downloads follow.'
-        : 'Downloading images: ' + (p.saved || 0) + ' saved of ' + (p.images || 0) + ' found. You can keep browsing.';
+        : 'Importing ' + noun + ': ' + (p.saved || 0) + ' saved of ' + (p.images || 0) + ' found. You can keep browsing.';
     } else if (s.lastRun) {
       detail = 'Last import: ' + ago(s.lastRun.at) + '. ' + s.lastRun.saved + ' new, ' + s.lastRun.skipped + ' already saved.';
       if (s.lastRun.failed) { status = 'Import incomplete'; detail += ' ' + s.lastRun.failed + ' failed; open Sources for details and retry.'; tone = 'warn'; }
+      else if (s.lastRun.cancelled) { status = 'Import stopped'; detail += ' Run Import now to continue.'; tone = 'warn'; }
     }
     if (s.linked && !s.busy) detail += s.enabled ? ' Scheduled every ' + s.scanHours + ' hours.' : ' Manual imports.';
     return card(name, status, detail, 'connection', tone);
@@ -3805,12 +3830,12 @@ const SourceOverview = (() => {
     if (running || currentView !== 'overview') return;
     running = true;
     try {
-      const [wa, cg, gm] = await Promise.all(['/api/state', '/api/chatgpt/state', '/api/gemini/state'].map((url) => requestJson(url).catch(() => null)));
+      const [wa, cg, gm, gp] = await Promise.all(['/api/state', '/api/chatgpt/state', '/api/gemini/state', '/api/google-photos/state'].map((url) => requestJson(url).catch(() => null)));
       const ready = wa && wa.status === 'ready';
       const broken = wa && wa.health && !wa.health.ok;
       const syncing = wa && ['starting', 'authenticated'].includes(wa.status);
       update(root, card('WhatsApp', !wa ? 'Unavailable' : broken ? 'Needs attention' : ready ? 'Capturing' : wa.status === 'qr' ? 'Scan QR code' : 'Not connected',
-        !wa ? 'The capture engine is unavailable. Check the app or try again.' : broken ? 'Downloads are failing. Open Sources to check the connection.' : ready ? 'New messages and selected media are saved while this app runs.' : 'Link your phone to start saving WhatsApp messages and media.', !wa ? 'app' : ready || broken ? 'connection' : 'link', ready && !broken ? 'ok' : 'warn') + source('ChatGPT', cg) + source('Gemini', gm));
+        !wa ? 'The capture engine is unavailable. Check the app or try again.' : broken ? 'Downloads are failing. Open Sources to check the connection.' : ready ? 'New messages and selected media are saved while this app runs.' : 'Link your phone to start saving WhatsApp messages and media.', !wa ? 'app' : ready || broken ? 'connection' : 'link', ready && !broken ? 'ok' : 'warn') + source('ChatGPT', cg) + source('Gemini', gm) + source('Google Photos', gp));
       let title, detail, action, button;
       if (!wa) { title = 'The capture engine is unavailable'; detail = 'Open App settings to restart capture. Your saved files remain in their folders.'; action = 'app'; button = 'Open app settings'; }
       else if (broken) { title = 'WhatsApp capture needs attention'; detail = 'Some downloads are failing. Check the connection before relying on new captures.'; action = 'connection'; button = 'Check connection'; }

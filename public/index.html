@@ -612,6 +612,38 @@
             </div>
           </div>
 
+          <div class="sec" id="gp-sec">
+            <div class="sec-title">Google Photos <span class="tag">Preview</span></div>
+            <p class="muted small">Keep a copy of photos and videos from your Google Photos timeline in this library. Choose Connect, sign in with Google in the window that opens, then choose Import now.</p>
+            <div class="row"><span id="gp-status" class="muted">&hellip;</span></div>
+            <div class="row"><span id="gp-last" class="muted small"></span></div>
+            <div class="row wrap">
+              <button id="gp-connect" class="btn primary">Connect Google Photos&hellip;</button>
+              <button id="gp-scan" class="btn">Import now</button>
+              <button id="gp-stop" class="btn hidden">Stop import</button>
+              <button id="gp-disconnect" class="btn danger">Forget this account&hellip;</button>
+            </div>
+            <p class="muted small">Downloads the files Google Photos offers, with duplicate detection. Large libraries can take hours; you can stop and run again to skip files already saved. Dates use Google&rsquo;s photo label when readable, otherwise the import date. Original file metadata is kept.</p>
+            <p class="muted small">This uses the Google Photos website, so changes to that website can interrupt imports. Only the main timeline is read; archived photos, Locked Folder, trash and photos only in shared albums are excluded. Sync copies files into WhatsBackUp; it does not upload or delete anything in Google Photos.</p>
+            <div class="row"><span id="gp-where" class="muted small"></span></div>
+            <div class="sec-title" style="margin-top:14px;font-size:12px">When</div>
+            <label class="row toggle">
+              <input type="checkbox" id="set-googlePhotosEnabled" /><span class="switch"></span>
+              <span>Import new photos and videos on a schedule</span>
+            </label>
+            <div class="row">
+              <label class="muted small">Look for new media every
+                <select id="set-googlePhotosScanHours" class="txt" style="max-width:160px;margin-left:8px">
+                  <option value="1">hour</option>
+                  <option value="3">3 hours</option>
+                  <option value="6">6 hours</option>
+                  <option value="12">12 hours</option>
+                  <option value="24">day</option>
+                </select>
+              </label>
+            </div>
+          </div>
+
           <div class="sec" id="cloud-sec">
             <div class="sec-title">Cloud folder</div>
             <p class="muted small">A second copy of your media. File sizes are checked here; check your cloud app to confirm uploads have finished. Message text stays on this PC.</p>

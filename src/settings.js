@@ -71,6 +71,8 @@ const DEFAULTS = {
   chatgptSearchChats: true,  // also look inside older chats for photos the lists do not reach
   geminiEnabled: false,
   geminiScanHours: 6,
+  googlePhotosEnabled: false,
+  googlePhotosScanHours: 6,
   aiChainEnabled: false,
   aiMode: 'assist',          // manual | assist (manual, then auto for new items) | auto
   aiAnalyseImages: true,

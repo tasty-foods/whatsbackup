@@ -11,3 +11,6 @@ build/
 .local-backup-installed-1.1.0/
 
 .dev-home/
+google-photos-session/
+output/playwright/
+.playwright-cli/
