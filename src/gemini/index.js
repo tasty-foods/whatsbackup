@@ -64,7 +64,11 @@ async function launch({ headed = false } = {}) {
   fs.mkdirSync(PROFILE_DIR, { recursive: true });
   // Google's sign-in refuses a browser that announces itself as automated.
   // These are the two flags that announcement rides on.
-  const args = ['--disable-gpu', '--no-first-run', '--no-default-browser-check', '--disable-blink-features=AutomationControlled'];
+  // Tabs left by an interrupted session would all open again (30 of them,
+  // once); see browser-profile.js.
+  const profile = require('../browser-profile');
+  profile.forgetTabs(PROFILE_DIR);
+  const args = ['--disable-gpu', ...profile.QUIET_ARGS, '--disable-blink-features=AutomationControlled'];
   if (process.env.WB_NO_SANDBOX === '1') args.push('--no-sandbox', '--disable-setuid-sandbox');
   const opts = {
     headless: !headed, args, userDataDir: PROFILE_DIR,
