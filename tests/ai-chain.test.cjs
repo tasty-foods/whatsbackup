@@ -96,7 +96,8 @@ test('items the old runner failed for "no provider" are put back once, other fai
   const ids = h.db.prepare('SELECT id, ref_id FROM ai_jobs ORDER BY id').all();
   h.db.prepare("UPDATE ai_jobs SET state = 'error', attempts = 3, error = 'No provider is available — every one is out of quota or missing a key.' WHERE id = ?").run(ids[0].id);
   h.db.prepare("UPDATE ai_jobs SET state = 'error', attempts = 3, error = 'The file is corrupt.' WHERE id = ?").run(ids[1].id);
-  assert.equal(h.runner.requeueStranded(), 1);
+  h.db.prepare("UPDATE ai_jobs SET state = 'skipped', error = 'no provider left that can do this (groq unavailable)' WHERE id = ?").run(ids[2].id);
+  assert.equal(h.runner.requeueStranded(), 2, 'the old quota failure and the old quota skip');
   assert.equal(h.db.prepare('SELECT state FROM ai_jobs WHERE id = ?').get(ids[0].id).state, 'queued');
   assert.equal(h.db.prepare('SELECT attempts FROM ai_jobs WHERE id = ?').get(ids[0].id).attempts, 0);
   assert.equal(h.db.prepare('SELECT state FROM ai_jobs WHERE id = ?').get(ids[1].id).state, 'error', 'a real failure stays a failure');

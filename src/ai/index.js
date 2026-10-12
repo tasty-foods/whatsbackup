@@ -883,7 +883,7 @@ function requeueStranded() {
   strandedChecked = true;
   try {
     const n = ai.db().prepare(`UPDATE ai_jobs SET state = 'queued', error = NULL, attempts = 0, updated_at = ?
-      WHERE state = 'error' AND (error LIKE 'No provider is available%' OR error LIKE 'no provider left%'
+      WHERE state IN ('error', 'skipped') AND (error LIKE 'No provider is available%' OR error LIKE 'no provider left%'
         OR error LIKE '%is rate-limiting this key%' OR error LIKE 'Waiting for free AI quota%'
         OR error LIKE '%Thinking level%not supported%')`).run(Date.now()).changes;
     if (n) console.log(`[ai] ${n} item${n === 1 ? '' : 's'} that failed only because every provider was resting ${n === 1 ? 'is' : 'are'} back in the queue`);
