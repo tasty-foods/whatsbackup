@@ -781,7 +781,7 @@
 
             <div class="sec" id="ai-chain-sec" style="margin-top:18px">
               <div class="sec-title">Fallback chain</div>
-              <p class="muted small">Free tiers run out. Add more providers and the sorting moves down the list when one is exhausted, instead of stopping. Each needs its own key: pick the provider above, paste its key, then add it here.</p>
+              <p class="muted small">Free tiers run out — every day, by design. When one model's allowance is used up the next model or provider takes over; when all of them are resting, sorting waits and resumes by itself. Nothing is marked failed for running out of quota.</p>
               <label class="row toggle">
                 <input type="checkbox" id="set-aiChainEnabled" /><span class="switch"></span>
                 <span>Move to the next provider when one runs out</span>
@@ -790,7 +790,9 @@
               <div class="row">
                 <select id="ai-chain-pick" class="txt" style="max-width:230px"></select>
                 <button class="btn" id="btn-chain-add">Add to chain</button>
+                <button class="btn" id="btn-chain-test">Test every provider</button>
               </div>
+              <div class="row"><span id="chain-test-status" class="muted small"></span></div>
             </div>
           </div>
 

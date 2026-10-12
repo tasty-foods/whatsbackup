@@ -3,13 +3,28 @@
 // `complete({...})` and gets back parsed JSON plus token counts; it never
 // learns which vendor answered.
 const { PRESETS, costOf, capCostOf } = require('./presets');
+const limits = require('./limits');
 
 const TIMEOUT_MS = 90000;
+
+// The thinking setting each Gemini model accepts, learned from its refusals.
+// Google's compatibility table says the 3-series Flash models take "minimal";
+// on 2026-10-12 gemini-3.8-flash answered "Thinking level MINIMAL is not
+// supported for this model" and failed every photo it was given. So each
+// model starts at its smallest setting and steps up once when refused, and
+// remembers the step for the rest of the session.
+const effortLadder = (model) => (/^gemini-2\.5-flash/i.test(model) ? ['none', 'low', null]
+  : /^gemini-3[\d.]*-flash/i.test(model) ? ['minimal', 'low', null] : [null]);
+const effortStep = new Map();                 // model -> index into its ladder
+// Thinking is paid out of the same token allowance as the answer. When it
+// cannot be switched off, room is added on top, so a 400-token answer is not
+// cut short by 600 tokens of thought. Free tiers do not charge per token.
+const THINKING_ROOM = 1536;
 
 class AiError extends Error {
   constructor(message, { kind = 'error', status = 0, retryable = false } = {}) {
     super(message);
-    this.kind = kind;           // auth | rate | network | cert | model | schema | error
+    this.kind = kind;           // auth | billing | rate | busy | timeout | network | cert | model | schema | length | error | wait
     this.status = status;
     this.retryable = retryable;
   }
@@ -34,7 +49,7 @@ function wrapNetworkError(e, label) {
     return new AiError(`Nothing is listening at ${label}. If this is a local AI, start it first.`, { kind: 'down' });
   }
   if (/ABORT_ERR|AbortError/i.test(String(e && e.name) + code)) {
-    return new AiError(`${label} took too long to answer.`, { kind: 'network', retryable: true });
+    return new AiError(`${label} took too long to answer.`, { kind: 'timeout', retryable: true });
   }
   return new AiError(`Could not reach ${label}: ${(e && e.message) || code || 'unknown error'}`, { kind: 'network', retryable: true });
 }
@@ -61,13 +76,24 @@ function skeletonFor(schema) {
   return '<' + hint + '>';
 }
 
-function statusToError(status, body, label) {
+// The refusal is read in full (limits.js), because "429" alone cannot say
+// whether to wait a minute or until tomorrow, and a 400 can be a bad key or an
+// empty account rather than anything wrong with the item.
+function statusToError(status, body, label, headers) {
   const detail = typeof body === 'string' ? body.slice(0, 300) : JSON.stringify(body || {}).slice(0, 300);
-  if (status === 401 || status === 403) return new AiError(`${label} rejected the API key.`, { kind: 'auth', status });
-  if (status === 404) return new AiError(`${label} doesn't know that model name.`, { kind: 'model', status });
-  if (status === 429) return new AiError(`${label} is rate-limiting this key — slowing down.`, { kind: 'rate', status, retryable: true });
-  if (status >= 500) return new AiError(`${label} had a server error.`, { kind: 'network', status, retryable: true });
-  return new AiError(`${label} refused the request (${status}). ${detail}`, { kind: 'error', status });
+  const refusal = limits.readRefusal(status, body, headers);
+  const make = (message, opts) => { const e = new AiError(message, { status, ...opts }); e.refusal = refusal; return e; };
+  if (refusal.billing) return make(`${label} says this account has no credit left.`, { kind: 'billing' });
+  if (status === 401 || refusal.badKey) return make(`${label} rejected the API key.`, { kind: 'auth' });
+  if (status === 403) return make(/model/i.test(detail) ? `${label} does not let this key use that model.` : `${label} rejected the API key.`, { kind: 'auth' });
+  if (status === 404) return make(`${label} doesn't know that model name.`, { kind: 'model' });
+  if (status === 429) {
+    const when = refusal.scope === 'day' ? " today's free allowance is used up" : refusal.scope === 'minute' ? ' too many requests this minute' : ' asked to slow down';
+    return make(`${label}:${when}.`, { kind: 'rate', retryable: true });
+  }
+  if (refusal.busy) return make(`${label} is overloaded right now.`, { kind: 'busy', retryable: true });
+  if (status >= 500) return make(`${label} had a server error.`, { kind: 'network', retryable: true });
+  return make(`${label} refused the request (${status}). ${detail}`, { kind: 'error' });
 }
 
 // Models disagree about how much JSON chatter they wrap around an answer.
@@ -102,7 +128,7 @@ async function completeAnthropic(cfg, req) {
       ...(req.schema ? { output_config: { format: { type: 'json_schema', schema: req.schema } } } : {}),
     }, { signal: req.signal });
   } catch (e) {
-    if (e && typeof e.status === 'number') throw statusToError(e.status, e.message, 'Anthropic');
+    if (e && typeof e.status === 'number') throw statusToError(e.status, (e.error ? JSON.stringify(e.error) + ' ' : '') + (e.message || ''), 'Anthropic', e.headers);
     throw wrapNetworkError(e, 'Anthropic');
   }
 
@@ -155,7 +181,15 @@ async function completeOpenAi(cfg, req) {
   // shape is fixed and there is nothing to reason about. Pro and 3-series models
   // refuse to have it turned off, so they are not asked.
   const isGemini = /(^|\.)generativelanguage\.googleapis\.com$/i.test(label);
-  if (isGemini && /^gemini-2\.5-flash/i.test(cfg.model || '')) body.reasoning_effort = 'none';
+  const ladder = isGemini ? effortLadder(cfg.model || '') : [null];
+  let step = Math.min(effortStep.get(cfg.model) || 0, ladder.length - 1);
+  const applyEffort = () => {
+    const effort = ladder[step];
+    if (effort) body.reasoning_effort = effort; else delete body.reasoning_effort;
+    const room = ladder.length > 1 && effort !== 'none' && effort !== 'minimal' ? THINKING_ROOM : 0;
+    if (openAiProper) body.max_completion_tokens = limit + room; else body.max_tokens = limit + room;
+  };
+  applyEffort();
 
   if (req.schema) {
     body.response_format = cfg.jsonSchema === false
@@ -183,20 +217,30 @@ async function completeOpenAi(cfg, req) {
   // The timeout has to cover reading the body as well as getting the headers,
   // and it has to survive a caller passing its own cancel signal — otherwise a
   // server that accepts the connection and then goes quiet hangs the run.
-  const timer = new AbortController();
-  const to = setTimeout(() => timer.abort(), TIMEOUT_MS);
-  if (req.signal) req.signal.addEventListener('abort', () => timer.abort(), { once: true });
   let res, raw;
-  try {
-    res = await fetch(`${base}/chat/completions`, {
-      method: 'POST', headers, body: JSON.stringify(body), signal: timer.signal,
-    });
-    raw = await res.text();
-  } catch (e) {
-    throw wrapNetworkError(e, label);
-  } finally { clearTimeout(to); }
+  for (;;) {
+    const timer = new AbortController();
+    const to = setTimeout(() => timer.abort(), TIMEOUT_MS);
+    if (req.signal) req.signal.addEventListener('abort', () => timer.abort(), { once: true });
+    try {
+      res = await fetch(`${base}/chat/completions`, {
+        method: 'POST', headers, body: JSON.stringify(body), signal: timer.signal,
+      });
+      raw = await res.text();
+    } catch (e) {
+      throw wrapNetworkError(e, label);
+    } finally { clearTimeout(to); }
+    // Refused for the thinking setting, not for the item: one step up, again.
+    if (res.status === 400 && step < ladder.length - 1 && /thinking[ _](level|budget|config)|reasoning[_ ]effort/i.test(raw)) {
+      step++;
+      effortStep.set(cfg.model, step);
+      applyEffort();
+      continue;
+    }
+    break;
+  }
 
-  if (!res.ok) throw statusToError(res.status, raw, label);
+  if (!res.ok) throw statusToError(res.status, raw, label, res.headers);
 
   let payload;
   try { payload = JSON.parse(raw); } catch (_) {
@@ -238,7 +282,7 @@ async function transcribeOpenAi(cfg, req) {
   } catch (e) {
     throw wrapNetworkError(e, label);
   } finally { clearTimeout(to); }
-  if (!res.ok) throw statusToError(res.status, raw, label);
+  if (!res.ok) throw statusToError(res.status, raw, label, res.headers);
   let payload;
   try { payload = JSON.parse(raw); } catch (_) { payload = { text: raw }; }
   const text = String(payload.text || '').trim();
@@ -284,7 +328,7 @@ async function embedOpenAi(cfg, texts, { inputType } = {}) {
   } catch (e) {
     throw wrapNetworkError(e, label);
   } finally { clearTimeout(to); }
-  if (!res.ok) throw statusToError(res.status, raw, label);
+  if (!res.ok) throw statusToError(res.status, raw, label, res.headers);
   let payload;
   try { payload = JSON.parse(raw); } catch (_) { throw new AiError(`${label} returned something that isn't an API response.`, { kind: 'error' }); }
   const rows = Array.isArray(payload.data) ? payload.data.slice().sort((a, b) => (a.index || 0) - (b.index || 0)) : [];
@@ -315,12 +359,24 @@ async function complete(cfg, req) {
   const api = preset.api;
   if (api === 'anthropic' && !cfg.apiKey) throw new AiError('No API key has been set.', { kind: 'auth' });
 
+  // A steady pace per provider and model, so free per-minute limits are
+  // rarely hit at all; told "too many", the gap widens by itself.
+  const lane = cfg.provider + '|' + cfg.model;
+  if (api !== 'demo' && !preset.local) await limits.pace(lane, preset.minIntervalMs || 0);
   const started = Date.now();
   // `local` is a property of the provider, not of whatever the caller passed —
   // reading it off cfg let an overridden provider look remote and be handed a key.
-  const out = api === 'demo' ? await require('./demo').complete(cfg, req)
-    : api === 'anthropic' ? await completeAnthropic(cfg, req)
-      : await completeOpenAi({ ...preset, ...cfg, local: !!preset.local }, req);
+  let out;
+  try {
+    out = api === 'demo' ? await require('./demo').complete(cfg, req)
+      : api === 'anthropic' ? await completeAnthropic(cfg, req)
+        : await completeOpenAi({ ...preset, ...cfg, local: !!preset.local }, req);
+  } catch (e) {
+    if (e && e.kind === 'rate' && !(e.refusal && e.refusal.scope === 'day')) limits.slower(lane);
+    throw e;
+  }
+  limits.faster(lane);
+  limits.noteSuccess(cfg.provider, cfg.model);
   out.ms = Date.now() - started;
   out.cost = costOf(cfg.provider, cfg.model, out.usage.in, out.usage.out);
   out.costCap = capCostOf(cfg.provider, cfg.model, out.usage.in, out.usage.out);

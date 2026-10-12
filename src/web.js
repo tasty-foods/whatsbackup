@@ -551,6 +551,11 @@ function createApp() {
   app.get('/api/ai/estimate', (req, res) => {
     try { res.json(ai.estimate()); } catch (e) { res.status(500).json({ error: e.message }); }
   });
+  // Every provider in the chain, each with its own saved key at its own address.
+  app.post('/api/ai/probe-chain', sameOrigin, async (req, res) => {
+    try { res.json({ results: await ai.probeChain() }); }
+    catch (e) { res.status(500).json({ error: e.message }); }
+  });
   app.post('/api/ai/probe', sameOrigin, async (req, res) => {
     try { res.json(await ai.probe(req.body || {})); }
     catch (e) { res.status(500).json({ reachable: { ok: false, detail: e.message } }); }

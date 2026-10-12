@@ -11,7 +11,10 @@
 const { complete, AiError } = require('./provider');
 
 // 8x8 solid red PNG, 75 bytes.
-const RED_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEklEQVR4nGP4z8CAFWEXHbQSACj/P8Fu7N9hAAAAAElFTkSuQmCC';
+// A 64×64 red square. It was 8×8, and Groq refuses anything under 32 pixels
+// a side ("Image must have at least 32 pixels in each dimension") — which
+// marked a model that reads photos perfectly well as blind.
+const RED_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAb0lEQVR4nO3PAQkAAAyEwO9feoshgnABdLep8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3IPanc8OLDQitxAAAAAElFTkSuQmCC';
 
 const OK_SCHEMA = {
   type: 'object',
@@ -39,6 +42,8 @@ async function probe(cfg) {
   } catch (e) {
     out.reachable = step(false, e.message);
     out.errorKind = e.kind;
+    // Kept off the JSON, for whoever asked to decide whether to rest it.
+    Object.defineProperty(out, 'error', { value: e, enumerable: false });
     out.json = step(false, 'not tested');
     out.vision = step(false, 'not tested');
     return out;
@@ -81,10 +86,16 @@ async function probe(cfg) {
     out.vision = saysRed
       ? step(true, 'the model can see images')
       : step(false, `shown a red square, it said "${said.slice(0, 40)}" — image sorting will be unavailable`);
+    out.visionVerdict = saysRed ? 'yes' : 'no';
   } catch (e) {
-    out.vision = step(false, e.kind === 'model' || e.status === 400
-      ? 'this model cannot accept images — image sorting will be unavailable'
-      : e.message);
+    // Only a refusal of the image itself says the model is blind. Running out
+    // of quota, a busy server or a dropped connection on this third request
+    // says nothing about its eyes — on 2026-10-12 a daily limit reached here
+    // marked Gemini and Groq blind, and every photo would have skipped them.
+    const aboutImages = (e.kind === 'model' || e.status === 400) && e.kind !== 'billing' && e.kind !== 'auth';
+    out.vision = step(false, aboutImages ? 'this model cannot accept images — image sorting will be unavailable (' + String(e.message || '').slice(0, 200) + ')' : e.message);
+    out.visionVerdict = aboutImages ? 'no' : 'unknown';
+    if (!aboutImages) Object.defineProperty(out, 'visionError', { value: e, enumerable: false });
   }
 
   return out;

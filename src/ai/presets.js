@@ -21,6 +21,7 @@ const PRESETS = {
     keyHint: 'Starts with sk-ant- · console.anthropic.com',
     models: ['claude-haiku-4-5', 'claude-sonnet-5', 'claude-opus-5'],
     defaultModel: 'claude-haiku-4-5',
+    minIntervalMs: 1200,
     vision: true,
     jsonSchema: true,
   },
@@ -32,6 +33,7 @@ const PRESETS = {
     keyHint: 'Starts with sk- · platform.openai.com',
     models: ['gpt-5-mini', 'gpt-5'],
     defaultModel: 'gpt-5-mini',
+    minIntervalMs: 300,
     vision: true,
     jsonSchema: true,
     audio: { model: 'whisper-1' },
@@ -43,8 +45,22 @@ const PRESETS = {
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
     keyRequired: true,
     keyHint: 'aistudio.google.com → Get API key',
-    models: ['gemini-2.5-flash', 'gemini-2.5-pro'],
+    models: ['gemini-2.5-flash', 'gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-3.6-flash', 'gemini-3.1-flash-lite', 'gemini-2.5-flash-lite', 'gemini-2.5-pro'],
     defaultModel: 'gemini-2.5-flash',
+    // Google counts free requests per model, per day (reset at midnight
+    // Pacific), so when one Flash model's allowance is spent the next one's is
+    // still whole — on the same key. Checked 2026-10-12: 3.8 Flash and 3.5
+    // Flash-Lite are the current ones; 2.0 is shut down; 2.5 stays available to
+    // accounts already using it. A model a key cannot use answers 404 or
+    // "limit: 0" once and then rests. All of them read images.
+    // Lite models first: on 2026-10-12 3.5 Flash-Lite labelled a photo every
+    // few seconds while 3.8 Flash took longer than 90 s on a document and ran
+    // out of its per-minute allowance after three requests.
+    fallbacks: {
+      vision: ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-2.5-flash-lite', 'gemini-3.8-flash', 'gemini-3.6-flash'],
+      text: ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-2.5-flash-lite', 'gemini-3.8-flash', 'gemini-3.6-flash'],
+    },
+    minIntervalMs: 4500,
     vision: true,
     jsonSchema: true,
     embeddings: { model: 'gemini-embedding-001', dims: 768 },
@@ -61,6 +77,7 @@ const PRESETS = {
     // model name is changed to a multimodal one — which the probe will detect.
     models: ['deepseek-ai/deepseek-v4-flash-0731'],
     defaultModel: 'deepseek-ai/deepseek-v4-flash-0731',
+    minIntervalMs: 1500,
     vision: false,
     jsonSchema: true,
     embeddings: { model: 'nvidia/nv-embedqa-e5-v5', dims: 1024, inputType: true },
@@ -77,6 +94,14 @@ const PRESETS = {
     // six hours, so the menu is worth more than a single hard-coded default.
     models: ['google/gemma-4-31b-it:free', 'google/gemma-4-26b-a4b-it:free', 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free'],
     defaultModel: 'google/gemma-4-31b-it:free',
+    // The free daily allowance is the account's, not the model's (50 a day,
+    // 1,000 once 10 credits have ever been bought), so these add availability
+    // when one model's host is busy, not extra allowance.
+    fallbacks: {
+      vision: ['google/gemma-4-26b-a4b-it:free', 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free'],
+      text: ['google/gemma-4-26b-a4b-it:free'],
+    },
+    minIntervalMs: 3500,
     vision: true,
     jsonSchema: true,
   },
@@ -92,6 +117,13 @@ const PRESETS = {
     // llamas stay on the list because they are quicker on conversations.
     models: ['qwen/qwen3.8-27b', 'qwen/qwen3.6-27b', 'llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'openai/gpt-oss-120b'],
     defaultModel: 'qwen/qwen3.8-27b',
+    // Groq counts per model too. Photos need one of the two that read images;
+    // conversations and topics can use any of them.
+    fallbacks: {
+      vision: ['qwen/qwen3.6-27b'],
+      text: ['llama-3.3-70b-versatile', 'openai/gpt-oss-120b', 'qwen/qwen3.6-27b', 'llama-3.1-8b-instant'],
+    },
+    minIntervalMs: 2500,
     vision: true,
     jsonSchema: true,
     // Whisper on Groq is on the free tier: the one place in the chain that

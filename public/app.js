@@ -2023,7 +2023,9 @@ const AI = (function () {
       $$('ai-bar').style.width = Math.round(((s.done + s.failed + s.skipped) / total) * 100) + '%';
       const spend = s.cost ? ` · $${s.cost.toFixed(3)} so far` : '';
       if (s.running) {
-        $$('ai-run-status').textContent = s.phase === 'arranging'
+        $$('ai-run-status').textContent = s.phase === 'waiting'
+          ? `${s.message || 'Waiting for free AI quota.'} ${s.done} done so far.`
+          : s.phase === 'arranging'
           ? `Working out the ${s.current || 'groups'}…`
           : s.phase === 'finals' ? 'Looking for versions of the same thing…'
           : `Looked at ${s.done} of ${total}${s.skipped ? `, skipped ${s.skipped}` : ''}${s.failed ? `, ${s.failed} failed` : ''}${spend}${s.current ? ' · ' + s.current : ''}`;
@@ -2999,6 +3001,41 @@ const Chain = (function () {
   // model name. Used to keep a key out of the model box.
   const KEYISH = /^(sk-|gsk_|AIza[0-9A-Za-z_-]|xai-|nvapi-|hf_|Bearer )/i;
   const looksLikeKey = (v) => KEYISH.test(String(v || '').trim());
+  // "until 09:00", "45 s", "until tomorrow 09:00" — and why.
+  function restLabel(until, why) {
+    const ms = until - Date.now();
+    const when = ms < 120000 ? Math.max(1, Math.round(ms / 1000)) + ' s'
+      : 'until ' + (new Date(until).toDateString() !== new Date().toDateString() ? 'tomorrow ' : '') + new Date(until).toTimeString().slice(0, 5);
+    return 'resting ' + when + (why ? ' — ' + why : '');
+  }
+  // A model name that plainly belongs to another provider would fail every
+  // call — the Anthropic row once held OpenRouter's "google/gemma-…:free".
+  function foreignModelFor(who, m) {
+    if (!m) return '';
+    if (who === 'anthropic' && !/^claude/i.test(m)) return 'Anthropic models start with "claude" — for example claude-haiku-4-5.';
+    if (who === 'gemini' && !/^(models\/)?(gemini|gemma|learnlm)/i.test(m)) return 'Gemini models start with "gemini" — for example gemini-2.5-flash.';
+    if (who === 'openai' && /[/:]/.test(m)) return 'That looks like an OpenRouter model name; OpenAI models look like gpt-5-mini.';
+    return '';
+  }
+  const lastProbe = {};                 // provider -> { ok, text } from "Test every provider"
+  async function testAll(btn, out) {
+    btn.disabled = true; out.textContent = 'Testing each provider with its own key…';
+    try {
+      const r = await requestJson('/api/ai/probe-chain', { method: 'POST' });
+      for (const p of r.results || []) {
+        if (p.missingKey) { lastProbe[p.provider] = { ok: false, text: 'No key yet — paste one in the box under this row.' }; continue; }
+        if (p.allResting) { lastProbe[p.provider] = { ok: false, text: 'Every model is ' + restLabel(p.restingUntil, p.why) + '. It is used again then, by itself.' }; continue; }
+        const ok = !!(p.reachable && p.reachable.ok);
+        lastProbe[p.provider] = ok
+          ? { ok: true, text: '✓ answers' + (p.vision && p.vision.ok ? ' and reads photos' : ' — but cannot read photos, so only conversations go to it') + ' (' + p.model + (p.fallback ? ', a spare model' : '') + ')' }
+          : { ok: false, text: '✗ ' + (p.why ? p.why : (p.reachable && p.reachable.detail) || 'did not answer') + (p.restingUntil ? ' · ' + restLabel(p.restingUntil, '') : '') };
+      }
+      const good = (r.results || []).filter((p) => p.reachable && p.reachable.ok).length;
+      out.textContent = good + ' of ' + (r.results || []).length + ' providers answered.';
+    } catch (e) { out.textContent = 'Could not test: ' + e.message; }
+    btn.disabled = false;
+    refresh();
+  }
   function say(where, text, bad) {
     let el = where.querySelector('.ck-msg');
     if (!el) {
@@ -3027,10 +3064,8 @@ const Chain = (function () {
       let tag = '<span class="st ready">ready</span>';
       if (c.keyRequired && !c.hasKey) tag = '<span class="st nokey">needs a key</span>';
       else if (c.needsModel) tag = '<span class="st nokey">needs a model</span>';
-      else if (c.restingUntil) {
-        const mins = Math.max(1, Math.round((c.restingUntil - Date.now()) / 60000));
-        tag = `<span class="st resting">paused ${mins} min (limit reached)</span>`;
-      } else if (c.blind) tag = '<span class="st blind">can’t see photos</span>';
+      else if (c.restingUntil) tag = `<span class="st resting" title="${escapeHtml(c.restWhy || '')}">${escapeHtml(restLabel(c.restingUntil, c.restWhy))}</span>`;
+      else if (c.blind) tag = '<span class="st blind">can’t see photos</span>';
       const first = i === 0;
       const modelCell = c.editableModel
         ? `<input class="mdl chain-model" value="${escapeHtml(c.model || '')}" placeholder="model name for this provider" spellcheck="false">`
@@ -3052,6 +3087,8 @@ const Chain = (function () {
           if (box && box.classList.contains('chain-key-row')) box.querySelector('input').focus();
           return;
         }
+        const foreign = foreignModelFor(c.provider, mi.value.trim());
+        if (foreign) { mi.value = c.model || ''; say(row, foreign, true); return; }
         const s = await (await fetch('/api/settings')).json();
         const models = { ...(s.settings.aiChainModels || {}) };
         models[c.provider] = mi.value.trim();
@@ -3065,14 +3102,29 @@ const Chain = (function () {
         refresh();
       });
       list.appendChild(row);
+      const spares = (c.models || []).filter((m) => m.model !== c.model);
+      if (spares.length) {
+        const line = document.createElement('div');
+        line.className = 'chain-models';
+        line.innerHTML = '<span class="ord"></span><span>Also uses, when the first runs out: ' + spares.map((m) => escapeHtml(m.model) + (m.restingUntil ? ' <em title="' + escapeHtml(m.why) + '">(' + escapeHtml(restLabel(m.restingUntil, m.why)) + ')</em>' : '')).join(', ') + '</span>';
+        list.appendChild(line);
+      }
+      const probe = lastProbe[c.provider];
+      if (probe) {
+        const line = document.createElement('div');
+        line.className = 'chain-probe ' + (probe.ok ? 'ok' : 'bad');
+        line.innerHTML = '<span class="ord"></span><span>' + escapeHtml(probe.text) + '</span>';
+        list.appendChild(line);
+      }
 
       // The key for this provider, asked for where the gap is. Saving it here
       // means never having to change the provider above and change it back.
-      if (c.keyRequired && !c.hasKey) {
+      const keyTrouble = c.hasKey && c.restingUntil && /key was refused|no credit/i.test(c.restWhy || '');
+      if (c.keyRequired && (!c.hasKey || keyTrouble)) {
         const kr = document.createElement('div');
         kr.className = 'chain-key-row';
         kr.innerHTML = `<span class="ord"></span>
-          <input type="password" class="ck" placeholder="paste the ${escapeHtml(c.provider)} key" autocomplete="off" spellcheck="false">
+          <input type="password" class="ck" placeholder="${keyTrouble ? 'paste a new ' + escapeHtml(c.provider) + ' key' : 'paste the ' + escapeHtml(c.provider) + ' key'}" autocomplete="off" spellcheck="false">
           <button class="btn small ck-save">Save key</button>
           <span class="ck-msg"></span>`;
         const input = kr.querySelector('input');
@@ -3098,6 +3150,9 @@ const Chain = (function () {
       ? offer.map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.label || p.id)}</option>`).join('')
       : '<option value="">every provider is already in the chain</option>';
   }
+
+  const testBtn = document.getElementById('btn-chain-test');
+  if (testBtn) testBtn.addEventListener('click', () => testAll(testBtn, document.getElementById('chain-test-status')));
 
   if (add) add.addEventListener('click', async () => {
     const who = pick.value;

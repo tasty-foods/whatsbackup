@@ -23,6 +23,7 @@ function harness(t, work) {
     './label': { eachCandidate: fn => records.forEach(r => fn(r, 'image', null)), currentLabel: () => false, census: () => ({}), labelImage: async (cfg, rec) => { calls.push(rec.id); return work(cfg, rec); } },
     './arrange': {}, './probe': {}, './presets': { PRESETS: { test: { keyRequired: false } } }, './provider': { AiError },
     '../content/documents': { status: () => ({ running: false }) },
+    './limits': require('../src/ai/limits').create({ file: null }),
   };
   return { runner: load('index.js', deps), restart: () => load('index.js', deps), prefs, calls, ledger };
 }
