@@ -187,6 +187,17 @@ const PRICES = {
   'claude-sonnet-5': { in: 3, out: 15 },
   'claude-opus-5': { in: 5, out: 25 },
   'gemini-2.5-flash': { in: 0.30, out: 2.50 },
+  // Google's paid Standard rates, read 2026-10-12. 3.8 and 3.6 Flash double on
+  // 2027-01-01. On a free-tier key all of these cost nothing (see free plans in
+  // limits.js); these only matter to a key with billing.
+  'gemini-3.8-flash': { in: 0.75, out: 3.75 },
+  'gemini-3.6-flash': { in: 0.75, out: 3.75 },
+  'gemini-3.5-flash-lite': { in: 0.30, out: 2.50 },
+  'gemini-3.1-flash-lite': { in: 0.25, out: 1.50 },
+  'gemini-2.5-flash-lite': { in: 0.10, out: 0.40 },
+  // Groq's developer-plan rates, read 2026-10-12; its free plan costs nothing.
+  'qwen/qwen3.8-27b': { in: 0.80, out: 4.00 },
+  'openai/gpt-oss-120b': { in: 0.15, out: 0.60 },
   'gemini-2.5-pro': { in: 1.25, out: 10 },     // the ≤200k-prompt tier; our calls never exceed it
   'gpt-5-mini': { in: 0.25, out: 2 },
   'gpt-5': { in: 1.25, out: 10 },
@@ -202,8 +213,12 @@ const AUDIO_PRICES_PER_MIN = {
   'whisper-large-v3': 0.00185,
 };
 
+// OpenRouter's ":free" variants are free by definition.
+const freeModel = (model) => /:free$/i.test(String(model || ''));
+
 function priceFor(provider, model) {
   if (PRESETS[provider] && PRESETS[provider].local) return { in: 0, out: 0, local: true };
+  if (freeModel(model)) return { in: 0, out: 0, free: true };
   return PRICES[model] || null;
 }
 
@@ -222,6 +237,7 @@ const CAP_FALLBACK = { in: 5, out: 25 };
 
 function capCostOf(provider, model, tokensIn, tokensOut) {
   if (PRESETS[provider] && PRESETS[provider].local) return 0;
+  if (freeModel(model)) return 0;
   const p = PRICES[model] || CAP_FALLBACK;
   return (tokensIn / 1e6) * p.in + (tokensOut / 1e6) * p.out;
 }

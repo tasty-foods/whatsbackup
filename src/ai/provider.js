@@ -253,6 +253,7 @@ async function completeOpenAi(cfg, req) {
     json: req.schema ? parseJson(text) : null,
     text,
     usage: { in: usage.prompt_tokens || 0, out: usage.completion_tokens || 0 },
+    headers: res.headers,
   };
 }
 
@@ -377,9 +378,13 @@ async function complete(cfg, req) {
   }
   limits.faster(lane);
   limits.noteSuccess(cfg.provider, cfg.model);
+  if (out.headers) { limits.noteHeaders(cfg.provider, out.headers); delete out.headers; }
   out.ms = Date.now() - started;
-  out.cost = costOf(cfg.provider, cfg.model, out.usage.in, out.usage.out);
-  out.costCap = capCostOf(cfg.provider, cfg.model, out.usage.in, out.usage.out);
+  // A provider whose own replies show a free plan bills nothing (limits.js).
+  const free = limits.onFreePlan(cfg.provider);
+  out.cost = free ? 0 : costOf(cfg.provider, cfg.model, out.usage.in, out.usage.out);
+  out.costCap = free ? 0 : capCostOf(cfg.provider, cfg.model, out.usage.in, out.usage.out);
+  if (free) out.freePlan = true;
   // Each paid answer is booked as it arrives, so a document whose third page
   // fails still has its first two on the ledger.
   if (cfg.onUsage) cfg.onUsage(out);

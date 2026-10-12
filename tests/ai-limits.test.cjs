@@ -175,3 +175,25 @@ test('a Gemini model that refuses a thinking level is asked again one step up, a
     assert.equal(bodies[0].reasoning_effort, 'low');
   } finally { global.fetch = realFetch; }
 });
+
+test('a free plan is proven by the provider itself, lapses after a week, and a new key forgets it', () => {
+  const L = fresh();
+  assert.equal(L.onFreePlan('gemini'), false, 'unproven: counted at paid rates');
+  quiet(() => L.restAfter(refused(429, '{"error":{"message":"Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests","details":[{"violations":[{"quotaId":"GenerateRequestsPerDayPerProjectPerModel-FreeTier"}]}]}}'), { provider: 'gemini', model: 'gemini-2.5-flash' }));
+  assert.equal(L.onFreePlan('gemini'), true, 'a FreeTier quota proves it');
+  L.noteKey('gemini', 'old'); L.noteKey('gemini', 'new');
+  assert.equal(L.onFreePlan('gemini'), false, 'a different key is unproven again');
+  L.noteHeaders('groq', { 'x-ratelimit-limit-requests': '1000' });
+  assert.equal(L.onFreePlan('groq'), true, "Groq's free daily limit proves it");
+  const P = fresh();
+  P.noteHeaders('groq', { 'x-ratelimit-limit-requests': '500000' });
+  assert.equal(P.onFreePlan('groq'), false, 'a developer-plan limit does not');
+});
+
+test("OpenRouter's :free models cost nothing, even against the cap", () => {
+  const presets = require('../src/ai/presets');
+  assert.equal(presets.capCostOf('openrouter', 'google/gemma-4-31b-it:free', 1e6, 1e6), 0);
+  assert.equal(presets.costOf('openrouter', 'google/gemma-4-31b-it:free', 1e6, 1e6), 0);
+  assert.ok(presets.capCostOf('openrouter', 'some/paid-model', 1e6, 0) > 0, 'an unknown paid model is still counted');
+  assert.equal(presets.costOf('gemini', 'gemini-3.5-flash-lite', 1e6, 0), 0.30, 'current Gemini prices are known');
+});

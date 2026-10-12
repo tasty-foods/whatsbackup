@@ -1901,6 +1901,7 @@ const AI = (function () {
       line += ` Plus work on a model with no published price, counted as ${money(used - known)} against the limit.`;
     }
     if (st.budget) line += ` Limit ${money(st.budget)}.`;
+    if (st.freePlans && st.freePlans.length) line += ` ${st.freePlans.join(' and ')} ${st.freePlans.length === 1 ? 'is' : 'are'} on a free plan, so ${st.freePlans.length === 1 ? 'its' : 'their'} work counts as $0.`;
     el.textContent = line;
   }
 

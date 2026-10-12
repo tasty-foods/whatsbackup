@@ -76,6 +76,8 @@ function readRefusal(status, body, headers, now = Date.now()) {
   out.badKey = /api[_ ]?key[_ ]?(not valid|invalid)|invalid[_ ]api[_ ]?key|incorrect api key|API_KEY_INVALID|authentication[_ ]error/i.test(text);
   out.busy = status === 503 || status === 529 || /overloaded|UNAVAILABLE|high demand|temporarily unavailable/i.test(text);
   out.accountWide = /free-models-per-(day|min)/i.test(text);
+  // Gemini names its free quotas so: "…-FreeTier", "generate_content_free_tier_requests".
+  out.freeTier = /free[_ -]?tier/i.test(text);
   return out;
 }
 
@@ -101,6 +103,11 @@ function create({ file = null } = {}) {
   // nothing that could be turned back into one. Kept with the rests so a key
   // replaced while the app was closed still starts clean.
   let prints = {};
+  // provider -> when its replies last proved it is on a free plan. A free plan
+  // is not billed, so its work is $0 against the cap. The proof lapses after a
+  // week without being seen again, and a new key starts unproven, so a key
+  // that has since been put on billing is never left uncapped for long.
+  let free = {};
 
   const keyOf = (provider, model) => provider + '|' + (model || '*');
 
@@ -108,17 +115,19 @@ function create({ file = null } = {}) {
     if (!path) return;
     const now = Date.now(), out = {};
     for (const [k, v] of rests) if (v.until > now) out[k] = v;
-    try { fs.writeFileSync(path, JSON.stringify({ rests: out, keys: prints })); } catch (_) {}
+    try { fs.writeFileSync(path, JSON.stringify({ rests: out, keys: prints, free })); } catch (_) {}
   }
   function load() {
     rests.clear();
     prints = {};
+    free = {};
     if (!path) return;
     try {
       const j = JSON.parse(fs.readFileSync(path, 'utf8')) || {};
       const now = Date.now();
       for (const [k, v] of Object.entries(j.rests || {})) if (v && v.until > now) rests.set(k, { until: v.until, why: String(v.why || '') });
       if (j.keys && typeof j.keys === 'object') prints = { ...j.keys };
+      if (j.free && typeof j.free === 'object') free = { ...j.free };
     } catch (_) {}
   }
   function configure(opts = {}) { if ('file' in opts) { path = opts.file || null; load(); } }
@@ -168,6 +177,7 @@ function create({ file = null } = {}) {
     const kind = err.kind || '', status = Number(err.status) || 0;
     const r = err.refusal || {};
     const provider = cfg.provider;
+    if (r.freeTier) noteFreePlan(provider);
     const model = cfg.restModel || cfg.model || null;
     let ms = 0, why = '', wide = false;
 
@@ -211,6 +221,25 @@ function create({ file = null } = {}) {
     return { ms, why, wide, until: Date.now() + ms };
   }
 
+  const FREE_PROOF_MS = 7 * 24 * HOUR;
+  function noteFreePlan(provider) {
+    if (!provider) return;
+    const was = free[provider];
+    free[provider] = Date.now();
+    if (!was || Date.now() - was > HOUR) save();            // no need to write on every request
+  }
+  const onFreePlan = (provider) => !!free[provider] && Date.now() - free[provider] < FREE_PROOF_MS;
+  const freePlans = () => Object.keys(free).filter(onFreePlan);
+  // What a successful reply's headers say. Groq reports each key's requests
+  // per day in x-ratelimit-limit-requests; only its free plan has a daily
+  // limit this low (1,000–14,400; the developer plan is in the hundreds of
+  // thousands).
+  function noteHeaders(provider, headers) {
+    if (provider !== 'groq') return;
+    const rpd = Number(header(headers, 'x-ratelimit-limit-requests'));
+    if (rpd > 0 && rpd <= 14400) noteFreePlan(provider);
+  }
+
   // A success clears the record of unexplained refusals for that model.
   function noteSuccess(provider, model) { streaks.delete(keyOf(provider, model)); }
 
@@ -241,16 +270,16 @@ function create({ file = null } = {}) {
     const had = prints[provider];
     if (had === fp) return false;
     prints[provider] = fp;
-    if (had !== undefined) { clear(provider); save(); return true; }
+    if (had !== undefined) { clear(provider); delete free[provider]; save(); return true; }
     save();
     return false;
   }
 
-  function reset() { rests.clear(); streaks.clear(); lanes.clear(); prints = {}; version++; }
+  function reset() { rests.clear(); streaks.clear(); lanes.clear(); prints = {}; free = {}; version++; }
   const changes = () => version;
 
   load();
-  return { configure, rest, restOf, restingUntil, clear, clearWide, allRests, restAfter, noteSuccess, noteKey, pace, slower, faster, intervalOf, reset, changes };
+  return { configure, rest, restOf, restingUntil, clear, clearWide, allRests, restAfter, noteSuccess, noteKey, noteFreePlan, onFreePlan, freePlans, noteHeaders, pace, slower, faster, intervalOf, reset, changes };
 }
 
 // One shared instance: the runner, the provider client and the probe must agree

@@ -255,6 +255,7 @@ function status() {
     },
     lastRun: ai.lastRun(),
     chainEnabled: !!s.aiChainEnabled,
+    freePlans: limits.freePlans(),
     chain: chainProviders().filter(Boolean).map((who) => {
       const c = configFor(who);
       const rest = limits.restOf(who, c.model);
