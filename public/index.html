@@ -114,7 +114,7 @@
         </label>
       </div>
     </div>
-    <div id="selection-bar" class="selection-bar hidden"><b id="selection-count">0 selected</b><button class="btn small" id="select-all">Select all in view</button><button class="btn small" id="selection-favorite">Add to favourites</button><button class="btn small primary" id="selection-export">Export selected</button><button class="btn small" id="selection-clear">Done</button></div><main id="gallery" class="gallery" aria-label="Archive media"></main>
+    <div id="selection-bar" class="selection-bar hidden"><b id="selection-count">0 selected</b><button class="btn small" id="select-all">Select all in view</button><button class="btn small" id="selection-favorite">Add to favourites</button><button class="btn small primary" id="selection-export">Export selected</button><button class="btn small" id="selection-clear">Done</button><div class="selection-file-actions" role="group" aria-label="Selected file actions"><button class="btn small" data-file-action="folder" title="Select one file to open its folder">Open folder</button><button class="btn small" data-file-action="paths">Copy path</button><button class="btn small" data-file-action="files" title="Copy original files to paste into a chat, email or folder">Copy for attachment</button><button class="btn small" data-file-action="links" title="Copy a file:/// link that requires access to the same storage path">Copy file link</button></div></div><main id="gallery" class="gallery" aria-label="Archive media"></main>
     <div id="empty" class="empty hidden">No photos or videos yet. New ones appear here the moment they arrive — or open <b>⚙︎ Settings → Import older</b> to pull in what came before.</div>
   </div>
 
@@ -964,6 +964,7 @@
   <div id="workspace-toast" class="workspace-toast hidden" role="status" aria-live="polite"></div><div id="save-view-dialog" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="save-view-title"><form class="modal-card save-view-card" id="save-view-form"><div class="modal-head"><h2 id="save-view-title">Keep this view handy.</h2><button type="button" class="btn icon" id="save-view-cancel" aria-label="Close saved view dialog">×</button></div><p>Your search, filters and sort order will be saved in the sidebar.</p><label for="save-view-name">Name this view</label><input id="save-view-name" class="txt" maxlength="60" required placeholder="e.g. Supplier documents"><p id="save-view-error" class="bad-text" role="status"></p><div class="modal-foot"><button class="btn primary" type="submit">Save view</button></div></form></div>
 <script src="/app.js"></script>
 <script src="/workspace.js"></script>
+<script src="/file-actions.js"></script>
 <script src="/content-search.js"></script>
 </body>
 </html>

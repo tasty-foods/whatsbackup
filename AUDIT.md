@@ -36,6 +36,32 @@ not exercised.
   cluster items of the same kind inside one chat; semantic search needs an
   embedding-capable provider and is skipped silently without one.
 
+# File access and clipboard — 2.1.1
+
+The location endpoint called the asynchronous local-path lookup without waiting
+for it, causing preview folder actions to fail. It now waits for the lookup,
+checks cloud-file presence asynchronously, and returns distinct paths and encoded
+file links. A file found only on the cloud drive is not labelled as a separate
+PC copy.
+
+Selected files and the preview now expose Open folder, Copy path, Copy for
+attachment, and Copy file link. Windows attachment copying writes a native
+FileDropList through the system PowerShell runtime, without decoding media or
+interpolating paths into executable code. Clipboard operations validate every
+file against archive roots and resolve symlinks before copying; an invalid
+selection is rejected before changing the clipboard. Local file links do not
+create public shares. Preview paths are selectable and show separate copy
+locations; selection controls preserve their busy/disabled state during work.
+
+Validation: 104 automated checks pass, including location lookup awaiting,
+cloud-only files, missing drives, file-link encoding, clipboard payloads, unsafe
+paths, symlink escapes, atomic selection validation, IPC wiring and HTTP error
+handling. Browser checks verify single/multiple selection, copied path/link
+values, and preview storage paths. Attachment clipboard calls and Explorer are
+mocked in automated tests; no live message or file upload is sent during testing.
+
+---
+
 # Content search and responsiveness — 1.6.0
 
 Reviewed Overview, Library, Conversations, Status Studio, Clean up and all eight

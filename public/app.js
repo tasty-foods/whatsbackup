@@ -311,17 +311,16 @@ function showCurrent() {
   const kept = typeof Finals !== 'undefined' && Finals.isKept(r.id);
   els.lbMeta.innerHTML = `<span class="m-chat">${escapeHtml(r.chat)}</span>
     <span class="m-sub">${r.dir === 'out' ? 'Sent' : 'Received'} · ${new Date(r.ts).toLocaleString()} · ${sizeKb}${cloudTag}</span>
+    <section id="lb-file-actions" class="file-location-card" aria-label="File actions and storage location"></section>
     ${aiBlock}
     <span id="lb-extra"></span>
     ${typeof AI !== 'undefined' && AI.groups().length ? AI.albumPicker(r) : ''}
     <a href="#" id="lb-final" class="final${kept ? ' on' : ''}" title="${kept ? 'A copy is in your Finals folder. Click to take it out again.' : 'Copy this into your Finals folder and mark it as the one to keep'}">${kept ? '★ Kept as final' : '☆ Keep as final'}</a>
     <a href="${r.serve}" download>⭳ Download</a>
-    <a href="#" id="lb-show-local" title="Open the folder on this PC with this file selected">📁 Show in folder</a>
-    <a href="#" id="lb-show-cloud" title="Open the pCloud folder with this file selected">☁ Show in pCloud</a>
     ${(r.kind === 'image' || r.kind === 'video') ? '<a href="#" id="lb-queue-status" title="Add to the status queue">📣 Queue as status</a>' : ''}
-    <span id="lb-where" class="m-where"></span>`;
+    `;
   if (typeof AI !== 'undefined') AI.bindAlbumPicker(r);
-  bindShowInFolder(r);
+  if (window.FileActions) window.FileActions.viewer(r);
   if (window.Workspace) window.Workspace.viewer(r);
   if (window.ContentSearch) window.ContentSearch.viewer(r);
   const fb = document.getElementById('lb-final');
@@ -370,31 +369,6 @@ async function fillLightboxExtra(r) {
   box.innerHTML = bits.join('');
   const os = document.getElementById('lb-open-set');
   if (os) os.addEventListener('click', (e) => { e.preventDefault(); closeLightbox(); setView('finals'); if (typeof Finals !== 'undefined') Finals.showSet(d.set.id); });
-}
-
-// "Show in folder": the desktop app opens Explorer with the file selected; in
-// a plain browser, which cannot, the path is shown and copied instead.
-async function bindShowInFolder(r) {
-  const aLocal = document.getElementById('lb-show-local');
-  const aCloud = document.getElementById('lb-show-cloud');
-  const out = document.getElementById('lb-where');
-  if (!aLocal || !aCloud) return;
-  let w = null;
-  try { w = await requestJson('/api/media/' + encodeURIComponent(r.id) + '/where'); } catch (_) {}
-  if (lbId !== r.id) return;                       // moved on while asking
-  aLocal.hidden = !(w && w.local);
-  aCloud.hidden = !(w && w.cloud);
-  if (w && !w.cloud && w.cloudExpected) out.textContent = 'Not copied to pCloud yet — the backup picks it up shortly.';
-  const reveal = async (p) => {
-    if (bridge && bridge.showInFolder) {
-      const ok = await bridge.showInFolder(p);
-      if (ok) { out.textContent = ''; return; }
-    }
-    try { await navigator.clipboard.writeText(p); out.textContent = 'Path copied: ' + p; }
-    catch (_) { out.textContent = p; }
-  };
-  aLocal.onclick = (e) => { e.preventDefault(); if (w && w.local) reveal(w.local); };
-  aCloud.onclick = (e) => { e.preventDefault(); if (w && w.cloud) reveal(w.cloud); };
 }
 
 function step(d) {

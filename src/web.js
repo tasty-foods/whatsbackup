@@ -1041,17 +1041,11 @@ function createApp() {
 
   // Where one item's files are: the copy on this PC and the one in the cloud
   // folder, and whether each is actually there. For "Show in folder".
-  app.get('/api/media/:id/where', (req, res) => {
+  app.get('/api/media/:id/where', async (req, res) => {
     const rec = store.get(String(req.params.id || ''));
     if (!rec) return res.status(404).json({ error: 'not found' });
-    const bk = require('./backup');
-    const fsx = require('fs');
-    const local = bk.localPathFor(rec);
-    const cloud = bk.cloudPathFor(rec);
-    let cloudThere = false;
-    try { cloudThere = !!cloud && fsx.existsSync(cloud); } catch (_) {}
-    const same = !!local && !!cloud && path.resolve(local).toLowerCase() === path.resolve(cloud).toLowerCase();
-    res.json({ local: same ? null : local, cloud: cloudThere ? cloud : null, cloudExpected: cloud });
+    try { res.json(await require('./media-locations').locate(rec)); }
+    catch (_) { res.status(503).json({ error: 'Could not check file locations. Check that the storage drive is connected and try again.' }); }
   });
 
   // Documents saved with a broken extension, renamed (see maintenance.js).

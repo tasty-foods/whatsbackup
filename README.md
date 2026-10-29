@@ -6,6 +6,13 @@ The 2.0 release makes the archive understood rather than just stored. The AI rea
 
 For installing and using it, see **[INSTALL.md](INSTALL.md)**. This file is about how it's built.
 
+In 2.1.1, selected files and previews offer **Open folder**, **Copy path**,
+**Copy for attachment** and **Copy file link**. Attachment copying uses the
+Windows file clipboard, so Ctrl+V can attach the original in an app that accepts
+files. File links use the existing storage path; they are not public pCloud share
+links. The preview lists separate archive and cloud-drive copies. Files stored
+only on the mounted cloud drive are identified explicitly.
+
 The [desktop audit](AUDIT.md) records the reviewed flows, shipped changes and remaining product limits. Other features include ChatGPT and Gemini image imports (`src/chatgpt/`, `src/gemini/`), Google Photos imports (`src/google-photos/`), media copy verification (`src/backup.js`), reversible cleanup (`src/cleanup/`), and opt-in status scheduling (`src/status/`). Import summaries are persisted in `data/*-import.json`. Run `npm test` for regression checks.
 
 ### Google Photos

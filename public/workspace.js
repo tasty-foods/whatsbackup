@@ -71,6 +71,7 @@ window.Workspace = (() => {
     node('select-mode').setAttribute('aria-pressed',String(selecting));
     node('select-mode').textContent=selecting?'Selecting files':'Select files';
     node('selection-export').disabled=!selected.size;node('selection-favorite').disabled=!selected.size;
+    document.querySelectorAll('[data-file-action]').forEach(button=>{button.disabled=button.dataset.fileBusy==='1'||(button.dataset.fileAction==='folder'?selected.size!==1:!selected.size);});
     document.querySelectorAll('.tile[data-id]').forEach(tile=>{
       const active=selected.has(tile.dataset.id);tile.classList.toggle('selected',active);
       const checkbox=tile.querySelector('.tile-select input');if(checkbox)checkbox.checked=active;
@@ -160,6 +161,7 @@ window.Workspace = (() => {
   node('select-all').addEventListener('click',()=>{filteredCache.forEach(item=>selected.add(item.id));updateSelection();});
   node('selection-favorite').addEventListener('click',async event=>{event.currentTarget.disabled=true;await favorite([...selected],true);updateSelection();});
   node('selection-export').addEventListener('click',event=>exportItems(allItems.filter(item=>selected.has(item.id)),event.currentTarget));
+  document.querySelectorAll('[data-file-action]').forEach(button=>button.addEventListener('click',()=>window.FileActions?.run(button.dataset.fileAction,allItems.filter(item=>selected.has(item.id)),button)));
   node('export-matching').addEventListener('click',event=>exportItems(filteredCache,event.currentTarget));
   node('nav-favorites').addEventListener('click',()=>{clearAll();F.favorite=true;setView('media');render(allItems);});
   document.querySelector('[data-home]').addEventListener('click',event=>{event.preventDefault();setView('overview');});
@@ -194,5 +196,5 @@ window.Workspace = (() => {
     }catch(error){toast('Some workspace preferences could not load: '+error.message);}
   }
   init();
-  return {toast,applyPreferences,onRender,onView,decorateTile,viewer,isFavorite:id=>favoriteIds.has(id),videoPreview:()=>preferences.uiVideoPreview&&!preferences.uiReduceMotion,ready:()=>ready};
+  return {toast,refreshFileActions:updateSelection,applyPreferences,onRender,onView,decorateTile,viewer,isFavorite:id=>favoriteIds.has(id),videoPreview:()=>preferences.uiVideoPreview&&!preferences.uiReduceMotion,ready:()=>ready};
 })();

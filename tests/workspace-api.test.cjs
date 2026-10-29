@@ -23,7 +23,11 @@ test('workspace preferences persist, reject invalid options, and keep capture se
   const library = moduleLoad('library.js',{'./paths':{DATA_DIR:root}});
   const createApp = moduleLoad('web.js',{
     './config':cfg,'./paths':{DATA_DIR:root},'./settings':settings,'./library':library,
-    './logger':{FILE:path.join(root,'log')},'./store':{get:()=>null,hiddenIds:()=>new Set()},
+    './logger':{FILE:path.join(root,'log')},'./store':{get:id=>['located','offline'].includes(id)?{id}:null,hiddenIds:()=>new Set()},
+    './media-locations':{locate:async record=>{
+      if(record.id==='offline')throw Error('drive lookup failed');
+      return require('../src/media-locations').locate(record,{backup:{localPathFor:async()=>{await new Promise(setImmediate);return path.join(root,'label #1.png');},cloudPathFor:()=>null}});
+    }},
     './cleanup':{QUARANTINE_DIR:root},'./media-export':require('../src/media-export'),
   });
   const server=await new Promise(resolve=>{const s=createApp().listen(0,'127.0.0.1',()=>resolve(s));});
@@ -47,6 +51,14 @@ test('workspace preferences persist, reject invalid options, and keep capture se
   assert.equal(invalid.settings.uiTheme,'dark');
   assert.equal((await post({uiTheme:'light'},'https://other.example')).status,403);
   assert.equal(settings.read().uiTheme,'dark');
+  const locationResponse=await fetch(base+'/api/media/located/where');
+  assert.equal(locationResponse.status,200);
+  const location=await locationResponse.json();
+  assert.equal(location.local,path.join(root,'label #1.png'));
+  assert.equal(typeof location.local,'string'); // Never serialize a Promise or pass it to path.resolve.
+  assert.match(location.localLink,/%231\.png$/);
+  assert.equal((await fetch(base+'/api/media/missing/where')).status,404);
+  assert.equal((await fetch(base+'/api/media/offline/where')).status,503);
   const largeSelection=await fetch(base+'/api/export/prepare',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids:Array.from({length:3000},(_,i)=>'missing_'+String(i).padEnd(80,'x'))})});
   assert.equal(largeSelection.status,409); // Read the whole selection; do not hit Express's default 100 KB body limit.
 });

@@ -116,6 +116,15 @@ input[type=checkbox] { accent-color:var(--accent2); }
 .tile.selected { border-color:var(--accent); box-shadow:0 0 0 2px var(--accent); }
 .selection-bar { display:flex; align-items:center; flex-wrap:wrap; gap:9px; position:sticky; top:10px; z-index:15; padding:12px 16px; margin:14px var(--ui-space); border:1px solid var(--accent); border-radius:8px; background:var(--panel); box-shadow:var(--shadow); }
 .selection-bar b { margin-right:auto; color:var(--accent); font-size:13px; }
+.selection-file-actions { display:flex; flex-wrap:wrap; gap:8px; flex-basis:100%; border-top:1px solid var(--line); padding-top:10px; }
+.file-location-card { padding:14px; border:1px solid #506b55; border-radius:10px; background:#1b2d21; display:flex; flex-direction:column; gap:12px; }
+.file-location-card > b { font-size:13px; letter-spacing:.02em; }
+.file-location-card p { margin:0; font-size:12px; line-height:1.5; color:#c7d9ca; }
+.file-action-buttons { display:flex; flex-wrap:wrap; gap:7px; }
+.file-action-buttons .btn { flex:1 1 110px; white-space:normal; }
+.file-location-row label { display:flex; flex-direction:column; gap:5px; font-size:11px; color:#c7d9ca; }
+.file-location-row input { width:100%; min-width:0; background:#101d15; border-color:#506b55; color:#e4ede2; font-size:11px; }
+.file-location-row > button { margin-top:7px; }
 #sentinel { grid-column:1/-1; height:1px; }
 html[data-layout="masonry"] .gallery { display:block; columns:220px; column-gap:16px; }
 html[data-layout="masonry"] .tile { margin-bottom:16px; break-inside:avoid; }

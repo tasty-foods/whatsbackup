@@ -538,6 +538,14 @@ async function checkForUpdates(interactive) {
 
 // ---------- IPC exposed to the dashboard ----------
 function registerIpc() {
+  const fileActions = require(path.join(__dirname, 'file-actions')).createFileActions({
+    // Do not expose the sibling session/key directories under HOME to copying.
+    getRoots: () => { const s = settings.read(); return [path.join(HOME, 'media'), s.mediaRoot, s.cloudRoot]; },
+    writeText: text => require('electron').clipboard.writeText(text),
+  });
+  for (const action of ['copyPaths', 'copyFileLinks', 'copyFiles']) {
+    ipcMain.handle('wb:' + action, (_event, targets) => fileActions[action](targets));
+  }
   ipcMain.handle('wb:info', () => ({
     version: app.getVersion(),
     packaged: isPackaged,
