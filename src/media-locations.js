@@ -8,10 +8,12 @@ const fs = require('node:fs/promises');
 async function locate(record, { backup = require('./backup'), stat = fs.stat } = {}) {
   const [candidate, cloudExpected] = await Promise.all([backup.localPathFor(record), backup.cloudPathFor(record)]);
   let cloud = null;
-  if (cloudExpected) {
+  if (backup.existingCloudPathFor) cloud = await backup.existingCloudPathFor(record);
+  else if (cloudExpected) {
     try { if ((await stat(cloudExpected)).isFile()) cloud = cloudExpected; } catch (_) {}
   }
-  const same = candidate && cloudExpected && path.resolve(candidate).toLowerCase() === path.resolve(cloudExpected).toLowerCase();
+  const cloudCandidates=backup.cloudPathsFor?backup.cloudPathsFor(record):[cloud];
+  const same = candidate && cloudCandidates.filter(Boolean).some(file=>path.resolve(candidate).toLowerCase()===path.resolve(file).toLowerCase());
   const local = same ? null : candidate || null;
   return {
     local, cloud, cloudExpected: cloudExpected || null,

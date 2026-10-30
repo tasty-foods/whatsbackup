@@ -33,7 +33,7 @@ function lane(timeout) {
   return task => new Promise((resolve, reject) => { queue.push({ task, resolve, reject }); next(); });
 }
 const indexing = lane(120000), thumbs = lane(20000);
-const dirsFor = rec => rec.kind === 'video' ? [cfg.LOCAL_VIDEO_DIR, cfg.VIDEO_DIR] : rec.kind === 'document' ? [cfg.FILES_DIR] : [cfg.IMAGES_DIR];
+const dirsFor = rec => require('../backup').pathsFor(rec).map(file => path.dirname(file));
 const thumbnailPath = rec => path.join(cfg.DATA_DIR, 'thumbnails', crypto.createHash('sha256').update(`${rec.id}:${rec.size}:${rec.filename}`).digest('hex') + '.jpg');
 const extract = (rec, options = {}) => { const s = settings.read(); return indexing({ ...rec, dirs: dirsFor(rec), frames: s.aiVideoFrames, pages: s.aiDocumentPages, ocrPages: s.aiOcrPages, poster: rec.kind === 'video' ? thumbnailPath(rec) : null, ...options }); };
 const pending = new Map();

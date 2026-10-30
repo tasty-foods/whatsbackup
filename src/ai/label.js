@@ -124,11 +124,7 @@ const currentLabel = (row, s = require('../settings').read()) => !!row && row.la
 const extOf = (rec) => (/\.([A-Za-z0-9]{1,6})$/.exec(rec.docName || rec.filename || '') || [, ''])[1].toLowerCase();
 
 function fileFor(rec) {
-  const area = rec.kind === 'video' ? [cfgApp.VIDEO_DIR, cfgApp.LOCAL_VIDEO_DIR]
-    : rec.kind === 'image' || rec.kind === 'sticker' ? [cfgApp.IMAGES_DIR]
-      : [cfgApp.FILES_DIR];
-  for (const dir of area) {
-    const p = path.join(dir, rec.filename);
+  for (const p of require('../backup').pathsFor(rec)) {
     try { if (fs.existsSync(p)) return p; } catch (_) {}
   }
   return null;

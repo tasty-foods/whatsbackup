@@ -66,6 +66,9 @@ window.FileActions = (() => {
         : where.local ? 'Saved on this PC.' : where.cloud ? 'Stored on the pCloud drive. No separate PC copy was found.'
           : 'File unavailable. Check that its storage drive is connected.';
       host.append(status);
+      if(record.source==='gmail'){
+        const origin=document.createElement('p');origin.textContent=`Gmail · ${record.sender||record.gmailAccount||''}${record.subject?' · '+record.subject:''}`;host.append(origin);
+      }
       if (preferred(where)) {
         const buttons = document.createElement('div'); buttons.className = 'file-action-buttons';
         for (const action of ['folder', 'paths', 'files', 'links']) {

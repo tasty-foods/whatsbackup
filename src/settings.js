@@ -23,6 +23,7 @@ const DEFAULTS = {
   // cloudRoot means no cloud copy at all — a fresh PC has no pCloud drive.
   mediaRoot: '',
   cloudRoot: '',
+  cloudLayout: 'source-date',
   mirrorImages: false,
 
   // What to capture
@@ -73,6 +74,15 @@ const DEFAULTS = {
   geminiScanHours: 6,
   googlePhotosEnabled: false,
   googlePhotosScanHours: 6,
+  googlePhotosTokensEnc:'',
+  gmailEnabled: false,
+  gmailClientId: '',
+  gmailClientSecretEnc: '',
+  gmailTokensEnc: '',
+  gmailQuery: 'has:attachment',
+  gmailSyncMinutes: 0,
+  gmailMaxAttachmentMB: 25,
+  gmailMaxMessagesPerSync: 500,
   aiChainEnabled: false,
   aiMode: 'assist',          // manual | assist (manual, then auto for new items) | auto
   aiAnalyseImages: true,

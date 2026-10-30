@@ -59,6 +59,12 @@ const SETTING_SPEC = {
   port: { type: 'int', min: 1, max: 65535, restart: true },
   mediaRoot: { type: 'path', restart: true },
   cloudRoot: { type: 'path', restart: true },
+  cloudLayout: {type:'enum',values:['flat','source-date']},
+  gmailEnabled:{type:'bool'},
+  gmailQuery:{type:'path'},
+  gmailSyncMinutes:{type:'int',min:0,max:10080},
+  gmailMaxAttachmentMB:{type:'int',min:1,max:100},
+  gmailMaxMessagesPerSync:{type:'int',min:1,max:5000},
   mirrorImages: { type: 'bool' },
   captureImages: { type: 'bool' },
   captureVideos: { type: 'bool' },
@@ -190,15 +196,22 @@ function createApp() {
   // from the current folder and fall back to the local folder if the cloud
   // drive isn't reachable — instead of a silent 404.
   app.use('/media/images', express.static(cfg.IMAGES_DIR, { maxAge: '1h' }));
-  const serveFrom = (dirs) => async (req, res) => {
+  const serveFrom = (dirs, kind) => async (req, res) => {
     const name = safeName(req.params.name); // express already URL-decodes params
     if (!name) return res.status(400).end();
     let candidate;
-    for (const dir of [...new Set(dirs)]) { const p = path.join(dir, name); try { await fs.promises.access(p); candidate = p; break; } catch (_) {} }
+    const record = kind && store.listRecords({}).find(rec => rec.filename === name && (kind === 'file' ? !['image','sticker','video'].includes(rec.kind) : rec.kind === kind));
+    const options = [...dirs.map(dir => path.join(dir, name)), ...(record ? require('./backup').pathsFor(record) : [])];
+    for (const p of [...new Set(options)]) { try { if ((await fs.promises.stat(p)).isFile()) { candidate = p; break; } } catch (_) {} }
     if (!candidate) return res.status(404).end();
+    if(kind==='file') {
+      res.set('X-Content-Type-Options','nosniff');res.set('Content-Security-Policy',"sandbox; default-src 'none'");
+      if(/\.(html?|xhtml|svg|xml|mhtml?|js|mjs|css)$/i.test(record?.docName||name)||/^(text\/html|image\/svg\+xml|application\/(xhtml\+xml|javascript))/.test(record?.mimetype||''))res.attachment(record?.docName||name);
+    }
     res.sendFile(candidate, (err) => { if (err && !res.headersSent) res.status(404).end(); });
   };
-  app.get('/media/videos/:name', (req, res) => serveFrom([cfg.LOCAL_VIDEO_DIR, cfg.VIDEO_DIR])(req, res));
+  app.get('/media/videos/:name', (req, res) => serveFrom([cfg.LOCAL_VIDEO_DIR, cfg.VIDEO_DIR], 'video')(req, res));
+  app.get('/media/images/:name', (req, res) => serveFrom([cfg.IMAGES_DIR], 'image')(req, res));
   // A video gets its poster when it is indexed; before that, a frame is pulled
   // by the desktop shell (or sharp, from source), so the grid never shows a
   // placeholder for a clip that can be decoded.
@@ -217,7 +230,7 @@ function createApp() {
     }
     catch (_) { res.redirect('/media/images/' + encodeURIComponent(rec.filename)); }
   });
-  app.get('/media/files/:name', (req, res) => serveFrom([cfg.FILES_DIR])(req, res));
+  app.get('/media/files/:name', (req, res) => serveFrom([cfg.FILES_DIR], 'file')(req, res));
   app.get('/media/status/:name', (req, res) => serveFrom([require('./status/renderer').STATUS_DIR])(req, res));
 
   // The dashboard's own files must never be served from a stale cache: after an
@@ -260,7 +273,7 @@ function createApp() {
     hiddenIds: () => store.hiddenIds(),
     pathsFor: async record => {
       const backup = require('./backup');
-      return [await backup.localPathFor(record), backup.cloudPathFor(record)];
+      return backup.pathsFor(record);
     },
   });
 
@@ -286,6 +299,10 @@ function createApp() {
     s.aiKeyStored = !!s.aiKeyEnc;
     delete s.aiKeyEnc;
     delete s.aiKeysEnc;
+    s.gmailSecretStored = !!s.gmailClientSecretEnc;
+    delete s.gmailClientSecretEnc;
+    delete s.gmailTokensEnc;
+    delete s.googlePhotosTokensEnc;
     return s;
   };
 
@@ -325,6 +342,8 @@ function createApp() {
       if (spec.restart && JSON.stringify(clean) !== JSON.stringify(current[key])) restartRequired = true;
     }
     settings.write(patch);
+    if('cloudLayout' in patch)cfg.CLOUD_LAYOUT=patch.cloudLayout;
+    if(Object.keys(patch).some(key=>key.startsWith('gmail'))) {try{require('./gmail').schedule();}catch(_) {}}
     // The schedule reads settings when it is armed, not continuously, so a
     // change to it has to re-arm it or it would wait out the old interval.
     if ('chatgptEnabled' in patch || 'chatgptScanHours' in patch) { try { require('./chatgpt').schedule(); } catch (_) {} }
@@ -353,7 +372,7 @@ function createApp() {
   // Per source: how many, how much, where — so Settings can say it.
   app.get('/api/sources/summary', (req, res) => {
     const hidden = store.hiddenIds();
-    const out = { whatsapp: { count: 0, bytes: 0 }, chatgpt: { count: 0, bytes: 0 }, gemini: { count: 0, bytes: 0 }, googlephotos: { count: 0, bytes: 0 } };
+    const out = { whatsapp: { count: 0, bytes: 0 }, chatgpt: { count: 0, bytes: 0 }, gemini: { count: 0, bytes: 0 }, googlephotos: { count: 0, bytes: 0 }, gmail:{count:0,bytes:0} };
     for (const r of store.listRecords({})) {
       if (hidden.has(r.id) || r.sample) continue;
       const k = Object.hasOwn(out, r.source) ? r.source : 'whatsapp';
@@ -363,6 +382,7 @@ function createApp() {
       ...out,
       dirs: {
         images: cfg.IMAGES_DIR, videos: cfg.VIDEO_DIR, localVideos: cfg.LOCAL_VIDEO_DIR, files: cfg.FILES_DIR,
+        cloudRoot:cfg.CLOUD_ROOT||null,cloudLayout:cfg.CLOUD_LAYOUT||'flat',
         cloudImages: cfg.CLOUD_ROOT ? path.join(cfg.CLOUD_ROOT, 'Images') : null,
         cloudVideos: cfg.CLOUD_ROOT ? path.join(cfg.CLOUD_ROOT, 'Videos') : null,
         chatgptProfile: paths.CHATGPT_DIR, geminiProfile: paths.GEMINI_DIR,
@@ -372,11 +392,12 @@ function createApp() {
   });
 
   app.get('/api/storage', async (req, res) => {
-    const [images, files, videos, data] = await Promise.all([cfg.IMAGES_DIR, cfg.FILES_DIR, cfg.VIDEO_DIR, cfg.DATA_DIR].map(dir => folderSize(dir)));
+    const videoStats=async()=>{let bytes=0,files=0;const seen=new Set();for(const rec of store.listRecords({kind:'video'})){const file=await require('./backup').localPathFor(rec);if(!file||seen.has(file.toLowerCase()))continue;try{const info=await fs.promises.stat(file);bytes+=info.size;files++;seen.add(file.toLowerCase());}catch(_){}}return {bytes,files};};
+    const [images, files, videos, data] = await Promise.all([folderSize(cfg.IMAGES_DIR),folderSize(cfg.FILES_DIR),videoStats(),folderSize(cfg.DATA_DIR)]);
     res.json({
       images: { ...images, dir: cfg.IMAGES_DIR },
       files: { ...files, dir: cfg.FILES_DIR },
-      videos: { ...videos, dir: cfg.VIDEO_DIR, cloud: cfg.CLOUD_AVAILABLE },
+      videos: { ...videos, dir: cfg.CLOUD_ROOT||cfg.LOCAL_VIDEO_DIR, cloud: cfg.CLOUD_AVAILABLE },
       data: { ...data, dir: cfg.DATA_DIR },
       total: images.bytes + files.bytes + videos.bytes + data.bytes,
     });
@@ -525,10 +546,36 @@ function createApp() {
 
   // ---- Google Photos as a source ----
   const googlePhotos = require('./google-photos');
+  const photosPicker=require('./google-photos/picker');
+  app.get('/api/google-photos/picker/state',(_req,res)=>res.json(photosPicker.getState()));
+  for(const [route,method]of [['connect','beginConnect'],['session','createSession'],['check','checkSession'],['cancel','cancel'],['disconnect','disconnect']])app.post('/api/google-photos/picker/'+route,sameOrigin,async(_req,res)=>{
+    if(['connect','session'].includes(route)&&googlePhotos.getState().busy)return res.status(409).json({ok:false,error:'Finish the current Google Photos import first.'});
+    try{const r=await photosPicker[method]();res.status(r.ok===false?409:200).json(r);}catch(e){res.status(400).json({ok:false,error:e.message});}
+  });
+  app.post('/api/google-photos/picker/import',sameOrigin,(_req,res)=>{
+    const s=photosPicker.getState();if(googlePhotos.getState().busy||s.busy||!s.linked||!s.session?.ready)return res.status(409).json({ok:false,error:'Finish other imports, connect Google Photos and finish choosing media first.'});
+    photosPicker.importSelected().catch(e=>console.error('[photos-picker]',e.message));res.json({ok:true,started:true});
+  });
+  app.post('/api/google-photos/import-folder',sameOrigin,async(req,res)=>{
+    if(photosPicker.getState().busy)return res.status(409).json({ok:false,error:'Finish or cancel the current Google Photos selection import first.'});
+    try {const result=await googlePhotos.importFolder({folder:String(req.body?.folder||''),reason:'takeout'});res.status(result.ok?200:400).json(result);}
+    catch(error){res.status(400).json({ok:false,error:error.message});}
+  });
+  const gmail=require('./gmail');
+  app.get('/api/gmail/state',(_req,res)=>res.json(gmail.getState()));
+  app.post('/api/gmail/sync',sameOrigin,(_req,res)=>{
+    const state=gmail.getState();
+    if(state.busy||!state.linked)return res.status(409).json({ok:false,error:state.busy?'Gmail is already busy.':'Connect Gmail first.'});
+    gmail.sync({reason:'manual'}).catch(error=>console.error('[gmail]',error.message));res.json({ok:true,started:true});
+  });
+  for(const [route,method] of [['connect','beginConnect'],['cancel','stop'],['disconnect','disconnect']])app.post('/api/gmail/'+route,sameOrigin,async(req,res)=>{
+    try{const result=await gmail[method]();res.status(result.ok?200:409).json(result);}catch(error){res.status(400).json({ok:false,error:error.message});}
+  });
   app.get('/api/google-photos/state', (req, res) => res.json(googlePhotos.getState()));
   for (const action of ['connect', 'scan']) {
     app.post('/api/google-photos/' + action, sameOrigin, (req, res) => {
       const current = googlePhotos.getState();
+      if(photosPicker.getState().busy)return res.status(409).json({error:'Finish or cancel the current Google Photos selection import first.'});
       if (current.busy) return res.status(409).json({ error: 'Google Photos is already busy.' });
       if (action === 'scan' && !current.linked) return res.status(409).json({ error: 'Connect Google Photos first.' });
       googlePhotos[action]({ reason: 'manual' }).catch(error => console.error('[google-photos]', error.message));
@@ -549,18 +596,25 @@ function createApp() {
   const backup = require('./backup');
   app.get('/api/backup/status', async (req, res) => { try { res.json(await backup.status({ ids: req.query.ids !== '0' })); } catch (e) { res.status(500).json({ error: e.message }); } });
   app.post('/api/backup/sweep', sameOrigin, async (req, res) => res.json(await backup.sweep({ reason: 'manual' })));
+  const organizer=require('./cloud-organizer');
+  app.get('/api/backup/organize/status',(_req,res)=>res.json(organizer.status()));
+  app.post('/api/backup/organize/preview',sameOrigin,async(_req,res)=>{try{res.json(await organizer.preview());}catch(e){res.status(400).json({error:e.message});}});
+  for(const action of ['start','undo','stop'])app.post('/api/backup/organize/'+action,sameOrigin,(_req,res)=>{const r=organizer[action]();res.status(r.ok?200:409).json(r);});
 
   // ---- Clean up ----
   const cleanup = require('./cleanup');
+  app.get('/api/cleanup/exact',(_req,res)=>res.json(cleanup.exactStatus()));
+  app.post('/api/cleanup/exact/scan',sameOrigin,(_req,res)=>res.json(cleanup.scanExact()));
+  app.post('/api/cleanup/exact/stop',sameOrigin,(_req,res)=>res.json(cleanup.stopExact()));
   app.get('/api/cleanup/suggest', async (req, res) => { try { res.json(await cleanup.suggest()); } catch (e) { res.status(500).json({ error: e.message }); } });
   app.get('/api/cleanup/list', (req, res) => res.json(cleanup.list()));
   // Quarantined files are still shown, so a choice can be checked before it is final.
   app.use('/quarantine', express.static(cleanup.QUARANTINE_DIR, { index: false, dotfiles: 'ignore' }));
   const ids = (req) => (req.body && Array.isArray(req.body.ids)) ? req.body.ids.filter((x) => typeof x === 'string').slice(0, 5000) : [];
-  app.post('/api/cleanup/quarantine', sameOrigin, (req, res) => res.json(cleanup.quarantine(ids(req), req.body && req.body.reason)));
-  app.post('/api/cleanup/restore', sameOrigin, (req, res) => res.json(cleanup.restore(ids(req))));
+  app.post('/api/cleanup/quarantine', sameOrigin, async (req, res) => {try{res.json(await cleanup.quarantine(ids(req), req.body && req.body.reason));}catch(e){res.status(400).json({error:e.message});}});
+  app.post('/api/cleanup/restore', sameOrigin, async (req, res) => {try{res.json(await cleanup.restore(ids(req)));}catch(e){res.status(400).json({error:e.message});}});
   // Final. Only reaches what is already in quarantine, and the page asks twice.
-  app.post('/api/cleanup/purge', sameOrigin, (req, res) => res.json(cleanup.purge(ids(req))));
+  app.post('/api/cleanup/purge', sameOrigin, async (req, res) => {try{res.json(await cleanup.purge(ids(req)));}catch(e){res.status(400).json({error:e.message});}});
 
   // ---- AI sorting ----
   const ai = require('./ai');
@@ -973,6 +1027,7 @@ function createApp() {
   // oldest record of each picture is kept and the rest let go, file and cloud
   // copy with them. A backup of the index is written first.
   app.post('/api/maintenance/dedupe', sameOrigin, (req, res) => {
+    if(!req.body?.dryRun)return res.status(409).json({ok:false,error:'Use Clean up → Find exact duplicates, then Set aside selected. The older permanent deduplication action has been replaced with restorable cleanup.'});
     const fsx = require('fs');
     const crypto = require('crypto');
     const dry = !!(req.body && req.body.dryRun);

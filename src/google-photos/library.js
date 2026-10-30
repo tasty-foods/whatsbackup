@@ -34,7 +34,7 @@ function readViewport() {
     top: scroller.scrollTop,
     height: scroller.scrollHeight,
     viewport: scroller.clientHeight,
-    empty: /(?:no photos|your photos will appear here|back up your first photo)/i.test(document.body.innerText),
+    empty: /(?:no photos|your photos will appear here|back up your first photo|geen foto['’]?s|je foto['’]?s (?:worden|verschijnen) hier|aucune photo|vos photos (?:s['’]afficheront|appara[iî]tront) ici|keine fotos|deine fotos werden hier|אין תמונות|התמונות שלך יופיעו כאן)/i.test(document.body.innerText),
   };
 }
 

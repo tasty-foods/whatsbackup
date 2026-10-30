@@ -22,9 +22,9 @@ function mediaType(filename) {
   return { ext, kind: type[0], mime: type[1] };
 }
 
-async function hashFile(file) {
+async function hashFile(file, signal) {
   const hash = crypto.createHash('sha256');
-  for await (const chunk of fs.createReadStream(file)) hash.update(chunk);
+  for await (const chunk of fs.createReadStream(file, signal ? { signal } : undefined)) { signal?.throwIfAborted(); hash.update(chunk); }
   return hash.digest('hex');
 }
 

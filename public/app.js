@@ -25,6 +25,7 @@ const SOURCES = [
   { id: 'chatgpt', label: 'ChatGPT', glyph: '✦', badgeIn: '✦ ChatGPT', badgeOut: '↑ To ChatGPT' },
   { id: 'gemini', label: 'Gemini', glyph: '✦', badgeIn: '✦ Gemini', badgeOut: '✦ Gemini' },
   { id: 'googlephotos', label: 'Google Photos', glyph: '▧', badgeIn: '↓ Google Photos', badgeOut: '↓ Google Photos' },
+  { id: 'gmail', label: 'Gmail', glyph: '✉', badgeIn: '↓ Gmail', badgeOut: '↓ Gmail' },
 ];
 const srcOf = (r) => r.source || 'whatsapp';
 let allItems = [];         // full list, newest first
@@ -35,7 +36,7 @@ let allItems = [];         // full list, newest first
 // this and re-renders from it; none keeps a private copy. If two controls
 // could disagree, one of them would be wrong.
 const F = {
-  q: '', contentScope: 'all', source: '', kind: '', exact: '', dir: '', album: '', project: '', tag: '', backup: '', final: '', from: '', to: '', sort: 'new', favorite: false,
+  q: '', contentScope: 'all', source: '', kind: '', fileType:'', exact: '', dir: '', album: '', project: '', tag: '', backup: '', final: '', from: '', to: '', sort: 'new', favorite: false,
 };
 const thumbUrl = (r) => '/api/thumbnail/' + encodeURIComponent(r.id);
 const fEl = (id) => document.getElementById(id);
@@ -569,7 +570,7 @@ function makeSourceCard(prefix, api, label) {
     bConnect.disabled = busy;
     bConnect.textContent = s.linked ? "Sign in again…" : "Connect " + label + "…";
     bScan.disabled = busy || !s.linked;
-    bForget.disabled = busy || !s.linked;
+    bForget.disabled = busy || !(s.linked || (prefix==='gp'&&s.hasSavedSession));
     if (bStop) { bStop.classList.toggle('hidden', s.status !== 'scanning'); bStop.disabled = !!s.stopping; }
     // Older photos may predate the incremental gallery cursor. Reload the
     // archive when an import finishes so those pictures become visible too.
@@ -649,7 +650,7 @@ async function fillSourceWhere() {
     const n = s[k] ? s[k].count : 0, b = s[k] ? s[k].bytes : 0;
     return (n ? n + (k === 'googlephotos' ? ' media file' : ' photo') + (n === 1 ? '' : 's') + ' · ' + fmtBytes(b) : 'Nothing imported yet') + ' · saved to ' + escapeHtml(s.dirs.images)
       + (k === 'googlephotos' ? ' (photos) and ' + escapeHtml(s.dirs.localVideos || s.dirs.videos) + ' (videos)' : '')
-      + (s.dirs.cloudImages ? ' · copied to ' + escapeHtml(s.dirs.cloudImages) : '');
+      + (s.dirs.cloudRoot ? ' · cloud copies: ' + escapeHtml(s.dirs.cloudRoot) + (s.dirs.cloudLayout==='source-date'?' / source / month / file type':' / Images') : '');
   };
   const c = document.getElementById('cgpt-where'); if (c) c.innerHTML = line('chatgpt');
   const g = document.getElementById('gem-where'); if (g) g.innerHTML = line('gemini');
@@ -673,7 +674,7 @@ const Cleanup = (function () {
   let data = null;
 
   const mb = (b) => b >= 1e9 ? (b / 1e9).toFixed(2) + " GB" : b >= 1e6 ? (b / 1e6).toFixed(1) + " MB" : Math.round(b / 1024) + " KB";
-  const thumb = (it) => it.kind === "video"
+  const thumb = (it) => !['image','sticker'].includes(it.kind)
     ? "<div class=" + q("cl-thumb vid") + ">&#9654;</div>"
     : "<img class=" + q("cl-thumb") + " loading=" + q("lazy") + " decoding=" + q("async") + " src=" + q('/api/thumbnail/' + encodeURIComponent(it.id)) + " alt=" + q("") + ">";
   function q(s) { return String.fromCharCode(34) + s + String.fromCharCode(34); }
@@ -693,7 +694,7 @@ const Cleanup = (function () {
       const allOn = g.items.every((it) => picked.has(it.id));
       sec.innerHTML = "<div class=" + q("cl-group-head") + ">"
         + "<label class=" + q("cl-all") + "><input type=" + q("checkbox") + " " + (allOn ? "checked" : "") + " data-all=" + q(g.reason) + "> <b>" + escapeHtml(g.label) + "</b></label>"
-        + "<span class=" + q("cl-sure " + g.sure) + ">" + ({ certain: "Safe to go", likely: "Probably", optional: "Your call" })[g.sure] + "</span>"
+        + "<span class=" + q("cl-sure " + g.sure) + ">" + ({ exact:"Identical contents",certain: "Verified copy", likely: "Review", optional: "Your call" })[g.sure] + "</span>"
         + "<span class=" + q("muted small") + ">" + g.count + " item" + (g.count === 1 ? "" : "s") + " · " + mb(g.bytes) + "</span>"
         + "</div>"
         + "<p class=" + q("muted small cl-detail") + ">" + escapeHtml(g.detail) + "</p>"
@@ -926,16 +927,16 @@ async function loadSettings() {
     S.pathStatus.innerHTML = !d.cloudConfigured
       ? '<span class="muted">No cloud folder set — everything stays on this PC.</span>'
       : d.cloudAvailable
-        ? `<span class="ok-text">● Connected — videos saving to ${escapeHtml(d.paths.videos)}</span>`
-        : `<span class="bad-text">● Folder not reachable — videos saving locally to ${escapeHtml(d.paths.videos)}</span>`;
+        ? `<span class="ok-text">● Connected — ${d.settings.cloudLayout==='source-date'?'cloud files are grouped by source, month and file type in '+escapeHtml(d.settings.cloudRoot):'videos save in '+escapeHtml(d.paths.videos)}</span>`
+        : `<span class="bad-text">● Folder not reachable — videos use the local fallback folder.</span>`;
 
     const p = d.paths;
     S.paths.innerHTML = [
-      ['App data folder', p.home], ['Images', p.images], ['Videos', p.videos], ['Files', p.files],
+      ['App data folder', p.home], ['Images', p.images], ['Legacy video folder', p.videos], ['Files', p.files],
       ['Message database', p.data], ['Settings file', p.settingsFile], ['Log file', p.log],
       ['WhatsApp link', p.auth], ['ChatGPT sign-in', p.chatgptProfile || '—'], ['Gemini sign-in', p.geminiProfile || '—'],
       ['Google Photos sign-in', p.googlePhotosProfile || '—'],
-      ['Cloud copies', p.cloudImages ? p.cloudImages + '  and  ' + p.cloudVideos : 'no cloud folder set'],
+      ['Cloud copies', d.settings.cloudRoot ? d.settings.cloudRoot+(d.settings.cloudLayout==='source-date'?' (source / month / file type)':' (Images / Videos / Files)') : 'no cloud folder set'],
       ['Dashboard address', 'http://localhost:' + d.port],
     ].map(([k, v]) => `<tr><td class="k">${k}</td><td class="v">${escapeHtml(v)}</td></tr>`).join('');
 
@@ -955,12 +956,13 @@ async function loadStorage() {
     const s = await (await fetch('/api/storage')).json();
     let src = null;
     try { src = await (await fetch('/api/sources/summary')).json(); } catch (e) {}
-    const per = (k, label) => src && src[k] ? [label, `${fmtBytes(src[k].bytes)} · ${src[k].count} ${k === 'googlephotos' ? 'media files' : 'photos'}`] : null;
+    const per = (k, label) => src && src[k] ? [label, `${fmtBytes(src[k].bytes)} · ${src[k].count} ${['gmail','googlephotos'].includes(k) ? 'files' : 'photos'}`] : null;
     S.storage.innerHTML = [
       ['Images', `${fmtBytes(s.images.bytes)} · ${s.images.files} files`],
       per('whatsapp', '   from WhatsApp'), per('chatgpt', '   from ChatGPT'), per('gemini', '   from Gemini'),
       ['Videos', `${fmtBytes(s.videos.bytes)} · ${s.videos.files} files${s.videos.cloud ? ' (cloud folder)' : ''}`],
       per('googlephotos', 'Google Photos (photos and videos)'),
+      per('gmail','Gmail attachments'),
       ['Voice, audio, documents', `${fmtBytes(s.files.bytes)} · ${s.files.files} files`],
       ['Messages & index', fmtBytes(s.data.bytes)],
       ['Total', fmtBytes(s.total)],
@@ -1298,8 +1300,9 @@ const V = {
   toggle: document.getElementById('viewtoggle'),
 };
 let currentView = 'media';
-V.toggle.addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) { if (b.dataset.v === 'media' && F.favorite) { F.favorite = false; render(allItems); } setView(b.dataset.v); } });
+V.toggle.addEventListener('click', (e) => { const b = e.target.closest('button'); if (b?.dataset.v) { if (b.dataset.v === 'media' && (F.favorite||F.kind==='files')) { F.favorite = false; F.kind='';F.fileType='';syncKindUi();render(allItems); } setView(b.dataset.v); } });
 function setView(v) {
+  if(v==='documents'){clearAll();F.kind='files';syncKindUi();render(allItems);v='media';}
   currentView = v;
   [...V.toggle.children].forEach((c) => { c.classList.toggle('active', c.dataset.v === v); c.setAttribute('aria-pressed', String(c.dataset.v === v)); });
   for (const name of ['overview', 'cleanup', 'status', 'search', 'topics', 'finals']) {
@@ -2405,7 +2408,8 @@ function renderActiveBar() {
     + '<span class="count">showing ' + filteredCache.length + ' of ' + allItems.length + '</span>';
 }
 function clearAll() {
-  Object.assign(F, { q: '', contentScope: 'all', source: '', kind: '', exact: '', dir: '', album: '', project: '', tag: '', backup: '', from: '', to: '', favorite: false });
+  Object.assign(F, { q: '', contentScope: 'all', source: '', kind: '', fileType:'', exact: '', dir: '', album: '', project: '', tag: '', backup: '', from: '', to: '', favorite: false });
+  if(fEl('document-type'))fEl('document-type').value='';
   if (fEl('content-scope')) fEl('content-scope').value = 'all';
   if (window.ContentSearch) window.ContentSearch.query('');
   if (els.search) els.search.value = '';
@@ -2439,6 +2443,7 @@ function matchesAdvanced(r) {
   if (F.kind === 'photos' && !(r.kind === 'image' || r.kind === 'sticker')) return false;
   if (F.kind === 'videos' && r.kind !== 'video') return false;
   if (F.kind === 'files' && !FILE_KINDS.has(r.kind)) return false;
+  if(F.kind==='files'&&F.fileType&&window.ArchiveTools?.fileType(r)!==F.fileType)return false;
   if (F.exact && r.kind !== F.exact) return false;
   if (F.backup && typeof Backup !== 'undefined' && Backup.configured()) {
     const local = Backup.onlyHere().has(r.id);
@@ -3804,12 +3809,12 @@ const SourceOverview = (() => {
     if (running || currentView !== 'overview') return;
     running = true;
     try {
-      const [wa, cg, gm, gp] = await Promise.all(['/api/state', '/api/chatgpt/state', '/api/gemini/state', '/api/google-photos/state'].map((url) => requestJson(url).catch(() => null)));
+      const [wa, cg, gm, gp, mail] = await Promise.all(['/api/state', '/api/chatgpt/state', '/api/gemini/state', '/api/google-photos/state', '/api/gmail/state'].map((url) => requestJson(url).catch(() => null)));
       const ready = wa && wa.status === 'ready';
       const broken = wa && wa.health && !wa.health.ok;
       const syncing = wa && ['starting', 'authenticated'].includes(wa.status);
       update(root, card('WhatsApp', !wa ? 'Unavailable' : broken ? 'Needs attention' : ready ? 'Capturing' : wa.status === 'qr' ? 'Scan QR code' : 'Not connected',
-        !wa ? 'The capture engine is unavailable. Check the app or try again.' : broken ? 'Downloads are failing. Open Sources to check the connection.' : ready ? 'New messages and selected media are saved while this app runs.' : 'Link your phone to start saving WhatsApp messages and media.', !wa ? 'app' : ready || broken ? 'connection' : 'link', ready && !broken ? 'ok' : 'warn') + source('ChatGPT', cg) + source('Gemini', gm) + source('Google Photos', gp));
+        !wa ? 'The capture engine is unavailable. Check the app or try again.' : broken ? 'Downloads are failing. Open Sources to check the connection.' : ready ? 'New messages and selected media are saved while this app runs.' : 'Link your phone to start saving WhatsApp messages and media.', !wa ? 'app' : ready || broken ? 'connection' : 'link', ready && !broken ? 'ok' : 'warn') + source('ChatGPT', cg) + source('Gemini', gm) + card('Google Photos',gp?.busy?'Importing':'Export import','Import a Google Takeout folder with original photos and videos. Browser connection remains experimental.','connection',gp?.busy?'warn':'') + card('Gmail',mail?.linked?'Connected':mail?.configured?'Connect account':'Setup needed',mail?.busy?'Importing attachments. Saved files remain available.':'Save photos, videos, documents and other mail attachments. Uses read-only Google sign-in.','connection',mail?.linked?'ok':'warn'));
       let title, detail, action, button;
       if (!wa) { title = 'The capture engine is unavailable'; detail = 'Open App settings to restart capture. Your saved files remain in their folders.'; action = 'app'; button = 'Open app settings'; }
       else if (broken) { title = 'WhatsApp capture needs attention'; detail = 'Some downloads are failing. Check the connection before relying on new captures.'; action = 'connection'; button = 'Check connection'; }

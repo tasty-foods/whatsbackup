@@ -1,5 +1,11 @@
 # WhatsBackUp
 
+Version 2.2.0 adds a Documents & files workspace, read-only Gmail attachment
+imports, the official Google Photos Picker, Google Takeout folder imports,
+source/month/type cloud folders with preview and undo, and full-file duplicate
+checks with reversible cleanup. Google connections require a real desktop OAuth
+client; see [GOOGLE_SETUP.md](GOOGLE_SETUP.md). No shared credentials are bundled.
+
 A Windows desktop app that saves every photo, video and message from your WhatsApp — to a local folder, and to a cloud folder if you point it at one.
 
 The 2.0 release makes the archive understood rather than just stored. The AI reads photos, documents and (optionally) voice notes, follows each conversation into **Topics** with decisions and keywords, finds the versions of one thing that were sent and suggests the **Final** to keep (keeping copies the file into a `Finals` folder, nothing is deleted), and answers questions over the whole archive with cited sources in **Search & ask**. Search runs from every angle at once: full-text over messages with stemming and date/kind/direction filters, AI labels, vectors for search by meaning, topics, chats and people. Contacts and chats are now persisted and kept in sync with a catch-up pass on connect and every twenty minutes. The 1.6.0 workspace underneath is kept whole: photo details, document text, sampled video scenes, favourites, saved searches, selected-file ZIP exports and persistent appearance preferences. Personal organisation lives in `data/library.json`; display choices live in `data/settings.json`.

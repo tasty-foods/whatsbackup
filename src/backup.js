@@ -42,19 +42,26 @@ const log = (...a) => console.log('[backup]', ...a);
 // drive is away at startup and would then point at the wrong place.
 function cloudPathFor(rec) {
   if (!cfg.CLOUD_ROOT) return null;
-  if (rec.kind === 'video') return path.join(cfg.CLOUD_ROOT, 'Videos', rec.filename);
-  if (rec.kind === 'image' || rec.kind === 'sticker') return path.join(cfg.CLOUD_ROOT, 'Images', rec.filename);
-  return path.join(cfg.CLOUD_ROOT, 'Files', rec.filename);
+  return path.join(cfg.CLOUD_ROOT, require('./storage-layout').cloudRelative(rec, cfg.CLOUD_LAYOUT || 'flat'));
+}
+
+function cloudPathsFor(rec) {
+  if (!cfg.CLOUD_ROOT) return [];
+  const layout = require('./storage-layout');
+  return [...new Set([cloudPathFor(rec), path.join(cfg.CLOUD_ROOT, layout.cloudRelative(rec, 'source-date')), path.join(cfg.CLOUD_ROOT, layout.cloudRelative(rec, 'flat'))])];
+}
+function pathsFor(rec) {
+  const local = rec.kind === 'video' ? [cfg.LOCAL_VIDEO_DIR, cfg.VIDEO_DIR] : ['image','sticker'].includes(rec.kind) ? [cfg.IMAGES_DIR] : [cfg.FILES_DIR];
+  return [...new Set([...local.filter(Boolean).map(dir => path.join(dir, rec.filename)), ...cloudPathsFor(rec)])];
+}
+async function existingCloudPathFor(rec) {
+  for (const file of cloudPathsFor(rec)) { try { if ((await fs.promises.stat(file)).isFile()) return file; } catch (_) {} }
+  return null;
 }
 
 // Where the local copy is, if there is one.
 async function localPathFor(rec) {
-  const dirs = rec.kind === 'video' ? [cfg.LOCAL_VIDEO_DIR, cfg.VIDEO_DIR]
-    : rec.kind === 'image' || rec.kind === 'sticker' ? [cfg.IMAGES_DIR]
-      : [cfg.FILES_DIR];
-  for (const d of dirs) {
-    if (!d) continue;
-    const p = path.join(d, rec.filename);
+  for (const p of pathsFor(rec)) {
     try { if ((await fs.promises.stat(p)).isFile()) return p; } catch (_) {}
   }
   return null;
@@ -74,6 +81,7 @@ async function available() {
 // change the bytes, and then a perfect copy would be called missing for ever.
 async function expectedSize(rec) {
   const src = await localPathFor(rec);
+  if (src && cloudPathsFor(rec).some(p => path.resolve(p).toLowerCase() === path.resolve(src).toLowerCase())) return rec.size || 0;
   if (src) { try { return (await fs.promises.stat(src)).size; } catch (_) {} }
   return rec.size || 0;
 }
@@ -81,13 +89,13 @@ async function expectedSize(rec) {
 async function onCloud(rec) {
   const hit = known.get(rec.id);
   if (hit && Date.now() - hit.at < EXIST_TTL_MS) return hit.on;
-  const p = cloudPathFor(rec);
   let on = false;
-  if (p) {
+  for (const p of cloudPathsFor(rec)) {
     try {
       const file = await fs.promises.stat(p);
       const want = await expectedSize(rec);
       on = file.isFile() && file.size > 0 && (!want || file.size === want);
+      if (on) break;
     } catch (_) { on = false; }
   }
   known.set(rec.id, { on, at: Date.now() });
@@ -124,6 +132,7 @@ async function status({ ids = true } = {}) {
 // never deletes: a second copy is the point.
 async function sweep({ reason = 'manual' } = {}) {
   if (state.running) return { ok: false, error: 'already running' };
+  if (cfg.CLOUD_ORGANIZING) return { ok:false,error:'Cloud folders are being organized. Try backup again afterward.' };
   if (!cfg.CLOUD_ROOT) return { ok: false, error: 'no cloud folder set' };
   state.running = true;
   probe.at = 0;
@@ -192,4 +201,4 @@ function init() {
   if (periodic.unref) periodic.unref();
 }
 
-module.exports = { init, status, sweep, nudge, onCloud, available, cloudPathFor, localPathFor };
+module.exports = { init, status, sweep, nudge, onCloud, available, cloudPathFor, cloudPathsFor, pathsFor, existingCloudPathFor, localPathFor, statusBusy:()=>state.running };

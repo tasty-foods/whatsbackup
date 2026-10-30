@@ -7,6 +7,14 @@ const cfg = require('./config');
 const store = require('./store');
 const createApp = require('./web');
 const { startClient } = require('./whatsapp');
+const gmail = require('./gmail');
+const photosPicker=require('./google-photos/picker');
+const googleVault=type=>({
+  load:async()=>{const r=await require('./shell').request(type,{action:'load'});if(!r)throw Error('Desktop secure storage is unavailable. Open the installed app.');return r.tokens;},
+  save:async tokens=>{const r=await require('./shell').request(type,{action:'save',tokens});if(!r)throw Error('Google credentials could not be saved securely.');},
+  clear:async()=>{const r=await require('./shell').request(type,{action:'clear'});if(!r)throw Error('Google credentials could not be cleared.');},
+});
+gmail.setVault(googleVault('gmail-vault'));photosPicker.setVault(googleVault('googlephotos-vault'));
 
 store.ensureDirs();
 
@@ -34,6 +42,8 @@ const server = app.listen(cfg.PORT, '127.0.0.1', () => {
       // Replies to what the engine asked the shell for (resized pictures,
       // video frames, fingerprints) are matched up by id in src/shell.js.
       if (require('./shell').accept(msg)) return;
+      if(msg?.type==='prepare-stop'){Promise.allSettled([gmail.shutdown(),photosPicker.shutdown()]).finally(()=>{try{process.parentPort.postMessage({type:'prepared-stop'});}catch(_){}});return;}
+      if(msg?.type==='gmail-secret'){gmail.setClientSecret(msg.secret||'');photosPicker.setClientSecret(msg.secret||'');}
       if (msg && msg.type === 'ai-keys') {
         const keys = msg.keys || {};
         require('./ai').setKeys(keys);
@@ -57,6 +67,8 @@ const server = app.listen(cfg.PORT, '127.0.0.1', () => {
   try { require('./chatgpt').init(); } catch (e) { console.error('[chatgpt] failed to start:', e.message); }
   try { require('./gemini').init(); } catch (e) { console.error('[gemini] failed to start:', e.message); }
   try { require('./google-photos').init(); } catch (e) { console.error('[google-photos] failed to start:', e.message); }
+  gmail.init().catch(error=>console.error('[gmail] startup:',error.message));
+  photosPicker.init().catch(error=>console.error('[google-photos-picker] startup:',error.message));
 
   // Chats whose newer rows say "unknown" while older ones carry the name are
   // put right from the database alone, before the phone link is even up.

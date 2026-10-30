@@ -23,6 +23,7 @@ const config = {
   FILES_DIR: path.join(MEDIA_ROOT, 'files'),     // voice notes, audio, documents, stickers
 
   CLOUD_ROOT,
+  CLOUD_LAYOUT: s.cloudLayout || 'source-date',
   CLOUD_CONFIGURED: !!CLOUD_ROOT,
   VIDEO_DIR: CLOUD_ROOT ? path.join(CLOUD_ROOT, 'Videos') : path.join(MEDIA_ROOT, 'videos'),
   IMAGE_CLOUD_DIR: CLOUD_ROOT ? path.join(CLOUD_ROOT, 'Images') : path.join(MEDIA_ROOT, 'images-cloud'),

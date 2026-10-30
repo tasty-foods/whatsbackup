@@ -5,6 +5,10 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('desktop', {
   available: true,
+  configureGmail: options => ipcRenderer.invoke('wb:gmailConfigure', options || {}),
+  connectGmail: () => ipcRenderer.invoke('wb:gmailConnect'),
+  connectGooglePhotos:()=>ipcRenderer.invoke('wb:connectGooglePhotos'),
+  chooseGooglePhotos:()=>ipcRenderer.invoke('wb:chooseGooglePhotos'),
   info: () => ipcRenderer.invoke('wb:info'),
   pickFolder: (opts) => ipcRenderer.invoke('wb:pickFolder', opts || {}),
   openPath: (target) => ipcRenderer.invoke('wb:openPath', target),

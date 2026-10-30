@@ -18,7 +18,7 @@ function fixture(t) {
   fs.mkdirSync(cfg.IMAGES_DIR);
   const records = [];
   let now = Date.now();
-  const sandbox = { module: { exports: {} }, console, setTimeout, clearTimeout, setInterval, setImmediate, Date: class extends Date { static now() { return now; } }, require: name => name === './config' ? cfg : name === './store' ? { hiddenIds: () => new Set(), listRecords: () => records } : require(name) };
+  const sandbox = { module: { exports: {} }, console, setTimeout, clearTimeout, setInterval, setImmediate, Date: class extends Date { static now() { return now; } }, require: name => name === './config' ? cfg : name === './storage-layout' ? require('../src/storage-layout') : name === './store' ? { hiddenIds: () => new Set(), listRecords: () => records } : require(name) };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../src/backup.js'), 'utf8'), sandbox);
   function add(id, contents = 'complete image') {
     const rec = { id, kind: 'image', filename: id + '.jpg', size: Buffer.byteLength(contents) };

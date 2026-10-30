@@ -136,6 +136,11 @@ function startEngine() {
 
   child.on('message', (msg) => {
     if (!msg || typeof msg !== 'object') return;
+    if(msg.type==='gmail-vault'||msg.type==='googlephotos-vault') {
+      const type=msg.type,field=type==='gmail-vault'?'gmailTokensEnc':'googlePhotosTokensEnc';
+      require('./gmail-vault').createVault({settings,safeStorage,field})(msg.action,msg.tokens).then(result=>{try{child?.postMessage({type:type+'-done',id:msg.id,...result});}catch(_){}}).catch(()=>{try{child?.postMessage({type:type+'-done',id:msg.id,ok:false,error:'Secure Google credential storage failed.'});}catch(_){}});
+      return;
+    }
     if (msg.type === 'listening') {
       serverPort = msg.port;
       childRestarts = 0;
@@ -223,9 +228,9 @@ function startEngine() {
   });
 }
 
+let restartWork=null;
 function restartEngine() {
-  if (child) { try { child.kill(); } catch (_) {} child = null; }
-  else startEngine();     // the exit handler restarts it when we killed one
+  return restartWork ||= stopEngine().then(()=>{suspended=false;if(!quitting)startEngine();}).finally(()=>{restartWork=null;});
 }
 
 // Stop the engine and wait for it to actually be gone. Chrome takes a moment to
@@ -241,7 +246,12 @@ function stopEngine() {
     const c = child;
     const done = () => setTimeout(resolve, 1500);
     c.once('exit', done);
-    try { c.kill(); } catch (_) { done(); }
+    let killed=false;
+    const finishStop=()=>{if(killed)return;killed=true;c.removeListener('message',onPrepared);clearTimeout(grace);try{c.kill();}catch(_){done();}};
+    const onPrepared=msg=>{if(msg?.type==='prepared-stop')finishStop();};
+    const grace=setTimeout(finishStop,7500);grace.unref?.();
+    c.on('message',onPrepared);c.once('exit',()=>{clearTimeout(grace);c.removeListener('message',onPrepared);});
+    try { c.postMessage({type:'prepare-stop'}); } catch (_) { finishStop(); }
     setTimeout(() => resolve(), 15000);     // never hang the UI on a stuck child
   });
 }
@@ -440,6 +450,7 @@ const readAiKey = () => readAiKeys()[settings.read().aiProvider] || '';
 function sendAiKey() {
   if (!child) return;
   try { child.postMessage({ type: 'ai-keys', keys: readAiKeys() }); } catch (_) {}
+  try { child.postMessage({ type:'gmail-secret',secret:decrypt(settings.read().gmailClientSecretEnc) }); } catch (_) {}
 }
 
 // ---------- helpers ----------
@@ -538,6 +549,34 @@ async function checkForUpdates(interactive) {
 
 // ---------- IPC exposed to the dashboard ----------
 function registerIpc() {
+  ipcMain.handle('wb:gmailConfigure',async(_event,options={})=>{
+    const clientId=String(options.clientId||'').trim(),secret=options.clientSecret;
+    if(clientId&&!/^[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$/.test(clientId))return {ok:false,error:'Paste a valid Google desktop OAuth client ID.'};
+    const patch={gmailClientId:clientId};
+    if(clientId!==settings.read().gmailClientId){
+      for(const route of ['/api/gmail/disconnect','/api/google-photos/picker/disconnect']){const stopped=await post(route,{});if(!stopped?.ok)return {ok:false,error:stopped?.error||'The capture engine is unavailable. Restart the app before changing Google credentials.'};}
+      patch.gmailTokensEnc='';patch.googlePhotosTokensEnc='';patch.gmailClientSecretEnc='';
+    }
+    if(typeof secret==='string'&&secret.trim()){
+      if(!safeStorage.isEncryptionAvailable())return {ok:false,error:'Windows secure storage is unavailable.'};
+      patch.gmailClientSecretEnc=safeStorage.encryptString(secret.trim()).toString('base64');
+    }
+    if(clientId!==settings.read().gmailClientId)patch.gmailTokensEnc='';
+    settings.write(patch);sendAiKey();
+    return {ok:true};
+  });
+  ipcMain.handle('wb:gmailConnect',async()=>{
+    const result=await post('/api/gmail/connect',{});
+    if(!result?.ok||!result.authUrl)return result||{ok:false,error:'The capture engine is unavailable.'};
+    const url=new URL(result.authUrl);
+    if(url.protocol!=='https:'||url.hostname!=='accounts.google.com')return {ok:false,error:'Unexpected Google sign-in address.'};
+    await shell.openExternal(url.href);return {ok:true};
+  });
+  for(const [action,route,key,host]of [['connectGooglePhotos','connect','authUrl','accounts.google.com'],['chooseGooglePhotos','session','pickerUri','photos.google.com']])ipcMain.handle('wb:'+action,async()=>{
+    const result=await post('/api/google-photos/picker/'+route,{});if(!result?.ok||!result[key])return result||{ok:false,error:'The capture engine is unavailable.'};
+    const url=new URL(result[key]);if(url.protocol!=='https:'||url.hostname!==host)return {ok:false,error:'Unexpected Google Photos address.'};
+    await shell.openExternal(url.href);return {ok:true};
+  });
   const fileActions = require(path.join(__dirname, 'file-actions')).createFileActions({
     // Do not expose the sibling session/key directories under HOME to copying.
     getRoots: () => { const s = settings.read(); return [path.join(HOME, 'media'), s.mediaRoot, s.cloudRoot]; },
@@ -672,9 +711,10 @@ if (!ownsInstance) {
 
   app.on('window-all-closed', (e) => { /* tray app: keep running */ });
 
-  app.on('before-quit', () => {
+  let exitPrepared=false;
+  app.on('before-quit', event => {
     quitting = true;
     updates.stopAutomatic();
-    if (child) { try { child.kill(); } catch (_) {} }
+    if(child&&!exitPrepared){event.preventDefault();stopEngine().finally(()=>{exitPrepared=true;app.quit();});}
   });
 }

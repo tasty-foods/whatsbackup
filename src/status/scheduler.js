@@ -136,8 +136,8 @@ async function compose(slot, { consume = true } = {}) {
     const last = store.lastPostedRef(recs.map((r) => r.id));
     recs.sort((a, b) => (last.get(a.id) || 0) - (last.get(b.id) || 0));   // least-recently-posted first
     const rec = recs[0];
-    const base = rec.kind === 'video' ? cfg.VIDEO_DIR : cfg.IMAGES_DIR;
-    const full = path.join(base, rec.filename);
+    const full = await require('../backup').localPathFor(rec);
+    if(!full)throw new Error('The queued file is unavailable. Reconnect its storage drive.');
     if (!fs.existsSync(full)) return null;
     if (rec.kind === 'video') await validateVideo(full);
     return { type: rec.kind, filePath: full, caption: conf.caption || '', sourceRef: rec.id, describe: `${rec.kind} from album: ${rec.chat}` };

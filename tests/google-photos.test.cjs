@@ -7,6 +7,8 @@ const vm = require('node:vm');
 const { EventEmitter } = require('node:events');
 const { photoLink, photoTime, walkLibrary } = require('../src/google-photos/library');
 const { createDownloader, mediaType } = require('../src/google-photos/download');
+const takeout = require('../src/google-photos/takeout');
+const auth = require('../src/google-photos/auth');
 
 function temporary(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'whatsbackup-googlephotos-'));
@@ -119,10 +121,11 @@ test('a download timeout cancels the original and clears listeners for a later r
   await downloader.close();
 });
 
-function connector(t, { fail = [], cancelAfter = 0 } = {}) {
+function connector(t, { fail = [], cancelAfter = 0, localCancelAfter = 0, failIndexOnce = false } = {}) {
   const root = temporary(t), data = path.join(root, 'data'), profile = path.join(root, 'google-photos-session');
   fs.mkdirSync(data); fs.mkdirSync(profile); fs.writeFileSync(path.join(profile, 'linked.json'), '{}');
   const records = [], summaries = [], downloads = [], timers = [], nudges = [];
+  let indexFailures = failIndexOnce ? 1 : 0;
   let prefs = { googlePhotosEnabled: false, googlePhotosScanHours: 6 };
   let items = [{ mediaId: 'first', label: 'Photo - June 14, 2021', url: 'https://photos.google.com/photo/first' }, { mediaId: 'duplicate', url: 'https://photos.google.com/photo/duplicate' }, { mediaId: 'clip', url: 'https://photos.google.com/photo/clip' }];
   const cfg = { IMAGES_DIR: path.join(root, 'images'), LOCAL_VIDEO_DIR: path.join(root, 'videos'), DOWNLOAD_TIMEOUT_MS: 1000 };
@@ -131,9 +134,10 @@ function connector(t, { fail = [], cancelAfter = 0 } = {}) {
     '../paths': { DATA_DIR: data, APP_HOME: root, GOOGLE_PHOTOS_DIR: profile },
     '../config': cfg,
     '../settings': { read: () => prefs },
-    '../store': { has: id => records.some(rec => rec.id === id), listRecords: () => records, addRecord: rec => { records.push(rec); return true; } },
+    '../store': { has: id => records.some(rec => rec.id === id), listRecords: () => records, addRecord: rec => { if (indexFailures) { indexFailures--; throw new Error('Disk full'); } records.push(rec); return true; } },
     '../source-history': { read: () => summaries.at(-1) || null, write: (_source, run) => summaries.push({ ...run }) },
-    '../ai': { noteNewMedia() {} }, '../backup': { nudge: () => nudges.push(true) },
+    '../ai': { noteNewMedia() { if (localCancelAfter && records.length >= localCancelAfter) context.module.exports.cancel(); } }, '../backup': { nudge: () => nudges.push(true) },
+    './auth': auth, './takeout': takeout, './lock': require('../src/google-photos/lock'),
     './library': {
       ...require('../src/google-photos/library'),
       walkLibrary: async (_page, visit, { signal }) => {
@@ -167,7 +171,7 @@ function connector(t, { fail = [], cancelAfter = 0 } = {}) {
   });
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/google-photos/index.js'), 'utf8'), context);
   vm.runInContext('launch = async () => fixtureBrowser; openPage = async () => ({}); requireSignIn = async () => { state.linked = true; }; closeBrowser = async () => {};', context);
-  return { api: context.module.exports, root, data, cfg, records, summaries, downloads, timers, nudges, setPrefs: value => { prefs = value; }, setItems: value => { items = value; } };
+  return { api: context.module.exports, root, data, cfg, records, summaries, downloads, timers, nudges, setPrefs: value => { prefs = value; }, setItems: value => { items = value; }, setLastRun: run => summaries.push(run) };
 }
 
 test('a scan preserves original bytes, imports video locally, skips byte duplicates, and resumes without downloading saved items', async t => {
@@ -251,6 +255,146 @@ test('forgetting Google Photos removes only its sign-in profile and retains the 
   assert.equal(fixture.api.getState().busy, false);
 });
 
+function takeoutFolder(fixture) {
+  const root = path.join(fixture.root, 'Takeout', 'Google Photos');
+  fs.mkdirSync(path.join(root, 'Photos from 2021'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'Zzz album'), { recursive: true });
+  const photo = path.join(root, 'Photos from 2021', 'image #1.png');
+  const video = path.join(root, 'Photos from 2021', 'video.mov');
+  fs.writeFileSync(photo, Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3]));
+  fs.writeFileSync(video, 'exported original video');
+  fs.copyFileSync(photo, path.join(root, 'Zzz album', 'same-image.png'));
+  fs.writeFileSync(photo + '.supplemental-metadata.json', JSON.stringify({ title: 'image #1.png', description: 'Original export description', photoTakenTime: { timestamp: '1623672000' }, geoData: { latitude: 1 } }));
+  fs.writeFileSync(video + '.json', JSON.stringify({ photoTakenTime: { timestamp: '1623758400' } }));
+  fs.writeFileSync(path.join(root, 'not-a-photo.mbox'), 'irrelevant export');
+  fs.writeFileSync(path.join(root, 'archive.zip'), 'not extracted');
+  return { root, photo, video };
+}
+
+test('Takeout folder import preserves originals and sidecar dates, deduplicates albums and resumes without browser sign-in', async t => {
+  const f = connector(t), exported = takeoutFolder(f);
+  const pending = f.api.importFolder({ folder: exported.root });
+  assert.equal(f.api.getState().busy, true);
+  assert.equal(f.api.getState().progress.phase, 'takeout');
+  const result = await pending;
+  assert.equal(result.ok, true);
+  assert.equal(result.method, 'takeout');
+  assert.equal(result.complete, true);
+  assert.equal(result.saved, 2);
+  assert.equal(result.skipped, 1);
+  assert.ok(result.ignored >= 4);
+  assert.equal(f.downloads.length, 0);
+  assert.equal(f.api.getState().linked, false);
+  const image = f.records.find(r => r.kind === 'image'), video = f.records.find(r => r.kind === 'video');
+  assert.equal(image.ts, 1623672000000);
+  assert.equal(image.caption, 'Original export description');
+  assert.equal(video.ts, 1623758400000);
+  assert.equal(image.importMethod, 'takeout');
+  assert.deepEqual(fs.readFileSync(path.join(f.cfg.IMAGES_DIR, image.filename)), fs.readFileSync(exported.photo));
+  assert.deepEqual(fs.readFileSync(path.join(f.cfg.LOCAL_VIDEO_DIR, video.filename)), fs.readFileSync(exported.video));
+  const again = await f.api.importFolder({ folder: exported.root });
+  assert.equal(again.saved, 0);
+  assert.equal(again.skipped, 3);
+  assert.equal(f.records.length, 2);
+  assert.ok(fs.existsSync(exported.photo));
+  assert.ok(fs.existsSync(exported.video));
+  assert.equal(f.api.getState().takeoutSupported, true);
+});
+
+test('Takeout refuses invalid and archive-overlapping folders and excludes symlinks and unrelated files', async t => {
+  const f = connector(t), exported = takeoutFolder(f), outside = path.join(f.root, 'outside');
+  fs.mkdirSync(outside); fs.writeFileSync(path.join(outside, 'private.png'), 'outside');
+  fs.symlinkSync(outside, path.join(exported.root, 'escape'), process.platform === 'win32' ? 'junction' : 'dir');
+  const result = await f.api.importFolder({ folder: exported.root });
+  assert.equal(result.saved, 2);
+  assert.equal(f.records.some(r => r.docName === 'private.png'), false);
+  for (const folder of ['', 'relative', path.parse(f.root).root, f.cfg.IMAGES_DIR, f.root, exported.photo]) {
+    const bad = await f.api.importFolder({ folder });
+    assert.equal(bad.ok, false, folder);
+    assert.equal(bad.complete, false);
+  }
+  const zipOnly = path.join(f.root, 'zip-only'); fs.mkdirSync(zipOnly); fs.writeFileSync(path.join(zipOnly, 'takeout.zip'), 'compressed');
+  assert.match((await f.api.importFolder({ folder: zipOnly })).error, /Extract every Google Photos Takeout ZIP/);
+  assert.equal(f.records.length, 2);
+});
+
+test('Takeout cancellation retains completed files, keeps the export untouched and supports retry', async t => {
+  const f = connector(t, { localCancelAfter: 1 }), exported = takeoutFolder(f);
+  const result = await f.api.importFolder({ folder: exported.root });
+  assert.equal(result.cancelled, true);
+  assert.equal(result.complete, false);
+  assert.equal(result.saved, 1);
+  assert.equal(f.api.getState().busy, false);
+  assert.ok(fs.existsSync(exported.photo));
+  assert.ok(fs.existsSync(exported.video));
+  const retried = await f.api.importFolder({ folder: exported.root });
+  assert.equal(retried.saved, 1);
+  assert.equal(f.records.length, 2);
+});
+
+test('Takeout index failure stays incomplete and a later retry recovers the verified copied file', async t => {
+  const f = connector(t, { failIndexOnce: true }), exported = takeoutFolder(f);
+  const result = await f.api.importFolder({ folder: exported.root });
+  assert.equal(result.complete, false);
+  assert.equal(result.failed, 1);
+  assert.equal(f.summaries[0].firstError, 'Disk full');
+  const retried = await f.api.importFolder({ folder: exported.root });
+  assert.equal(retried.complete, true);
+  assert.equal(f.records.length, 2);
+  for (const directory of [f.cfg.IMAGES_DIR, f.cfg.LOCAL_VIDEO_DIR]) assert.equal(fs.readdirSync(directory).some(name => name.endsWith('.part')), false);
+});
+
+test('Takeout metadata handles duplicate suffixes, truncated sidecar filenames and historical dates without importing arbitrary fields', async t => {
+  const root = temporary(t), file = path.join(root, 'summer(1).jpg');
+  fs.writeFileSync(file, 'photo');
+  fs.writeFileSync(path.join(root, 'summer.jpg(1).json'), JSON.stringify({ title: 'summer(1).jpg', photoTakenTime: { timestamp: '-100' }, geoData: { latitude: 12 } }));
+  const metadataFor = takeout.metadataReader(), item = { name: 'summer(1).jpg', directory: root, sidecars: ['summer.jpg(1).json'] };
+  const metadata = await metadataFor(item);
+  assert.equal(takeout.takenTime(metadata, 123).ts, -100000);
+  assert.equal(metadata.geoData, undefined);
+  const other = 'a-very-long-original-file-title.jpg';
+  fs.writeFileSync(path.join(root, 'shortened.supplemental-metadata.json'), JSON.stringify({ title: other, creationTime: { timestamp: '0' } }));
+  assert.equal(takeout.takenTime(await metadataFor({ name: other, directory: root, sidecars: ['summer.jpg(1).json', 'shortened.supplemental-metadata.json'] }), 123).ts, 0);
+  assert.equal(takeout.takenTime({ photoTakenTime: { timestamp: '' } }, 123).ts, 123);
+});
+
+test('failed Google Photos account checks survive restart and a cached marker is never a verified connection', t => {
+  const f = connector(t);
+  f.setPrefs({ googlePhotosEnabled: true, googlePhotosScanHours: 6 });
+  f.setLastRun({ failed: 1, complete: false, firstError: 'Could not read the Google Photos account.', finishedAt: 123 });
+  f.api.init();
+  const state = f.api.getState();
+  assert.equal(state.status, 'error');
+  assert.equal(state.linked, false);
+  assert.equal(state.connectionVerified, false);
+  assert.equal(state.hasSavedSession, true);
+  assert.match(state.lastError, /Could not read/);
+  assert.equal(state.lastScanAt, 123);
+  assert.equal(f.timers.length, 0);
+});
+
+test('Google auth detects rejected login and accepts localized account controls or photo grids only at the Photos origin', async () => {
+  const page = (url, signals) => ({ url: () => url, isClosed: () => false, evaluate: async () => signals });
+  assert.equal((await auth.inspect(page('https://accounts.google.com/signin/rejected', {}))).blocked, true);
+  assert.equal((await auth.inspect(page('https://accounts.google.com/signin', { blocked: true }))).ready, false);
+  assert.equal((await auth.inspect(page('https://photos.google.com/', { account: true }))).ready, true);
+  assert.equal((await auth.inspect(page('https://photos.google.com/', { account: true, blocked: true }))).blocked, false);
+  assert.equal((await auth.inspect(page('https://photos.google.com/', { photos: true }))).ready, true);
+  assert.equal((await auth.inspect(page('https://photos.google.com.evil.test/', { photos: true }))).ready, false);
+  assert.match(auth.blockedMessage(), /Takeout/);
+  const flags = vm.runInNewContext('(' + auth.readAuthSignals.toString() + ')()', { document: { body: { innerText: 'This browser or app may not be secure' }, querySelector: () => null, querySelectorAll: () => [] } });
+  assert.equal(flags.blocked, true);
+});
+
+test('localized empty photo libraries are distinct from unreadable loading pages', () => {
+  const { readViewport } = require('../src/google-photos/library');
+  for (const text of ["Geen foto's", 'Aucune photo', 'Keine Fotos', 'אין תמונות']) {
+    const body = { innerText: text, scrollTop: 0, scrollHeight: 100, clientHeight: 100 };
+    const view = vm.runInNewContext('(' + readViewport.toString() + ')()', { document: { body, scrollingElement: body, querySelectorAll: () => [] } });
+    assert.equal(view.empty, true, text);
+  }
+});
+
 test('an index write failure leaves a photo available for retry instead of claiming it was saved', () => {
   let fail = true;
   const disk = [];
@@ -296,7 +440,7 @@ test('Google Photos API rejects unlinked or busy scans, validates schedules, and
       { id: 'legacy', size: 10 }, { id: 'google-photo', source: 'googlephotos', size: 20 },
       { id: 'google-video', source: 'googlephotos', kind: 'video', size: 30 },
       { id: 'hidden', source: 'googlephotos', size: 999 }, { id: 'sample', source: 'googlephotos', sample: true, size: 999 },
-    ] }, './google-photos': googlePhotos,
+    ] }, './google-photos': googlePhotos, './google-photos/picker': { getState: () => ({ busy: false }) },
   });
   const server = await new Promise(resolve => { const listening = createApp().listen(0, '127.0.0.1', () => resolve(listening)); });
   t.after(() => new Promise(resolve => server.close(resolve)));

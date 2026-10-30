@@ -555,10 +555,15 @@ async function saveMediaMessage(msg, chatObj) {
   // Async writes so a slow cloud-drive write doesn't block the shared event loop
   // (which also serves the dashboard the user is looking at).
   const area = AREA_BY_KIND[kind];
-  const target = area === 'videos' ? cfg.VIDEO_DIR : area === 'files' ? cfg.FILES_DIR : cfg.IMAGES_DIR;
+  const cloudTarget = cfg.CLOUD_AVAILABLE && area === 'videos' ? require('./backup').cloudPathFor({ kind, filename, ts, source: 'whatsapp' }) : null;
+  let destination = cloudTarget || path.join(area === 'videos' ? cfg.LOCAL_VIDEO_DIR : area === 'files' ? cfg.FILES_DIR : cfg.IMAGES_DIR, filename);
   try {
-    await fs.promises.mkdir(target, { recursive: true });
-    await fs.promises.writeFile(path.join(target, filename), buf);
+    try { await fs.promises.mkdir(path.dirname(destination), { recursive: true }); await fs.promises.writeFile(destination, buf); }
+    catch (error) {
+      if (!cloudTarget) throw error;
+      destination = path.join(cfg.LOCAL_VIDEO_DIR, filename);
+      await fs.promises.mkdir(path.dirname(destination), { recursive: true }); await fs.promises.writeFile(destination, buf);
+    }
   } catch (e) {
     // Tagged so the health net can tell "the drive went away" from "WhatsApp
     // changed its internals". They need opposite reactions from the user.
@@ -567,8 +572,8 @@ async function saveMediaMessage(msg, chatObj) {
   }
   if (area === 'images' && mirrorImages()) {
     try {
-      await fs.promises.mkdir(cfg.IMAGE_CLOUD_DIR, { recursive: true });
-      await fs.promises.writeFile(path.join(cfg.IMAGE_CLOUD_DIR, filename), buf);
+      const mirror = require('./backup').cloudPathFor({ kind, filename, ts, source:'whatsapp' });
+      if (mirror) { await fs.promises.mkdir(path.dirname(mirror), { recursive: true }); await fs.promises.writeFile(mirror, buf); }
     } catch (_) {}
   }
   const serve = `/media/${area}/` + encodeURIComponent(filename);
@@ -577,7 +582,7 @@ async function saveMediaMessage(msg, chatObj) {
     id, ts, dir, kind, chat: chatName, number, mimetype: media.mimetype,
     filename, serve, size: buf.length, caption: require('./content/message-text')(msg.body),
     docName: msg.type === 'document' ? (msg._data && msg._data.filename) || '' : '',
-    cloud: area === 'videos' ? cfg.CLOUD_AVAILABLE : false,
+    cloud: !!cloudTarget && destination === cloudTarget,
   };
   store.addRecord(rec);
   return rec;

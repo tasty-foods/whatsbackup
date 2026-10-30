@@ -36,6 +36,45 @@ not exercised.
   cluster items of the same kind inside one chat; semantic search needs an
   embedding-capable provider and is skipped silently without one.
 
+# Sources, documents, cloud folders and duplicates — 2.2.0
+
+Added a dedicated Documents & files workspace with file-type filters, Gmail
+attachment imports, official Google Photos Picker connection and selected-media
+downloads, and an extracted Takeout-folder importer for full-library originals.
+Google OAuth uses normal-browser sign-in, PKCE and loopback callbacks. Gmail
+and Photos have separate encrypted token stores; settings and diagnostics omit
+all credentials. Google clients are supplied by the user, with a setup guide.
+Live account authorization was not exercised; local OAuth/API fixtures cover
+the callback, tokens, downloads, pagination, stop/resume and failure cases.
+
+The old Google Photos session marker no longer proves a working connection.
+Failed state survives restarts and repeated failing browser imports stop
+relaunching automatically. Browser sign-in remains explicitly experimental;
+the Picker and Takeout are the supported paths. Picker media are Google's
+downloads: location metadata is omitted and videos can be transcoded.
+
+Cloud copies now support source / month / file-type folders. Legacy flat copies
+remain readable everywhere: serving, thumbnails, indexing, export, location
+controls, status selection and cleanup. Existing copies can be previewed,
+organized and restored with a recovery journal. Exclusive copies, full content
+checks, timestamp preservation, conflict checks and root/junction validation
+prevent overwriting unrelated files. No live archive organization was executed.
+
+Duplicate scanning reads complete files in bounded background workers and
+covers every file type. Shared physical paths are protected; extra copies are
+quarantined with their local/cloud paths, checked before restore or purge, and
+cannot remove the last verified independent copy. The older permanent
+maintenance dedupe action directs users to this restorable workflow. Active
+HTML/SVG attachment responses download under a restrictive sandbox policy.
+
+Validation includes 161 automated checks and browser flows using isolated sample
+files: Takeout import and repeat deduplication, Gmail options, document filters,
+cloud organization and undo, exact duplicate scan, set-aside and restore. Native
+Google sign-in still requires the user's own client setup and authorization.
+No real mailbox, cloud archive reorganization or permanent cleanup was used.
+
+---
+
 # File access and clipboard — 2.1.1
 
 The location endpoint called the asynchronous local-path lookup without waiting

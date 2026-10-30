@@ -47,7 +47,7 @@ window.Workspace = (() => {
       open.addEventListener('click',()=>{
         clearAll(); Object.assign(F,view.filters); els.search.value=F.q || '';
         if(node('content-scope'))node('content-scope').value=['all','content','names'].includes(F.contentScope)?F.contentScope:'all';
-        const ids={exact:'f-exact',dir:'f-dir',album:'f-album',project:'f-project',tag:'f-tag',backup:'f-backup',from:'f-from',to:'f-to',sort:'f-sort'};
+        const ids={fileType:'document-type',exact:'f-exact',dir:'f-dir',album:'f-album',project:'f-project',tag:'f-tag',backup:'f-backup',from:'f-from',to:'f-to',sort:'f-sort'};
         Object.entries(ids).forEach(([key,id])=>{if(node(id))node(id).value=F[key]||'';});
         syncKindUi();renderSourceBar();setView('media');if(window.ContentSearch && F.q)window.ContentSearch.query(F.q);else render(allItems);
       });
@@ -59,7 +59,11 @@ window.Workspace = (() => {
     });
   }
   function onView(view) {
-    node('workspace-title').textContent = view === 'media' && F.favorite ? 'Favourites' : title[view] || 'Overview';
+    const documents=view==='media'&&F.kind==='files';
+    node('workspace-title').textContent = documents?'Documents & files':view === 'media' && F.favorite ? 'Favourites' : title[view] || 'Overview';
+    const docsNav=node('nav-documents');if(docsNav){docsNav.classList.toggle('active',documents);docsNav.setAttribute('aria-pressed',String(documents));}
+    if(documents){const nav=document.querySelector('#viewtoggle [data-v="media"]');nav.classList.remove('active');nav.setAttribute('aria-pressed','false');}
+    node('document-file-tools')?.classList.toggle('hidden',!documents);
     node('nav-favorites').classList.toggle('active',view==='media' && F.favorite);
     node('nav-favorites').setAttribute('aria-pressed',String(view==='media' && F.favorite));
     if(view==='media' && F.favorite) { const button=document.querySelector('#viewtoggle [data-v="media"]');button.classList.remove('active');button.setAttribute('aria-pressed','false'); }
@@ -79,7 +83,7 @@ window.Workspace = (() => {
   }
   function onRender() {
     node('library-count').textContent=filteredCache.length.toLocaleString()+(filteredCache.length===1?' item':' items');
-    node('library-title').firstChild.textContent=F.favorite?'Your favourites ':'Your library ';
+    node('library-title').firstChild.textContent=F.kind==='files'?'Your documents & files ':F.favorite?'Your favourites ':'Your library ';
     node('nav-media-count').textContent=allItems.length.toLocaleString();
     node('favorites-count').textContent=allItems.filter(item=>favoriteIds.has(item.id)).length.toLocaleString();
     node('export-matching').disabled=!filteredCache.length;

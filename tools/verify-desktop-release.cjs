@@ -34,8 +34,9 @@ async function verify(directory = path.resolve(__dirname, '../dist')) {
   for (const relative of ['src/content/worker.js', 'public/content-search.js', 'public/third-party.html', 'node_modules/ffmpeg-static/ffmpeg.exe', 'node_modules/ffmpeg-static/ffmpeg.exe.LICENSE', 'node_modules/sharp/package.json', 'node_modules/pdfjs-dist/legacy/build/pdf.mjs']) {
     assert.ok(fs.existsSync(path.join(resources, 'app', relative)), `Missing content-search runtime: ${relative}`);
   }
-  for (const relative of ['electron/file-actions.js', 'electron/main.js', 'electron/preload.js', 'src/media-locations.js', 'public/file-actions.js', 'public/workspace.js', 'public/workspace.css', 'src/google-photos/index.js', 'src/google-photos/library.js', 'src/google-photos/download.js', 'src/index.js', 'src/paths.js', 'src/settings.js', 'src/store.js', 'src/web.js', 'public/index.html', 'public/app.js', 'public/styles.css']) {
-    assert.deepEqual(fs.readFileSync(path.join(resources, 'app', relative)), fs.readFileSync(path.resolve(__dirname, '..', relative)), `Packaged runtime differs from source: ${relative}`);
+  for(const directory of ['electron','src','public'])for(const name of fs.readdirSync(path.resolve(__dirname,'..',directory),{recursive:true})){
+    const relative=path.join(directory,name),source=path.resolve(__dirname,'..',relative);if(!fs.statSync(source).isFile())continue;
+    assert.deepEqual(fs.readFileSync(path.join(resources,'app',relative)),fs.readFileSync(source),`Packaged runtime differs from source: ${relative}`);
   }
   assert.ok(fs.existsSync(path.join(resources, 'app/node_modules/puppeteer/package.json')), 'Missing source browser runtime');
   return { version, installer, bytes: file.size, sha512, feed: 'tasty-foods/whatsbackup', assets: [filename, filename + '.blockmap', 'latest.yml'] };

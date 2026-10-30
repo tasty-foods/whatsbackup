@@ -10,6 +10,9 @@ const store = require('../store');
 const history = require('../source-history');
 const { ORIGIN, walkLibrary, photoTime } = require('./library');
 const { createDownloader, hashFile } = require('./download');
+const auth = require('./auth');
+const takeout = require('./takeout');
+const lock = require('./lock');
 
 const PROFILE_DIR = paths.GOOGLE_PHOTOS_DIR;
 const MARKER = path.join(PROFILE_DIR, 'linked.json');
@@ -32,10 +35,10 @@ async function launch({ headed = false } = {}) {
   const profile = require('../browser-profile');
   fs.mkdirSync(PROFILE_DIR, { recursive: true });
   profile.forgetTabs(PROFILE_DIR);
-  const args = ['--disable-gpu', '--lang=en-US', ...profile.QUIET_ARGS, '--disable-blink-features=AutomationControlled'];
+  const args = ['--disable-gpu', '--lang=en-US', ...profile.QUIET_ARGS];
   if (process.env.WB_NO_SANDBOX === '1') args.push('--no-sandbox', '--disable-setuid-sandbox');
   browser = await require('puppeteer').launch({
-    headless: !headed, args, userDataDir: PROFILE_DIR, ignoreDefaultArgs: ['--enable-automation'],
+    headless: !headed, args, userDataDir: PROFILE_DIR,
     defaultViewport: headed ? null : { width: 1280, height: 900 }, protocolTimeout: 120000,
     ...(cfg.CHROME_PATH ? { executablePath: cfg.CHROME_PATH } : {}),
   });
@@ -54,69 +57,72 @@ async function closeBrowser() {
 async function openPage(b, url = ORIGIN + '/?hl=en') {
   const page = await b.newPage();
   page.setDefaultTimeout(60000);
-  const ua = await b.userAgent();
-  await page.setUserAgent(ua.replace('HeadlessChrome', 'Chrome'));
   await page.setExtraHTTPHeaders({ 'Accept-Language': 'en-US,en;q=0.9' });
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
   return page;
-}
-
-async function signedIn(page) {
-  if (page.isClosed() || new URL(page.url()).origin !== ORIGIN) return false;
-  try { return await page.evaluate(() => !!document.querySelector('a[aria-label^="Google Account"], button[aria-label^="Google Account"], a[href*="accounts.google.com/SignOutOptions"], a[href*="/photo/"]')); }
-  catch (_) { return false; }
 }
 
 async function requireSignIn(page) {
   // A slow grid must not erase a valid session. Only an explicit login page
   // clears the marker; other loading failures remain retryable.
   for (let i = 0; i < 20; i++) {
-    if (await signedIn(page)) { markLinked(true); return; }
-    if (new URL(page.url()).hostname === 'accounts.google.com') {
+    const current = await auth.inspect(page);
+    if (current.blocked) { markLinked(false); throw new Error(auth.blockedMessage()); }
+    if (current.ready) { markLinked(true); return; }
+    if (current.login) {
       markLinked(false);
-      throw new Error('Google Photos is signed out — connect again.');
+      throw new Error('Google Photos is signed out. Browser sign-in may be blocked by Google. ' + auth.TAKEOUT_HELP);
     }
     await new Promise(resolve => setTimeout(resolve, 1000));
   }
-  throw new Error('Could not read the Google Photos account. Try signing in again.');
+  throw new Error('Google Photos did not expose a readable signed-in library. ' + auth.TAKEOUT_HELP);
 }
 
 async function connect() {
   if (state.busy) return { ok: false, error: 'Google Photos is already busy' };
+  const release = lock.acquire('browser-sign-in');
+  if (!release) return { ok: false, busy: true, error: 'Another Google Photos operation is running.' };
   state.busy = true; state.status = 'connecting'; state.lastError = null;
+  controller = new AbortController();
+  const signal = controller.signal;
   clearTimeout(timer); state.nextScanAt = null;
   try {
     const b = await launch({ headed: true });
     const page = await openPage(b);
     const until = Date.now() + 10 * 60000;
     while (Date.now() < until && !page.isClosed()) {
-      if (await signedIn(page)) {
+      signal.throwIfAborted();
+      const current = await auth.inspect(page);
+      if (current.blocked) { markLinked(false); throw new Error(auth.blockedMessage()); }
+      if (current.ready) {
         markLinked(true); state.status = 'linked';
         return { ok: true };
       }
       await new Promise(resolve => setTimeout(resolve, 1500));
     }
-    throw new Error(page.isClosed() ? 'Sign-in window closed before Google Photos connected.' : 'No Google Photos sign-in within ten minutes.');
+    throw new Error(page.isClosed() ? 'Sign-in window closed before Google Photos connected. ' + auth.TAKEOUT_HELP : 'No Google Photos sign-in within ten minutes. ' + auth.TAKEOUT_HELP);
   } catch (error) {
     state.lastError = error.message; state.status = state.linked ? 'error' : 'unlinked';
     return { ok: false, error: error.message };
-  } finally { await closeBrowser(); state.busy = false; schedule(); }
+  } finally { await closeBrowser(); state.busy = false; state.stopping = false; controller = null; release(); schedule(); }
 }
 
 async function checkLink() {
   if (state.busy) return state.linked;
   if (!hasProfile()) { state.linked = false; state.status = 'unlinked'; return false; }
+  const release = lock.acquire('browser-check'); if (!release) return false;
   state.busy = true;
   try {
     await requireSignIn(await openPage(await launch()));
     state.status = 'linked'; state.lastError = null;
     return true;
   } catch (error) { state.lastError = error.message; state.status = state.linked ? 'error' : 'unlinked'; return false; }
-  finally { await closeBrowser(); state.busy = false; schedule(); }
+  finally { await closeBrowser(); state.busy = false; release(); schedule(); }
 }
 
 async function disconnect() {
   if (state.busy) return { ok: false, error: 'Stop the Google Photos import before forgetting this account.' };
+  const release = lock.acquire('browser-forget'); if (!release) return { ok: false, busy: true, error: 'Another Google Photos operation is running.' };
   state.busy = true;
   clearTimeout(timer); clearTimeout(startupTimer); timer = startupTimer = null;
   try {
@@ -127,7 +133,7 @@ async function disconnect() {
     state.linked = false; state.status = 'unlinked'; state.lastError = null; state.nextScanAt = null;
     return { ok: true };
   } catch (error) { state.lastError = error.message; return { ok: false, error: 'Could not forget Google Photos: ' + error.message }; }
-  finally { state.busy = false; schedule(); }
+  finally { state.busy = false; release(); schedule(); }
 }
 
 function readSeen() {
@@ -142,9 +148,85 @@ function writeSeen(seen) {
   fs.renameSync(SEEN_FILE + '.tmp', SEEN_FILE);
 }
 
+// Google Takeout is the supported full-library path. Read only the selected,
+// extracted directory; leave the export untouched and keep a separate original.
+async function importFolder({ folder, reason = 'takeout' } = {}) {
+  if (state.busy) return { ok: false, error: 'Google Photos is already busy' };
+  const release = lock.acquire('takeout'); if (!release) return { ok: false, busy: true, error: 'Another Google Photos operation is running.' };
+  state.busy = true; state.status = 'scanning'; state.lastError = null; state.stopping = false;
+  state.nextScanAt = null; clearTimeout(timer); clearTimeout(startupTimer);
+  controller = new AbortController();
+  const signal = controller.signal;
+  const run = { method: 'takeout', images: 0, videos: 0, saved: 0, skipped: 0, ignored: 0, failed: 0, complete: false, cancelled: false, firstError: null, at: Date.now(), reason };
+  state.progress = { phase: 'takeout', found: 0, images: 0, videos: 0, saved: 0, skipped: 0, ignored: 0, failed: 0 };
+  try {
+    const root = await takeout.validateFolder(folder, [cfg.IMAGES_DIR, cfg.LOCAL_VIDEO_DIR, cfg.FILES_DIR, paths.DATA_DIR, PROFILE_DIR]);
+    const metadataFor = takeout.metadataReader();
+    const held = new Map(store.listRecords({}).filter(rec => rec.source === 'googlephotos' && rec.hash).map(rec => [rec.hash, rec.id]));
+    let consecutiveFailures = 0;
+    for await (const item of takeout.walkMedia(root, { signal, onProgress: progress => { Object.assign(state.progress, progress); run.ignored = progress.ignored; } })) {
+      signal.throwIfAborted();
+      if (item.kind === 'video') run.videos++; else run.images++;
+      try {
+        const original = await takeout.inspectFile(item, root, signal);
+        const id = recordId('takeout:' + original.hash);
+        if (held.has(original.hash) || store.has(id)) { run.skipped++; consecutiveFailures = 0; continue; }
+        const metadata = await metadataFor(item);
+        signal.throwIfAborted();
+        const dated = takeout.takenTime(metadata, original.mtimeMs);
+        const filename = `${new Date(dated.ts).toISOString().slice(0, 19).replace(/[-:T]/g, '')}__googlephotos__${id.slice(-24)}.${item.ext}`;
+        const directory = item.kind === 'video' ? cfg.LOCAL_VIDEO_DIR : cfg.IMAGES_DIR;
+        await fs.promises.mkdir(directory, { recursive: true });
+        const target = path.join(directory, filename);
+        await takeout.copyOriginal(original, target, signal);
+        // Copy completion and byte count are checked before the archive index is
+        // changed. On an index failure, the unchanged export can safely retry.
+        const size = (await fs.promises.stat(target)).size;
+        const rec = {
+          id, ...dated, importedAt: Date.now(), dir: 'in', kind: item.kind, source: 'googlephotos', chat: 'Google Photos', number: '',
+          mimetype: item.mime, filename, docName: item.name,
+          serve: '/media/' + (item.kind === 'video' ? 'videos/' : 'images/') + encodeURIComponent(filename),
+          size, caption: typeof metadata?.description === 'string' ? metadata.description.slice(0, 3000) : '',
+          generated: false, cloud: false, hash: original.hash, importMethod: 'takeout',
+        };
+        if (store.addRecord(rec)) {
+          held.set(original.hash, id); run.saved++;
+          try { require('../ai').noteNewMedia(rec); } catch (_) {}
+          if (run.saved === 1 || run.saved % 25 === 0) { try { require('../backup').nudge(); } catch (_) {} }
+        } else run.skipped++;
+        consecutiveFailures = 0;
+      } catch (error) {
+        if (signal.aborted) throw error;
+        run.failed++; run.firstError ||= error.message;
+        if (++consecutiveFailures >= 3) throw new Error('Three exported files failed in a row. Import stopped; fix the storage problem and retry. ' + run.firstError);
+      } finally {
+        Object.assign(state.progress, { images: run.images, videos: run.videos, saved: run.saved, skipped: run.skipped, failed: run.failed });
+      }
+    }
+    if (!run.images && !run.videos) throw new Error('No supported photos or videos were found. Extract every Google Photos Takeout ZIP, then choose its extracted Google Photos folder.');
+    run.complete = !run.failed;
+    state.status = run.complete ? state.linked ? 'linked' : hasProfile() ? 'unverified' : 'unlinked' : 'error';
+    state.lastError = run.firstError;
+    return { ok: run.complete, ...run };
+  } catch (error) {
+    run.cancelled = signal.aborted;
+    if (!run.cancelled) { run.failed = Math.max(1, run.failed); run.firstError ||= error.message; state.lastError = error.message; }
+    state.status = run.cancelled ? state.linked ? 'linked' : 'unlinked' : 'error';
+    return { ok: run.cancelled, error: run.cancelled ? undefined : error.message, ...run };
+  } finally {
+    run.finishedAt = Date.now(); state.lastRun = run; state.lastScanAt = run.finishedAt;
+    try { history.write('googlephotos', run); } catch (_) {}
+    state.busy = false; state.progress = null; state.stopping = false; controller = null;
+    if (run.saved) { try { require('../backup').nudge(); } catch (_) {} }
+    log(`${reason}: ${run.saved} saved, ${run.skipped} already saved, ${run.failed} failed${run.cancelled ? ', stopped' : ''}`);
+    release(); schedule();
+  }
+}
+
 async function scan({ reason = 'manual' } = {}) {
   if (state.busy) return { ok: false, error: 'Google Photos is already busy' };
   if (!hasProfile()) { state.status = 'unlinked'; return { ok: false, error: 'Connect Google Photos first.' }; }
+  const release = lock.acquire('browser-import'); if (!release) return { ok: false, busy: true, error: 'Another Google Photos operation is running.' };
   state.busy = true; state.status = 'scanning'; state.lastError = null; state.stopping = false;
   state.nextScanAt = null; clearTimeout(timer); clearTimeout(startupTimer);
   controller = new AbortController();
@@ -236,11 +318,11 @@ async function scan({ reason = 'manual' } = {}) {
       try { await fs.promises.rm(staging, { recursive: true, force: true }); } catch (_) {}
     }
     run.finishedAt = Date.now(); state.lastRun = run; state.lastScanAt = run.finishedAt;
-    history.write('googlephotos', run);
+    try { history.write('googlephotos', run); } catch (_) {}
     state.busy = false; state.progress = null; state.stopping = false; controller = null;
     if (run.saved) { try { require('../backup').nudge(); } catch (_) {} }
     log(`${reason}: ${run.saved} saved, ${run.skipped} already saved, ${run.failed} failed${run.cancelled ? ', stopped' : ''}`);
-    schedule();
+    release(); schedule();
   }
 }
 
@@ -257,20 +339,23 @@ function schedule() {
   clearTimeout(timer); clearTimeout(startupTimer); timer = startupTimer = null;
   const s = settings.read();
   state.nextScanAt = null;
-  if (!s.googlePhotosEnabled || !hasProfile() || state.busy) return;
+  // Do not repeatedly launch a browser after a known failed connection. The
+  // user can retry the experimental connector, or use the supported export.
+  if (!s.googlePhotosEnabled || !hasProfile() || state.busy || state.status === 'error') return;
   const delay = Math.max(1, Math.min(168, parseInt(s.googlePhotosScanHours, 10) || 6)) * 3600000;
   state.nextScanAt = Date.now() + delay;
-  timer = setTimeout(() => { timer = null; if (settings.read().googlePhotosEnabled) scan({ reason: 'scheduled' }); }, delay);
+  timer = setTimeout(async () => { timer = null; if (settings.read().googlePhotosEnabled) { const result = await scan({ reason: 'scheduled' }); if (result.busy) schedule(); } }, delay);
   timer.unref?.();
 }
 
 function init() {
   state.lastRun = history.read('googlephotos');
   state.lastScanAt = state.lastRun?.finishedAt || state.lastRun?.at || null;
-  state.linked = hasProfile();
-  state.status = state.linked ? 'linked' : settings.read().googlePhotosEnabled ? 'unlinked' : 'off';
+  state.linked = false; // A saved marker is not proof that sign-in still works.
+  state.lastError = state.lastRun?.failed ? state.lastRun.firstError || 'The previous Google Photos import failed. ' + auth.TAKEOUT_HELP : null;
+  state.status = state.lastError ? 'error' : hasProfile() ? 'unverified' : settings.read().googlePhotosEnabled ? 'unlinked' : 'off';
   schedule();
-  if (settings.read().googlePhotosEnabled && state.linked) {
+  if (settings.read().googlePhotosEnabled && hasProfile() && !state.lastError) {
     // Avoid launching alongside WhatsApp, ChatGPT, and Gemini on startup.
     startupTimer = setTimeout(() => { startupTimer = null; if (settings.read().googlePhotosEnabled) scan({ reason: 'startup' }); }, 180000);
     startupTimer.unref?.();
@@ -279,7 +364,9 @@ function init() {
 
 function getState() {
   const s = settings.read();
-  return { ...state, enabled: !!s.googlePhotosEnabled, scanHours: s.googlePhotosScanHours || 6 };
+  return { ...state, enabled: !!s.googlePhotosEnabled, scanHours: s.googlePhotosScanHours || 6, hasSavedSession: hasProfile(), connectionVerified: state.linked,
+    takeoutSupported: true, recommendedImport: 'takeout', browserImportExperimental: true,
+    takeoutUrl: 'https://takeout.google.com/', takeoutGuideUrl: 'https://support.google.com/accounts/answer/3024190' };
 }
 
-module.exports = { init, connect, disconnect, checkLink, scan, cancel, schedule, getState };
+module.exports = { init, connect, disconnect, checkLink, scan, importFolder, cancel, schedule, getState };
