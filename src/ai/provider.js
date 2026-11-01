@@ -1,5 +1,5 @@
 'use strict';
-// One function, two implementations. Everything above this file asks for
+// One function, provider-specific transports. Everything above this file asks for
 // `complete({...})` and gets back parsed JSON plus token counts; it never
 // learns which vendor answered.
 const { PRESETS, costOf, capCostOf } = require('./presets');
@@ -29,6 +29,7 @@ class AiError extends Error {
     this.retryable = retryable;
   }
 }
+const redact = (value, cfg) => cfg.apiKey ? String(value || '').split(cfg.apiKey).join('[redacted]') : String(value || '');
 
 // Turn whatever the network threw at us into something a person can act on.
 // The cert case matters: on a network that inspects TLS, Node's bundled roots
@@ -147,8 +148,148 @@ async function completeAnthropic(cfg, req) {
   };
 }
 
-/* ---------------- OpenAI-compatible ---------------- */
+/* ---------------- official OpenAI Responses ---------------- */
+const openaiModes = new Map(), openaiFormats = new Map(), openaiTokenKeys = new Map();
+const modelBase = model => String(model || '').replace(/^ft:/, '').split(':')[0].toLowerCase();
+const isReasoningModel = model => /^(?:gpt-(?:[5-9]|\d{2})(?:[.-]|$)|o\d(?:[.-]|$))/.test(modelBase(model));
+const isLegacyChatModel = model => /^(?:gpt-3\.5(?:-|$)|gpt-4(?:$|-(?:turbo|vision|\d))|chatgpt-4o-latest|gpt-\d+(?:\.\d+)?-chat-latest|o1-(?:mini|preview)(?:-|$))/.test(modelBase(model));
+function openaiEffort(cfg) {
+  const model = modelBase(cfg.model);
+  if (!isReasoningModel(model) || /^o1-(?:mini|preview)(?:-|$)/.test(model)) return null;
+  const chosen = cfg.openaiReasoningEffort;
+  if (chosen && chosen !== 'auto') return chosen;
+  // Lowest documented efforts preserve this app's extraction/labeling role.
+  // Unknown future models keep their own default instead of receiving an
+  // assumed parameter value. Their output limit still leaves reasoning room.
+  if (/^gpt-(?:6-astra|6\.1-sol)(?:-|$)/.test(model)) return 'low';
+  if (/^gpt-(?:6(?:\.1)?-(?:luna|terra|sol)|5\.6(?:-(?:sol|terra|luna))?)(?:-|$)/.test(model)) return 'none';
+  if (/^gpt-5(?:-(?:mini|nano))?(?:-\d|$)/.test(model)) return 'minimal';
+  if (/^o\d(?:-|$)/.test(model)) return 'low';
+  return null;
+}
+function openaiOutputLimit(cfg, req) {
+  const answer = Math.max(16, Math.min(128000, Number(req.maxTokens) || 512));
+  if (!isReasoningModel(cfg.model)) return answer;
+  const effort = openaiEffort(cfg);
+  const room = effort === 'none' ? 0 : effort === 'minimal' ? 1536 : ['max', 'xhigh'].includes(effort) ? 24576 : effort === 'high' ? 12288 : effort === 'medium' ? 8192 : 4096;
+  return Math.min(128000, answer + room);
+}
+function openaiBase(cfg) {
+  let url;
+  try { url = new URL(cfg.baseUrl || PRESETS.openai.baseUrl); } catch (_) { throw new AiError('The OpenAI server address is invalid.', { kind: 'error' }); }
+  const official = url.hostname === 'api.openai.com' || url.hostname.endsWith('.api.openai.com');
+  if (!official) {
+    if (cfg.provider === 'openai') throw new AiError('Use the official OpenAI API address, or choose an OpenAI-compatible provider for a different server.', { kind: 'auth' });
+    return null;
+  }
+  if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash || (url.port && url.port !== '443')) throw new AiError('OpenAI requires a secure API address without credentials or query parameters.', { kind: 'auth' });
+  const route = url.pathname.replace(/\/+$/, '').replace(/\/(?:responses|chat\/completions)$/, '');
+  if (route !== '/v1') throw new AiError('The OpenAI API base address must end in /v1.', { kind: 'error' });
+  return url.origin + '/v1';
+}
+const openaiUsage = usage => ({ in: Number(usage?.input_tokens ?? usage?.prompt_tokens) || 0, out: Number(usage?.output_tokens ?? usage?.completion_tokens) || 0,
+  reasoning: Number(usage?.output_tokens_details?.reasoning_tokens ?? usage?.completion_tokens_details?.reasoning_tokens) || 0 });
+function answeredError(error, usage, headers, transport) { error.usage = usage; error.headers = headers; error.transport = transport; error.paidResponse = true; return error; }
+async function postOpenai(base, route, cfg, req, body) {
+  const timer = new AbortController(), timeout = setTimeout(() => timer.abort(), TIMEOUT_MS);
+  const abort = () => timer.abort(); req.signal?.addEventListener('abort', abort, { once: true });
+  if (req.signal?.aborted) timer.abort();
+  try {
+    const response = await fetch(base + route, { method: 'POST', redirect: 'error', headers: { 'content-type': 'application/json', ...(cfg.apiKey ? { authorization: `Bearer ${cfg.apiKey}` } : {}) }, body: JSON.stringify(body), signal: timer.signal });
+    const raw = await response.text();
+    if (response.status >= 300 && response.status < 400) throw new AiError('OpenAI redirected the request. Check the configured API address.', { kind: 'auth', status: response.status });
+    if (!response.ok) {
+      const safe = redact(raw, cfg), error = statusToError(response.status, safe, new URL(base).host, response.headers);
+      Object.defineProperty(error, 'apiDetail', { value: safe, enumerable: false }); throw error;
+    }
+    let payload;
+    try { payload = JSON.parse(raw); } catch (_) { throw new AiError('OpenAI returned an invalid API response.', { kind: 'schema' }); }
+    return { payload, headers: response.headers };
+  } catch (error) { const safe = error instanceof AiError ? error : wrapNetworkError(error, new URL(base).host); safe.message = redact(safe.message, cfg); throw safe; }
+  finally { clearTimeout(timeout); req.signal?.removeEventListener('abort', abort); }
+}
+function unsupportedOpenai(error, type) {
+  if (![400, 404, 405, 422].includes(error.status) || ['auth', 'billing', 'rate'].includes(error.kind)) return false;
+  const detail = String(error.apiDetail || '');
+  if (type === 'transport') return /(?:responses|chat.?completions).{0,100}(?:not supported|unsupported|not available|only supported)|(?:not supported|unsupported|only supported|only available).{0,100}(?:responses|chat.?completions)|(?:unknown|unrecognized|invalid) (?:request )?(?:url|endpoint).{0,100}responses/i.test(detail);
+  if (/invalid (?:json )?schema|schema.*(?:required|additionalProperties|properties|items)/i.test(detail)) return false;
+  return /(?:unsupported|not supported|does not support).{0,100}(?:response_format|text\.format|json_schema|json_object)|(?:response_format|text\.format|json_schema|json_object).{0,100}(?:unsupported|not supported|does not support)/i.test(detail);
+}
+function formatInstructions(req) { return String(req.system || '') + (req.schema ? '\n\nReply with JSON only in this shape, replacing placeholders with real values:\n' + JSON.stringify(skeletonFor(req.schema)) : ''); }
+async function completeOfficialOpenai(cfg, req, base) {
+  const key = base + '|' + cfg.model;
+  const mode = ['responses', 'chat'].includes(cfg.openaiApiMode) ? cfg.openaiApiMode : 'auto';
+  let transport = mode === 'auto' ? openaiModes.get(key) || (isLegacyChatModel(cfg.model) ? 'chat' : 'responses') : mode;
+  let format = req.schema ? (cfg.jsonSchema === false ? (openaiFormats.get(key) === 'text' ? 'text' : 'json_object') : openaiFormats.get(key) || 'json_schema') : 'text';
+  let switched = false, tokenSwitched = false, chatTokenKey = openaiTokenKeys.get(key);
+  for (;;) {
+    const limit = openaiOutputLimit(cfg, req), effort = openaiEffort(cfg);
+    let body;
+    if (transport === 'responses') {
+      const content = [{ type: 'input_text', text: String(req.user || '') }, ...(req.images || []).map(image => ({ type: 'input_image', image_url: `data:${image.mediaType};base64,${image.data}`, detail: req.imageDetail || 'low' }))];
+      body = { model: cfg.model, store: false, instructions: format === 'json_schema' || !req.schema ? String(req.system || '') : formatInstructions(req), input: [{ role: 'user', content }], max_output_tokens: limit,
+        ...(effort ? { reasoning: { effort } } : {}),
+        ...(req.schema && format !== 'text' ? { text: { format: format === 'json_schema' ? { type: 'json_schema', name: req.schemaName || 'result', strict: true, schema: req.schema } : { type: 'json_object' } } } : {}) };
+    } else {
+      const legacyReasoning = /^o1-(?:mini|preview)(?:-|$)/.test(modelBase(cfg.model));
+      const content = [{ type: 'text', text: (legacyReasoning ? formatInstructions(req) + '\n\n' : '') + String(req.user || '') }, ...(req.images || []).map(image => ({ type: 'image_url', image_url: { url: `data:${image.mediaType};base64,${image.data}`, detail: req.imageDetail || 'low' } }))];
+      const oldTokens = /^(?:gpt-3\.5|gpt-4(?:$|-(?:\d|turbo|vision)))/.test(modelBase(cfg.model));
+      body = { model: cfg.model, store: false, [chatTokenKey || (oldTokens ? 'max_tokens' : 'max_completion_tokens')]: limit, messages: [...(legacyReasoning ? [] : [{ role: 'system', content: format === 'json_schema' || !req.schema ? String(req.system || '') : formatInstructions(req) }]), { role: 'user', content }],
+        ...(effort ? { reasoning_effort: effort } : {}),
+        ...(req.schema && format !== 'text' ? { response_format: format === 'json_schema' ? { type: 'json_schema', json_schema: { name: req.schemaName || 'result', strict: true, schema: req.schema } } : { type: 'json_object' } } : {}) };
+    }
+    let payload, headers;
+    try { ({ payload, headers } = await postOpenai(base, transport === 'responses' ? '/responses' : '/chat/completions', cfg, req, body)); }
+    catch (error) {
+      // Retry only requests rejected before generation for a specific unsupported
+      // endpoint/format. Never replay paid refusals, incomplete output or billing.
+      if (transport === 'chat' && !tokenSwitched && error.status === 400 && !['auth', 'billing', 'rate'].includes(error.kind)) {
+        const detail = String(error.apiDetail || '');
+        const parameter = body.max_completion_tokens != null ? 'max_completion_tokens' : 'max_tokens';
+        if (detail.includes(parameter) && /unsupported parameter|not supported/i.test(detail)) {
+          chatTokenKey = parameter === 'max_tokens' ? 'max_completion_tokens' : 'max_tokens'; tokenSwitched = true; continue;
+        }
+      }
+      if (req.schema && format !== 'text' && unsupportedOpenai(error, 'format')) { format = format === 'json_schema' ? 'json_object' : 'text'; continue; }
+      if (mode === 'auto' && !switched && unsupportedOpenai(error, 'transport')) { transport = transport === 'responses' ? 'chat' : 'responses'; switched = true; continue; }
+      throw error;
+    }
+    const usage = openaiUsage(payload.usage);
+    try {
+      let text = '';
+      if (transport === 'responses') {
+        if (payload.error) throw statusToError(400, redact(JSON.stringify(payload.error), cfg), 'OpenAI', headers);
+        if (payload.status === 'incomplete') throw new AiError(payload.incomplete_details?.reason === 'max_output_tokens' ? 'OpenAI ran out of output room, including reasoning tokens. Increase the output allowance or lower reasoning effort.' : 'OpenAI did not finish this response (' + String(payload.incomplete_details?.reason || 'unknown reason') + ').', { kind: payload.incomplete_details?.reason === 'max_output_tokens' ? 'length' : 'refusal', retryable: false });
+        if (payload.status && payload.status !== 'completed') throw new AiError('OpenAI did not complete this response (' + payload.status + ').', { kind: 'error', retryable: false });
+        const messages = (Array.isArray(payload.output) ? payload.output : []).filter(item => item.type === 'message');
+        const content = messages.flatMap(item => Array.isArray(item.content) ? item.content : []);
+        if (content.some(item => item.type === 'refusal')) throw new AiError('OpenAI declined this request. Review the file or query before trying again.', { kind: 'refusal', retryable: false });
+        if (messages.some(item => item.status === 'incomplete')) throw new AiError('OpenAI returned an incomplete message.', { kind: 'length', retryable: false });
+        text = content.filter(item => item.type === 'output_text' && typeof item.text === 'string').map(item => item.text).join('');
+        if (!text && typeof payload.output_text === 'string') text = payload.output_text;
+      } else {
+        const choice = payload.choices?.[0], message = choice?.message;
+        if (choice?.finish_reason === 'length') throw new AiError('OpenAI ran out of completion room, including reasoning tokens.', { kind: 'length', retryable: false });
+        if (message?.refusal || choice?.finish_reason === 'content_filter') throw new AiError('OpenAI declined this request. Review the file or query before trying again.', { kind: 'refusal', retryable: false });
+        text = typeof message?.content === 'string' ? message.content : Array.isArray(message?.content) ? message.content.filter(part => ['text', 'output_text'].includes(part.type)).map(part => part.text || '').join('') : '';
+      }
+      if (!text.trim()) throw new AiError('OpenAI returned no answer text. Reasoning or tool output alone cannot index this file.', { kind: 'schema', retryable: false });
+      const json = req.schema ? parseJson(text) : null;
+      if (mode === 'auto') openaiModes.set(key, transport);
+      if (req.schema) openaiFormats.set(key, format);
+      if (transport === 'chat' && chatTokenKey) openaiTokenKeys.set(key, chatTokenKey);
+      return { json, text, usage, headers, transport, jsonMode: format };
+    } catch (error) { error.retryable = false; throw answeredError(error, usage, headers, transport); }
+  }
+}
+
+/* ---------------- OpenAI-compatible Chat Completions ---------------- */
 async function completeOpenAi(cfg, req) {
+  const base = openaiBase(cfg);
+  if (base) return completeOfficialOpenai(cfg, req, base);
+  return completeChatCompletions(cfg, req);
+}
+async function completeChatCompletions(cfg, req) {
   const base = (cfg.baseUrl || '').replace(/\/+$/, '');
   if (!base) throw new AiError('No server address is configured for this provider.', { kind: 'error' });
   const label = new URL(base).host;
@@ -224,7 +365,7 @@ async function completeOpenAi(cfg, req) {
     if (req.signal) req.signal.addEventListener('abort', () => timer.abort(), { once: true });
     try {
       res = await fetch(`${base}/chat/completions`, {
-        method: 'POST', headers, body: JSON.stringify(body), signal: timer.signal,
+        method: 'POST', redirect: 'error', headers, body: JSON.stringify(body), signal: timer.signal,
       });
       raw = await res.text();
     } catch (e) {
@@ -240,7 +381,7 @@ async function completeOpenAi(cfg, req) {
     break;
   }
 
-  if (!res.ok) throw statusToError(res.status, raw, label, res.headers);
+  if (!res.ok) throw statusToError(res.status, redact(raw, cfg), label, res.headers);
 
   let payload;
   try { payload = JSON.parse(raw); } catch (_) {
@@ -262,7 +403,7 @@ async function completeOpenAi(cfg, req) {
    file, the text back. Billed by the minute, so the duration is reported
    rather than tokens. */
 async function transcribeOpenAi(cfg, req) {
-  const base = (cfg.baseUrl || '').replace(/\/+$/, '');
+  const base = openaiBase(cfg) || (cfg.baseUrl || '').replace(/\/+$/, '');
   if (!base) throw new AiError('No server address is configured for this provider.', { kind: 'error' });
   const label = new URL(base).host;
   const form = new FormData();
@@ -278,12 +419,12 @@ async function transcribeOpenAi(cfg, req) {
   const to = setTimeout(() => timer.abort(), TIMEOUT_MS * 2);
   let res, raw;
   try {
-    res = await fetch(`${base}/audio/transcriptions`, { method: 'POST', headers, body: form, signal: timer.signal });
+    res = await fetch(`${base}/audio/transcriptions`, { method: 'POST', redirect: 'error', headers, body: form, signal: timer.signal });
     raw = await res.text();
   } catch (e) {
     throw wrapNetworkError(e, label);
   } finally { clearTimeout(to); }
-  if (!res.ok) throw statusToError(res.status, raw, label, res.headers);
+  if (!res.ok) throw statusToError(res.status, redact(raw, cfg), label, res.headers);
   let payload;
   try { payload = JSON.parse(raw); } catch (_) { payload = { text: raw }; }
   const text = String(payload.text || '').trim();
@@ -312,7 +453,7 @@ async function transcribe(cfg, req) {
    OpenAI-compatible shape. Gemini's shim and NVIDIA's gateway both answer
    it; NVIDIA additionally insists on being told query or passage. */
 async function embedOpenAi(cfg, texts, { inputType } = {}) {
-  const base = (cfg.baseUrl || '').replace(/\/+$/, '');
+  const base = openaiBase(cfg) || (cfg.baseUrl || '').replace(/\/+$/, '');
   if (!base) throw new AiError('No server address is configured for this provider.', { kind: 'error' });
   const label = new URL(base).host;
   const body = { model: cfg.embedModel, input: texts };
@@ -324,12 +465,12 @@ async function embedOpenAi(cfg, texts, { inputType } = {}) {
   const to = setTimeout(() => timer.abort(), TIMEOUT_MS);
   let res, raw;
   try {
-    res = await fetch(`${base}/embeddings`, { method: 'POST', headers, body: JSON.stringify(body), signal: timer.signal });
+    res = await fetch(`${base}/embeddings`, { method: 'POST', redirect: 'error', headers, body: JSON.stringify(body), signal: timer.signal });
     raw = await res.text();
   } catch (e) {
     throw wrapNetworkError(e, label);
   } finally { clearTimeout(to); }
-  if (!res.ok) throw statusToError(res.status, raw, label, res.headers);
+  if (!res.ok) throw statusToError(res.status, redact(raw, cfg), label, res.headers);
   let payload;
   try { payload = JSON.parse(raw); } catch (_) { throw new AiError(`${label} returned something that isn't an API response.`, { kind: 'error' }); }
   const rows = Array.isArray(payload.data) ? payload.data.slice().sort((a, b) => (a.index || 0) - (b.index || 0)) : [];
@@ -354,6 +495,16 @@ async function embed(cfg, texts, opts) {
 }
 
 /* ---------------- public ---------------- */
+function bookCompletion(cfg, out, started) {
+  if (out.headers) { limits.noteHeaders(cfg.provider, out.headers); delete out.headers; }
+  out.ms = Date.now() - started;
+  const free = limits.onFreePlan(cfg.provider);
+  out.cost = free ? 0 : costOf(cfg.provider, cfg.model, out.usage.in, out.usage.out);
+  out.costCap = free ? 0 : capCostOf(cfg.provider, cfg.model, out.usage.in, out.usage.out);
+  if (free) out.freePlan = true;
+  if (cfg.onUsage) cfg.onUsage(out);
+  return out;
+}
 // cfg: { provider, model, apiKey, baseUrl, jsonSchema }
 async function complete(cfg, req) {
   const preset = PRESETS[cfg.provider] || PRESETS.custom;
@@ -373,22 +524,21 @@ async function complete(cfg, req) {
       : api === 'anthropic' ? await completeAnthropic(cfg, req)
         : await completeOpenAi({ ...preset, ...cfg, local: !!preset.local }, req);
   } catch (e) {
+    if (e.paidResponse && e.usage) {
+      const spent = bookCompletion(cfg, { usage: e.usage, headers: e.headers, transport: e.transport }, started);
+      e.cost = spent.cost; e.costCap = spent.costCap; e.ms = spent.ms;
+      e.usageCharged = typeof cfg.onUsage === 'function';
+      e.retryable = false;
+    }
     if (e && e.kind === 'rate' && !(e.refusal && e.refusal.scope === 'day')) limits.slower(lane);
     throw e;
   }
   limits.faster(lane);
   limits.noteSuccess(cfg.provider, cfg.model);
-  if (out.headers) { limits.noteHeaders(cfg.provider, out.headers); delete out.headers; }
-  out.ms = Date.now() - started;
-  // A provider whose own replies show a free plan bills nothing (limits.js).
-  const free = limits.onFreePlan(cfg.provider);
-  out.cost = free ? 0 : costOf(cfg.provider, cfg.model, out.usage.in, out.usage.out);
-  out.costCap = free ? 0 : capCostOf(cfg.provider, cfg.model, out.usage.in, out.usage.out);
-  if (free) out.freePlan = true;
   // Each paid answer is booked as it arrives, so a document whose third page
-  // fails still has its first two on the ledger.
-  if (cfg.onUsage) cfg.onUsage(out);
-  return out;
+  // fails still has its first two on the ledger. Paid OpenAI incomplete/refused
+  // replies use the same accounting path above before throwing.
+  return bookCompletion(cfg, out, started);
 }
 
 module.exports = { complete, transcribe, embed, AiError, parseJson };

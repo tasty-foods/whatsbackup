@@ -1,8 +1,7 @@
 'use strict';
-// Every provider is one of two shapes: Anthropic's own API, or an
-// OpenAI-compatible /chat/completions endpoint — which is what OpenAI, Gemini,
-// Ollama, LM Studio, OpenRouter and Groq all speak. So there are two adapters
-// and a table of endpoints, not a driver per vendor.
+// Official OpenAI uses Responses for modern models, with a legacy Chat
+// Completions route where needed. Compatible providers keep their existing
+// Chat Completions dialect; Anthropic has its own adapter.
 //
 // `vision` and `jsonSchema` here are only defaults for the UI. What a given
 // model actually honours is decided by probing it (see probe.js) — every
@@ -31,7 +30,7 @@ const PRESETS = {
     baseUrl: 'https://api.openai.com/v1',
     keyRequired: true,
     keyHint: 'Starts with sk- · platform.openai.com',
-    models: ['gpt-5-mini', 'gpt-5'],
+    models: ['gpt-6-luna', 'gpt-6.1-terra', 'gpt-6.1-sol', 'gpt-6-astra', 'gpt-6-sol', 'gpt-5-mini', 'gpt-5'],
     defaultModel: 'gpt-5-mini',
     minIntervalMs: 300,
     vision: true,
@@ -201,6 +200,12 @@ const PRICES = {
   'gemini-2.5-pro': { in: 1.25, out: 10 },     // the ≤200k-prompt tier; our calls never exceed it
   'gpt-5-mini': { in: 0.25, out: 2 },
   'gpt-5': { in: 1.25, out: 10 },
+  // Standard text rates verified 2026-11-01 in official OpenAI model docs:
+  // https://developers.openai.com/api/docs/models
+  'gpt-6-luna': { in: 0.10, out: 0.50, longAbove: 272000, longIn: 2, longOut: 1.5 },
+  'gpt-6.1-terra': { in: 1, out: 5 },
+  'gpt-6.1-sol': { in: 2, out: 10 },
+  'gpt-6-astra': { in: 10, out: 50, longAbove: 272000, longIn: 2, longOut: 1.5 },
   'text-embedding-3-small': { in: 0.02, out: 0 },
   'gemini-embedding-001': { in: 0.15, out: 0 },
 };
@@ -226,20 +231,26 @@ function priceFor(provider, model) {
 function costOf(provider, model, tokensIn, tokensOut) {
   const p = priceFor(provider, model);
   if (!p) return null;
-  return (tokensIn / 1e6) * p.in + (tokensOut / 1e6) * p.out;
+  const long = p.longAbove && tokensIn > p.longAbove;
+  return (tokensIn / 1e6) * p.in * (long ? p.longIn : 1) + (tokensOut / 1e6) * p.out * (long ? p.longOut : 1);
 }
 
 // Used only by the spending cap. Reporting an unknown price as $0 is honest;
 // letting the cap treat it as free is not — that would make "unlisted model"
 // a way to buy an unlimited budget. Unknown work is counted at the dearest
 // rate we know of, so the cap errs towards stopping too early.
-const CAP_FALLBACK = { in: 5, out: 25 };
+// Headroom above the published standard Astra rates. Unknown prices remain
+// explicitly unknown in reporting; this budget estimate is not a price quote.
+const CAP_FALLBACK = { in: 25, out: 75 };
 
 function capCostOf(provider, model, tokensIn, tokensOut) {
   if (PRESETS[provider] && PRESETS[provider].local) return 0;
   if (freeModel(model)) return 0;
   const p = PRICES[model] || CAP_FALLBACK;
-  return (tokensIn / 1e6) * p.in + (tokensOut / 1e6) * p.out;
+  // GPT-6 budget reservations include cache-write headroom. Reported spend
+  // remains the standard-rate estimate; reservation can stop work earlier.
+  const gpt6 = /^gpt-6(?:[.-]|$)/.test(String(model)), long = gpt6 && tokensIn > 272000;
+  return (tokensIn / 1e6) * p.in * (gpt6 ? 1.25 * (long ? 2 : 1) : 1) + (tokensOut / 1e6) * p.out * (long ? 1.5 : 1);
 }
 
 function audioCostOf(provider, model, seconds) {

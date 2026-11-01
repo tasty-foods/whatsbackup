@@ -805,6 +805,12 @@
               <input id="set-aiModel" type="text" class="txt" list="ai-model-list" placeholder="model name" />
               <datalist id="ai-model-list"></datalist>
             </div>
+            <details id="ai-openai-options" class="openai-model-options">
+              <summary>OpenAI compatibility options</summary>
+              <p class="muted small">Automatic chooses the API supported by the model. Change these only when a model needs a specific setting.</p>
+              <label class="preference-row"><span>API</span><select id="set-aiOpenaiApiMode" class="txt"><option value="auto">Automatic</option><option value="responses">Responses</option><option value="chat">Chat Completions</option></select></label>
+              <label class="preference-row"><span>Reasoning effort</span><select id="set-aiOpenaiReasoningEffort" class="txt"><option value="auto">Model default</option><option value="none">None</option><option value="minimal">Minimal</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="xhigh">Extra high</option><option value="max">Maximum</option></select></label>
+            </details>
             <div class="row wrap">
               <button class="btn primary" id="btn-ai-test">Test connection</button>
               <span id="ai-test-status" class="muted small"></span>
@@ -968,5 +974,6 @@
 <script src="/content-search.js"></script>
 <script src="/archive-tools.js"></script>
 <script src="/connections.js"></script>
+<script src="/ai-models.js"></script>
 </body>
 </html>

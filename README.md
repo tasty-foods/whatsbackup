@@ -1,5 +1,9 @@
 # WhatsBackUp
 
+Version 2.3.0 adds a searchable live OpenAI model catalogue, safe model testing
+before switching, modern Responses API support, and compatibility controls for
+legacy endpoints and reasoning effort. See [AI_MODELS.md](AI_MODELS.md).
+
 Version 2.2.0 adds a Documents & files workspace, read-only Gmail attachment
 imports, the official Google Photos Picker, Google Takeout folder imports,
 source/month/type cloud folders with preview and undo, and full-file duplicate

@@ -59,6 +59,8 @@ const DEFAULTS = {
   aiProvider: 'anthropic',
   aiModel: 'claude-haiku-4-5',
   aiBaseUrl: '',
+  aiOpenaiApiMode: 'auto',
+  aiOpenaiReasoningEffort: 'auto',
   aiKeyEnc: '',              // DPAPI ciphertext; the plaintext key is never stored
   aiKeysEnc: {},             // provider -> DPAPI ciphertext, for the fallback chain
   aiChain: [],               // ordered provider names to fall through when one runs out

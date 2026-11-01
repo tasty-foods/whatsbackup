@@ -21,7 +21,9 @@ test('workspace preferences persist, reject invalid options, and keep capture se
   const settings = moduleLoad('settings.js',{'./paths':{DATA_DIR:root}});
   settings.write({captureVideos:false,cloudRoot:'existing-cloud',aiKeyEnc:'private-ciphertext',aiKeysEnc:{provider:'private-ciphertext'}});
   const library = moduleLoad('library.js',{'./paths':{DATA_DIR:root}});
+  const modelCalls=[];
   const createApp = moduleLoad('web.js',{
+    './ai':{listModels:async options=>{modelCalls.push(options);return {ok:true,provider:'openai',models:[{id:'gpt-6-luna',selectable:true}]};}},
     './config':cfg,'./paths':{DATA_DIR:root},'./settings':settings,'./library':library,
     './logger':{FILE:path.join(root,'log')},'./store':{get:id=>['located','offline'].includes(id)?{id}:null,listRecords:()=>[],hiddenIds:()=>new Set()},
     './media-locations':{locate:async record=>{
@@ -51,6 +53,15 @@ test('workspace preferences persist, reject invalid options, and keep capture se
   assert.equal(invalid.settings.uiTheme,'dark');
   assert.equal((await post({uiTheme:'light'},'https://other.example')).status,403);
   assert.equal(settings.read().uiTheme,'dark');
+  const modelList=await fetch(base+'/api/ai/models?provider=openai&refresh=1&apiKey=do-not-use&baseUrl=https://outside.example');
+  assert.equal(modelList.headers.get('cache-control'),'no-store');assert.equal((await modelList.json()).models[0].id,'gpt-6-luna');assert.deepEqual(Object.keys(modelCalls[0]).sort(),['force','provider']);assert.equal(modelCalls[0].force,true);
+  const modelPrefs=await(await post({aiOpenaiApiMode:'responses',aiOpenaiReasoningEffort:'low',aiModel:'ft:gpt-4.1-mini:org:label:id'})).json();
+  assert.deepEqual(modelPrefs.rejected,[]);assert.equal(modelPrefs.settings.aiOpenaiApiMode,'responses');
+  const badModel=await(await post({aiModel:'sk-this-is-a-private-key',aiOpenaiApiMode:'made-up',aiOpenaiReasoningEffort:'extreme'})).json();
+  assert.deepEqual(badModel.rejected,['aiModel','aiOpenaiApiMode','aiOpenaiReasoningEffort']);assert.equal(settings.read().aiModel,'ft:gpt-4.1-mini:org:label:id');
+  const switched=await(await post({aiProvider:'openai'})).json();
+  assert.equal(switched.settings.aiKeysEnc,undefined);assert.equal(switched.settings.aiKeyEnc,undefined);
+  assert.equal(settings.read().aiKeysEnc.anthropic,'private-ciphertext','Changing providers keeps the previous legacy key under its original provider');assert.equal(settings.read().aiKeyEnc,'');
   const locationResponse=await fetch(base+'/api/media/located/where');
   assert.equal(locationResponse.status,200);
   const location=await locationResponse.json();

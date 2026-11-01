@@ -92,8 +92,10 @@ const SETTING_SPEC = {
   aiEnabled: { type: 'bool' },
   aiConsent: { type: 'bool' },
   aiProvider: { type: 'path', restart: false },
-  aiModel: { type: 'path' },
+  aiModel: { type: 'model' },
   aiBaseUrl: { type: 'path' },
+  aiOpenaiApiMode: { type: 'enum', values: ['auto', 'responses', 'chat'] },
+  aiOpenaiReasoningEffort: { type: 'enum', values: ['auto', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] },
   aiMode: { type: 'enum', values: ['manual', 'assist', 'auto'] },
   aiAnalyseImages: { type: 'bool' },
   aiAnalyseChats: { type: 'bool' },
@@ -138,6 +140,11 @@ const SETTING_SPEC = {
 };
 
 function coerce(spec, value) {
+  if (spec.type === 'model') {
+    if (typeof value !== 'string') return undefined;
+    const model = value.trim();
+    return model.length <= 1024 && !/^sk-/i.test(model) && !/\s|[<>"'`]/.test(model) ? model : undefined;
+  }
   if (spec.type === 'enum') return spec.values.includes(value) ? value : undefined;
   if (spec.type === 'bool') return typeof value === 'boolean' ? value : undefined;
   if (spec.type === 'int') {
@@ -153,7 +160,10 @@ function coerce(spec, value) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
     const out = {};
     for (const [k, v] of Object.entries(value).slice(0, 50)) {
-      if (typeof k === 'string' && typeof v === 'string') out[k.slice(0, 60)] = v.trim().slice(0, 120);
+      if (typeof k === 'string' && typeof v === 'string') {
+        const model = coerce({ type: 'model' }, v);
+        if (model !== undefined) out[k.slice(0, 60)] = model;
+      }
     }
     return out;
   }
@@ -340,6 +350,11 @@ function createApp() {
       if (clean === undefined) { rejected.push(key); continue; }
       patch[key] = clean;
       if (spec.restart && JSON.stringify(clean) !== JSON.stringify(current[key])) restartRequired = true;
+    }
+    if (patch.aiProvider && patch.aiProvider !== current.aiProvider && current.aiKeyEnc) {
+      patch.aiKeysEnc = { ...(current.aiKeysEnc || {}) };
+      if (!patch.aiKeysEnc[current.aiProvider]) patch.aiKeysEnc[current.aiProvider] = current.aiKeyEnc;
+      patch.aiKeyEnc = '';
     }
     settings.write(patch);
     if('cloudLayout' in patch)cfg.CLOUD_LAYOUT=patch.cloudLayout;
@@ -620,6 +635,13 @@ function createApp() {
   const ai = require('./ai');
 
   app.get('/api/ai/status', (req, res) => res.json(ai.status()));
+  app.get('/api/ai/models', async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    try {
+      const result = await ai.listModels({ provider: req.query.provider || 'openai', force: req.query.refresh === '1' });
+      res.status(result.ok ? 200 : result.kind === 'auth' ? 401 : 400).json(result);
+    } catch (_) { res.status(503).json({ ok: false, error: 'Could not load the model list. Your saved model is unchanged.', models: [] }); }
+  });
   // Models running on this PC are not offered: the sorting is meant to run on
   // free online providers that keep working without a machine kept awake.
   const HIDDEN_PRESETS = new Set(['ollama', 'lmstudio']);

@@ -1,3 +1,36 @@
+# OpenAI model selection and compatibility — 2.3.0
+
+The OpenAI model field now includes a searchable authenticated live catalogue,
+with a 15-minute memory cache per credential and a manual refresh. All returned
+IDs remain visible; specialised model types and declared retired models explain
+why they cannot replace the archive's chat model. Fine-tuned and unknown IDs
+can be entered and tested explicitly.
+
+Model tests use synthetic prompts and a generated red square. An untested or
+failed selection cannot replace the saved model through the picker. Test
+receipts match the model, endpoint, API mode and reasoning effort, and late
+results cannot apply to a different selection. Key changes invalidate the
+browser catalogue and test receipt. Switching providers preserves the old
+legacy encrypted key under its original provider.
+
+Modern official OpenAI requests support Responses, text/image inputs,
+structured output, bounded reasoning and `store:false`. Legacy models can use
+Chat Completions. Automatic compatibility retries only explicit pre-generation
+endpoint/format rejections. Paid incomplete/refused/invalid responses record
+reported usage and are not replayed through the provider chain.
+
+Live checks on November 1 returned 134 catalogue records, including 50 models
+eligible for compatibility testing. GPT-6 Luna and GPT-6.1 Sol each passed text,
+structured-output and image tests through Responses. Browser checks verified
+search, selection, test-before-save, failed-choice preservation and keeping the
+current model. The preview used only synthetic media, with source capture,
+cloud copying and background AI disabled. No personal archive files were sent.
+
+All 204 automated checks pass, including catalogue credential isolation,
+bounded responses, cache invalidation, retired models, selection races,
+adapter request/response shapes, key redaction and paid-failure accounting.
+Desktop packaging and updater verification are recorded with release evidence.
+
 # Understanding, search from every angle and finals — 2.0
 
 Reviewed Overview, Library, Conversations, Search & ask, Topics, Finals and the

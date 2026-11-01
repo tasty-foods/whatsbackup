@@ -36,8 +36,10 @@ async function probe(cfg) {
 
   // 1. Reachable
   try {
-    const r = await complete(cfg, { system: 'Answer with one word.', user: 'Say READY.', maxTokens: 16 });
-    out.reachable = step(true, `answered in ${r.ms} ms`);
+    const r = await complete(cfg, { system: 'Answer with one word.', user: 'Say READY.', maxTokens: 128 });
+    if (!String(r.text || '').trim()) throw new AiError('The model returned no answer text; reasoning alone does not prove the connection works.', { kind: 'schema' });
+    out.reachable = step(true, `answered in ${r.ms} ms${r.transport ? ' using ' + r.transport : ''}`);
+    if (r.transport) out.transport = r.transport;
     out.usage = r.usage;
   } catch (e) {
     out.reachable = step(false, e.message);
@@ -92,7 +94,8 @@ async function probe(cfg) {
     // of quota, a busy server or a dropped connection on this third request
     // says nothing about its eyes — on 2026-10-12 a daily limit reached here
     // marked Gemini and Groq blind, and every photo would have skipped them.
-    const aboutImages = (e.kind === 'model' || e.status === 400) && e.kind !== 'billing' && e.kind !== 'auth';
+    const aboutImages = (e.kind === 'model' || e.status === 400) && e.kind !== 'billing' && e.kind !== 'auth'
+      && /image|vision|multimodal|media type|input_image/i.test(String(e.message || ''));
     out.vision = step(false, aboutImages ? 'this model cannot accept images — image sorting will be unavailable (' + String(e.message || '').slice(0, 200) + ')' : e.message);
     out.visionVerdict = aboutImages ? 'no' : 'unknown';
     if (!aboutImages) Object.defineProperty(out, 'visionError', { value: e, enumerable: false });

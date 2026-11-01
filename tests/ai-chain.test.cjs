@@ -156,3 +156,12 @@ test('a model that is too slow rests a few minutes and the next model takes the 
   assert.equal(rest.why, 'too slow to answer');
   assert.ok(rest.until - Date.now() <= 5 * 60 * 1000 + 1000, 'only a few minutes');
 });
+
+test('a paid incomplete answer is recorded once and never retried on another provider', async t => {
+  const h=harness(t,async cfg=>{
+    cfg.onUsage({usage:{in:100,out:200},cost:0.01,costCap:0.01});
+    const error=new AiError('Answer stopped at its output limit',{kind:'length',retryable:false});error.usageCharged=true;throw error;
+  },{ids:['a'],chain:['spare']});
+  await h.runner.run({indexOnly:true});await idle(h.runner);
+  assert.deepEqual(h.calls,['test:first:a']);assert.deepEqual(states(h.db),{error:1});assert.equal(h.ledger.spendCapSince(0),0.01);
+});

@@ -812,6 +812,7 @@ const FIELDS = {
   aiAnalyseVideos: 'bool', aiAnalyseDocuments: 'bool', aiVideoFrames: 'int', aiDocumentPages: 'int', aiOcrPages: 'int', aiResumeOnLaunch: 'bool', performanceMode: 'enum',
   aiTranscribeAudio: 'bool', aiTopics: 'bool', aiEmbeddings: 'bool', aiFinals: 'bool',
   aiProvider: 'text', aiModel: 'text', aiBaseUrl: 'text', aiMode: 'text', aiMonthlyBudget: 'int',
+  aiOpenaiApiMode: 'text', aiOpenaiReasoningEffort: 'text',
   chatgptEnabled: 'bool', chatgptScanHours: 'int', chatgptUploads: 'bool', chatgptGenerated: 'bool', chatgptSearchChats: 'bool',
   geminiEnabled: 'bool', geminiScanHours: 'int',
   googlePhotosEnabled: 'bool', googlePhotosScanHours: 'int',
@@ -921,6 +922,7 @@ async function loadSettings() {
   try {
     const d = await (await fetch('/api/settings')).json();
     for (const [key, type] of Object.entries(FIELDS)) writeField(key, type, d.settings[key]);
+    window.AiModels?.setSaved({ provider: d.settings.aiProvider, model: d.settings.aiModel, baseUrl: d.settings.aiBaseUrl, apiMode: d.settings.aiOpenaiApiMode || 'auto', effort: d.settings.aiOpenaiReasoningEffort || 'auto' });
     if (window.Workspace) window.Workspace.applyPreferences(d.settings);
     S.limit.value = d.settings.backfillLimit;
 
@@ -971,6 +973,7 @@ async function loadStorage() {
 }
 
 S.save.addEventListener('click', async () => {
+  if (window.AiModels && !window.AiModels.canSave()) { flashSaved('Test the selected model first, or keep the current model.', true); return; }
   S.saveStatus.textContent = 'Saving…';
   const body = { backfillLimit: parseInt(S.limit.value, 10) || 400 };
   for (const [key, type] of Object.entries(FIELDS)) {
@@ -980,6 +983,7 @@ S.save.addEventListener('click', async () => {
   try {
     if (bridge) await bridge.setStartup(body.startWithWindows);
     const r = await requestJson('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    window.AiModels?.setSaved({ provider: r.settings.aiProvider, model: r.settings.aiModel, baseUrl: r.settings.aiBaseUrl, apiMode: r.settings.aiOpenaiApiMode || 'auto', effort: r.settings.aiOpenaiReasoningEffort || 'auto' });
     S.saveStatus.innerHTML = '<span class="ok-text">Saved ✓</span>';
     S.restartNote.textContent = r.restartRequired
       ? 'Some changes (folders, port, timeouts) apply after a restart — use “Restart capture” on the App tab.'
@@ -1868,6 +1872,9 @@ const AI = (function () {
       if (s.aiProvider) sel.value = s.aiProvider;
       if (s.aiModel) $$('set-aiModel').value = s.aiModel;
       if (s.aiBaseUrl) $$('set-aiBaseUrl').value = s.aiBaseUrl;
+      $$('set-aiOpenaiApiMode').value = s.aiOpenaiApiMode || 'auto';
+      $$('set-aiOpenaiReasoningEffort').value = s.aiOpenaiReasoningEffort || 'auto';
+      window.AiModels?.setSaved({ provider: s.aiProvider, model: s.aiModel, baseUrl: s.aiBaseUrl, apiMode: s.aiOpenaiApiMode || 'auto', effort: s.aiOpenaiReasoningEffort || 'auto' });
       if (s.aiMode) $$('set-aiMode').value = s.aiMode;
       $$('set-aiEnabled').checked = !!s.aiEnabled;
       $$('set-aiConsent').checked = !!s.aiConsent;
@@ -1923,14 +1930,20 @@ const AI = (function () {
 
   function preset() { return state.presets.find((p) => p.id === $$('set-aiProvider').value) || {}; }
 
-  function onProviderChange() {
+  function onProviderChange(event) {
     const p = preset();
+    if (event?.type === 'change') {
+      $$('set-aiBaseUrl').value = p.baseUrl || '';
+      $$('set-aiModel').value = p.defaultModel || '';
+    }
     $$('ai-key-hint').textContent = p.keyHint || '';
     $$('ai-key-row').style.display = p.keyRequired === false && p.local ? 'none' : '';
     $$('ai-baseurl-row').style.display = p.baseUrl === '' && p.id !== 'custom' ? 'none' : '';
     if (!$$('set-aiBaseUrl').value && p.baseUrl) $$('set-aiBaseUrl').value = p.baseUrl;
     $$('ai-model-list').innerHTML = (p.models || []).map((m) => `<option value="${m}">`).join('');
     if (!$$('set-aiModel').value && p.defaultModel) $$('set-aiModel').value = p.defaultModel;
+    $$('ai-openai-options').classList.toggle('hidden', p.id !== 'openai');
+    window.AiModels?.providerChanged({ provider: p.id, model: $$('set-aiModel').value, baseUrl: $$('set-aiBaseUrl').value, apiMode: $$('set-aiOpenaiApiMode').value, effort: $$('set-aiOpenaiReasoningEffort').value });
     // With a model running on this machine nothing actually leaves it, and
     // saying otherwise would be the wrong kind of scary.
     const note = $$('ai-local-note');
@@ -1965,30 +1978,43 @@ const AI = (function () {
   /* --- probes --- */
   async function test() {
     const btn = $$('btn-ai-test');
+    const candidate = { provider: $$('set-aiProvider').value, model: $$('set-aiModel').value.trim(), baseUrl: $$('set-aiBaseUrl').value.trim(), apiMode: $$('set-aiOpenaiApiMode').value, effort: $$('set-aiOpenaiReasoningEffort').value };
+    if (!candidate.model || /^sk-/i.test(candidate.model)) { $$('ai-test-status').textContent = 'Enter a model name in Model. API keys belong in the separate API key field.'; return; }
     btn.disabled = true;
+    window.AiModels?.testStarted(candidate);
     $$('ai-test-status').textContent = 'Asking the service three questions…';
     $$('ai-probe').classList.add('hidden');
     try {
-      await saveAiSettings();
-      const r = await (await fetch('/api/ai/probe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })).json();
+      const r = await requestJson('/api/ai/probe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ provider: candidate.provider, model: candidate.model, baseUrl: candidate.baseUrl, openaiApiMode: candidate.apiMode, openaiReasoningEffort: candidate.effort }) });
       const line = (label, s) => s ? `<div class="probe-line ${s.ok ? 'ok' : 'bad'}"><b>${s.ok ? '✓' : '✕'} ${label}</b><span>${escapeHtml(s.detail || '')}</span></div>` : '';
       $$('ai-probe').innerHTML = line('Connected', r.reachable) + line('Structured replies', r.json) + line('Can see images', r.vision);
       $$('ai-probe').classList.remove('hidden');
-      $$('ai-test-status').innerHTML = r.reachable && r.reachable.ok
-        ? '<span class="ok-text">Ready.</span>' : '<span class="bad-text">Not usable yet.</span>';
+      const ok = !!(r.reachable?.ok && r.json?.ok);
+      const message = ok ? (r.vision?.ok ? 'Test passed. Model selected.' : 'Text and structured replies work. Photos need another provider in your fallback chain.') : 'Test failed. Your saved model was kept.';
+      const stillSelected = window.AiModels ? window.AiModels.testFinished({ ...candidate, ok, message }) : candidate.provider === $$('set-aiProvider').value && candidate.model === $$('set-aiModel').value.trim();
+      $$('ai-test-status').textContent = stillSelected ? message : 'Selection changed during the test. Test your current choice before saving.';
       // Remember what the probe found so calls are shaped to what this model honours.
-      if (r.json) await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ aiJsonSchema: !!r.json.ok }) });
-    } catch (e) { $$('ai-test-status').textContent = 'Test failed: ' + e.message; }
+      if (ok && stillSelected) {
+        await saveAiSettings();
+        await requestJson('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ aiJsonSchema: true }) });
+        if (typeof Chain !== 'undefined') Chain.refresh();
+        refreshEstimate();
+        flashSaved('Model selected ✓');
+      }
+    } catch (e) { window.AiModels?.testFinished({ ...candidate, ok: false, message: 'Test failed. Your saved model was kept.' }); $$('ai-test-status').textContent = 'Test failed: ' + e.message; }
     btn.disabled = false;
   }
 
   async function saveAiSettings() {
+    if (window.AiModels && !window.AiModels.canSave()) throw new Error('Test the selected model first, or keep the current model.');
     const body = {
       aiEnabled: $$('set-aiEnabled').checked,
       aiConsent: $$('set-aiConsent').checked,
       aiProvider: $$('set-aiProvider').value,
       aiModel: $$('set-aiModel').value.trim(),
       aiBaseUrl: $$('set-aiBaseUrl').value.trim(),
+      aiOpenaiApiMode: $$('set-aiOpenaiApiMode').value,
+      aiOpenaiReasoningEffort: $$('set-aiOpenaiReasoningEffort').value,
       aiMode: $$('set-aiMode').value,
       aiAnalyseImages: $$('set-aiAnalyseImages').checked,
       aiAnalyseChats: $$('set-aiAnalyseChats').checked,
@@ -2002,7 +2028,8 @@ const AI = (function () {
       aiMonthlyBudget: parseInt($$('set-aiMonthlyBudget').value, 10) || 0,
     };
     for (const k of ['aiTranscribeAudio', 'aiTopics', 'aiEmbeddings', 'aiFinals']) { const el = $$('set-' + k); if (el) body[k] = el.checked; }
-    await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const saved = await requestJson('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    window.AiModels?.setSaved({ provider: saved.settings.aiProvider, model: saved.settings.aiModel, baseUrl: saved.settings.aiBaseUrl, apiMode: saved.settings.aiOpenaiApiMode || 'auto', effort: saved.settings.aiOpenaiReasoningEffort || 'auto' });
   }
 
   /* --- running --- */
@@ -2057,6 +2084,7 @@ const AI = (function () {
     // Save it against the provider on screen, so a chain can hold one key each.
     const who = ($$('set-aiProvider') && $$('set-aiProvider').value) || '';
     const r = await bridge.setAiKey(v, who);
+    if (r.ok) window.AiModels?.invalidateTests?.();
     $$('ai-key').value = '';
     $$('ai-key').placeholder = r.ok ? '•••••••• (saved on this PC)' : 'Paste your key';
     $$('ai-test-status').innerHTML = r.ok
@@ -2067,6 +2095,7 @@ const AI = (function () {
   $$('btn-ai-clearkey').addEventListener('click', async () => {
     if (!bridge) return;
     await bridge.setAiKey('');
+    window.AiModels?.invalidateTests?.();
     $$('ai-key').placeholder = 'Paste your key';
     $$('ai-test-status').textContent = 'Key removed from this PC.';
   });
@@ -3017,7 +3046,7 @@ const Chain = (function () {
     if (!m) return '';
     if (who === 'anthropic' && !/^claude/i.test(m)) return 'Anthropic models start with "claude" — for example claude-haiku-4-5.';
     if (who === 'gemini' && !/^(models\/)?(gemini|gemma|learnlm)/i.test(m)) return 'Gemini models start with "gemini" — for example gemini-2.5-flash.';
-    if (who === 'openai' && /[/:]/.test(m)) return 'That looks like an OpenRouter model name; OpenAI models look like gpt-5-mini.';
+    if (who === 'openai' && (m.includes('/') || (m.includes(':') && !/^ft:[A-Za-z0-9_.:-]+$/.test(m)))) return 'Use the exact OpenAI model ID, without an OpenRouter provider prefix.';
     return '';
   }
   const lastProbe = {};                 // provider -> { ok, text } from "Test every provider"

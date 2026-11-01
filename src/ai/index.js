@@ -163,7 +163,7 @@ function foreignModel(who, m) {
   if (!m) return false;
   if (who === 'anthropic') return !/^claude/i.test(m);
   if (who === 'gemini') return !/^(models\/)?(gemini|gemma|learnlm)/i.test(m);
-  if (who === 'openai') return /[/:]/.test(m);
+  if (who === 'openai') return m.includes('/') || (m.includes(':') && !/^ft:[A-Za-z0-9_.:-]+$/.test(m));
   return false;
 }
 
@@ -183,6 +183,8 @@ function configFor(who) {
     baseUrl: ((isCurrent && s.aiBaseUrl) || preset.baseUrl || '').trim(),
     apiKey: keyFor(who),
     jsonSchema: s.aiJsonSchema !== false,
+    openaiApiMode: s.aiOpenaiApiMode || 'auto',
+    openaiReasoningEffort: s.aiOpenaiReasoningEffort || 'auto',
     keyRequired: preset.keyRequired,
     local: !!preset.local,
     audioModel: preset.audio ? preset.audio.model : '',
@@ -476,6 +478,7 @@ async function runJobOnChain(job) {
       const r = await runOneJob({ ...cfg, onUsage: recordUsage }, job);
       return { ...r, provider: cfg.provider };
     } catch (e) {
+      if (e.usageCharged) { e.provider = cfg.provider; e.cfgUsed = cfg; throw e; }
       const status = e instanceof AiError ? e.status : 0;
       const kind = e instanceof AiError ? e.kind : '';
       // A missing audio or embeddings endpoint is that provider's gap, not
@@ -990,6 +993,11 @@ function embedConfig() {
 
 module.exports = {
   setKey, setKeys, hasKey, config, configFor, status, estimate, census, chainProviders, capabilities, embedConfig, pickProvider,
+  listModels: (options = {}) => {
+    const who = options.provider || 'openai';
+    const cfg = configFor(who);
+    return require('./models').getModels({ provider: who, apiKey: cfg.apiKey, baseUrl: cfg.baseUrl, force: options.force === true });
+  },
   run, cancel, kick, queueBacklog, queueSecondPass, noteNewMedia, noteNewMessages, requeueStranded, nextAvailable, probeChain, limits,
   // Testing the connection is also how the runner finds out whether it may
   // send photos at all — a probe here saves a queue of doomed calls later.
@@ -1000,14 +1008,22 @@ module.exports = {
   probe: async (override) => {
     const saved = config();
     const o = override || {};
-    const elsewhere = (o.baseUrl && o.baseUrl !== saved.baseUrl) || (o.provider && o.provider !== saved.provider);
+    const target = o.provider ? configFor(o.provider) : saved;
+    const elsewhere = !!(o.baseUrl && o.baseUrl !== target.baseUrl);
     const cfg = {
-      ...saved,
+      ...target,
       ...(o.provider ? { provider: o.provider } : {}),
       ...(o.baseUrl ? { baseUrl: o.baseUrl } : {}),
       ...(o.model ? { model: o.model } : {}),
-      apiKey: elsewhere ? (o.key || '') : saved.apiKey,
+      ...(['auto', 'responses', 'chat'].includes(o.openaiApiMode) ? { openaiApiMode: o.openaiApiMode } : {}),
+      ...(['auto', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(o.openaiReasoningEffort) ? { openaiReasoningEffort: o.openaiReasoningEffort } : {}),
+      apiKey: elsewhere ? (o.key || '') : target.apiKey,
     };
+    if (typeof cfg.model !== 'string' || !cfg.model.trim() || cfg.model.length > 1024 || /^sk-/i.test(cfg.model)) return { reachable: { ok: false, detail: 'Enter a model ID, not an API key.' }, errorKind: 'model' };
+    if (cfg.provider === 'openai') {
+      const classification = require('./models').classifyModel(cfg.model);
+      if (!classification || !classification.selectable) return { provider: cfg.provider, model: cfg.model, reachable: { ok: false, detail: classification?.reason || 'Enter a valid OpenAI model ID.' }, errorKind: 'model' };
+    }
     const r = await probe(cfg);
     if (r.visionVerdict === 'yes') noteVisionOk(cfg); else if (r.visionVerdict === 'no') noteVisionOff(cfg);
     if (!elsewhere) {
