@@ -276,6 +276,13 @@ html[data-reduce-motion=true] *,html[data-reduce-motion=true] *::before,html[dat
 /* OpenAI catalogue: choosing a candidate never commits a saved model. */
 .ai-model-picker{margin:14px 0 18px;padding:16px;border:1px solid var(--line,#dce2db);border-radius:10px;background:var(--panel,#f6f8f5);min-width:0}
 .ai-model-picker[hidden]{display:none!important}
+.ai-model-picker [hidden]{display:none!important}
+.ai-model-mode{margin:0 0 12px;padding:0 0 12px;border-bottom:1px solid var(--line,#dce2db);gap:12px}
+.ai-model-mode select{min-width:225px;max-width:100%}
+.ai-model-auto-summary>p:first-child{margin-top:0;font-size:13px}
+.ai-model-auto-routes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:15px 0}
+.ai-model-auto-routes>div{display:flex;flex-direction:column;gap:7px;padding:12px;border:1px solid var(--line,#dce2db);border-radius:7px;min-width:0}
+.ai-model-auto-routes b{font-size:12px}.ai-model-auto-routes span{font-size:12px;color:var(--muted,#68766e);overflow-wrap:anywhere}
 .ai-model-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
 .ai-model-heading label{font-weight:650;font-size:13px}
 .ai-model-picker #ai-model-search{width:100%;margin-bottom:9px;min-width:0}
@@ -296,3 +303,4 @@ html[data-reduce-motion=true] *,html[data-reduce-motion=true] *::before,html[dat
 html[data-theme=dark] .ai-model-picker{background:#17241f;border-color:#34483a}
 html[data-theme=dark] .ai-model-picker .ai-model-catalogue{background:#102018;color:#e0eade}
 @media(max-width:760px){.ai-model-heading{align-items:flex-start;flex-wrap:wrap}.ai-model-picker{padding:12px}.ai-model-actions .btn{flex:1}.ai-model-catalogue{font-size:11px!important}}
+@media(max-width:1000px){.ai-model-auto-routes{grid-template-columns:1fr}.ai-model-mode{flex-wrap:wrap}.ai-model-mode select{width:100%;min-width:0}}

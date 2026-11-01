@@ -1,5 +1,9 @@
 # WhatsBackUp
 
+Version 2.4.0 adds **Auto** model selection within OpenAI. It chooses available
+models by task and budget, keeps the manual choice for later, and records
+standalone search/test usage including paid failures. See [AI_MODELS.md](AI_MODELS.md).
+
 Version 2.3.0 adds a searchable live OpenAI model catalogue, safe model testing
 before switching, modern Responses API support, and compatibility controls for
 legacy endpoints and reasoning effort. See [AI_MODELS.md](AI_MODELS.md).

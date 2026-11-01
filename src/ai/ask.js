@@ -14,6 +14,7 @@ const store = require('../store');
 const ai = require('./store');
 const search = require('../search');
 const { complete } = require('./provider');
+const { createRequestMeter } = require('./request-meter');
 
 const MAX_SNIPPETS = 40;
 const SNIPPET_CHARS = 320;
@@ -77,22 +78,23 @@ async function ask(cfg, question, { semanticCfg = null } = {}) {
   const { items, search: found } = await gather(q, semanticCfg);
   if (!items.length) return { answer: 'Nothing in the archive matches that yet. Try other words, or run the AI sorting so more of it can be searched.', sources: [], searched: found.counts };
   const lines = items.map((it, i) => `${i + 1}. [${it.kind}${it.ts ? ' ' + day(it.ts) : ''}${it.chat ? ' · ' + it.chat : ''}${it.who ? ' · ' + it.who : ''}] ${it.text}`);
-  const res = await complete(cfg, {
-    system: SYSTEM,
-    user: `Question: ${q}\n\nSources:\n${lines.join('\n')}\n\nAnswer the question from these sources.`,
-    schema: SCHEMA, schemaName: 'answer', maxTokens: 700,
-  });
+  const meter = createRequestMeter({ store: ai, kind: 'ask', model: cfg.model, provider: cfg.provider });
+  let ok = false;
   try {
-    const runId = ai.startRun('ask', cfg.model, cfg.provider);
-    ai.updateRun(runId, { items: 1, ok: 1, tokens_in: res.usage.in, tokens_out: res.usage.out, cost_usd: res.cost || 0, cost_cap_usd: res.costCap || 0, finished_at: Date.now() });
-  } catch (_) {}
-  const used = (Array.isArray(res.json && res.json.sources) ? res.json.sources : []).map((n) => parseInt(n, 10)).filter((n) => n >= 1 && n <= items.length);
-  const sources = (used.length ? used : items.slice(0, 5).map((_, i) => i + 1)).map((n) => {
-    const it = items[n - 1];
-    const rec = it.ref && it.ref.id && it.kind !== 'message' && it.kind !== 'topic' ? store.get(it.ref.id) : null;
-    return { n, kind: it.kind, chat: it.chat, ts: it.ts, text: it.text, ref: it.ref, serve: rec ? rec.serve : null };
-  });
-  return { answer: String((res.json && res.json.answer) || res.text || '').trim(), sources, searched: found.counts, cost: res.cost || 0 };
+    const res = await complete({ ...cfg, onUsage: meter.onUsage }, {
+      system: SYSTEM,
+      user: `Question: ${q}\n\nSources:\n${lines.join('\n')}\n\nAnswer the question from these sources.`,
+      schema: SCHEMA, schemaName: 'answer', maxTokens: 700,
+    });
+    const used = (Array.isArray(res.json && res.json.sources) ? res.json.sources : []).map((n) => parseInt(n, 10)).filter((n) => n >= 1 && n <= items.length);
+    const sources = (used.length ? used : items.slice(0, 5).map((_, i) => i + 1)).map((n) => {
+      const it = items[n - 1];
+      const rec = it.ref && it.ref.id && it.kind !== 'message' && it.kind !== 'topic' ? store.get(it.ref.id) : null;
+      return { n, kind: it.kind, chat: it.chat, ts: it.ts, text: it.text, ref: it.ref, serve: rec ? rec.serve : null };
+    });
+    ok = true;
+    return { answer: String((res.json && res.json.answer) || res.text || '').trim(), sources, searched: found.counts, cost: res.cost || 0 };
+  } finally { meter.finish({ ok }); }
 }
 
 module.exports = { ask, gather };

@@ -1,3 +1,30 @@
+# Automatic OpenAI model selection — 2.4.0
+
+Added a single Auto/manual choice. Auto hides the long model catalogue and
+selects only account-listed, nonretired, known-price OpenAI models using local
+task and complexity rules. Routine work favours Luna, visual/scanned work Terra,
+and complex documents, comparisons and archive answers Sol. Low remaining budget
+narrows the selection. Speech and embeddings retain their specialised models.
+
+The user's monthly application budget was set to $10 and their Auto preference
+was saved for the updated desktop. Their retained manual model, privacy consent,
+queue mode and pause preference were preserved. Other users retain their saved
+manual configuration until choosing Auto themselves.
+
+Routing covers queued jobs, archive organisation, search interpretation,
+archive answers and Status Studio composition. It does not add a model-routing
+API call, initiate status publishing, start a backlog scan or upload personal
+test files. Unknown-price, fine-tuned and premium Astra models are not chosen
+automatically. Paid partial jobs are not replayed on another model after a later
+error. Standalone searches and tests now meter receipts as they arrive.
+
+All 237 automated checks pass. Isolated live checks verified the available
+routine/visual/complex routes and a job-routed Terra synthetic text/JSON/image
+probe. Browser checks verified enabling Auto without selecting a model, saving
+it while retaining the manual ID, and the $10 limit. Packaging and updater
+verification are recorded with release evidence. The application budget remains
+a reported-usage control, not an OpenAI account billing limit.
+
 # OpenAI model selection and compatibility — 2.3.0
 
 The OpenAI model field now includes a searchable authenticated live catalogue,

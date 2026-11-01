@@ -95,6 +95,7 @@ const SETTING_SPEC = {
   aiModel: { type: 'model' },
   aiBaseUrl: { type: 'path' },
   aiOpenaiApiMode: { type: 'enum', values: ['auto', 'responses', 'chat'] },
+  aiOpenaiModelMode: { type: 'enum', values: ['manual', 'auto'] },
   aiOpenaiReasoningEffort: { type: 'enum', values: ['auto', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] },
   aiMode: { type: 'enum', values: ['manual', 'assist', 'auto'] },
   aiAnalyseImages: { type: 'bool' },
@@ -358,6 +359,7 @@ function createApp() {
     }
     settings.write(patch);
     if('cloudLayout' in patch)cfg.CLOUD_LAYOUT=patch.cloudLayout;
+    if ('aiOpenaiModelMode' in patch) { try { Promise.resolve(ai.prepareAutoRouting?.()).catch(() => {}); } catch (_) {} }
     if(Object.keys(patch).some(key=>key.startsWith('gmail'))) {try{require('./gmail').schedule();}catch(_) {}}
     // The schedule reads settings when it is armed, not continuously, so a
     // change to it has to re-arm it or it would wait out the old interval.
@@ -635,6 +637,11 @@ function createApp() {
   const ai = require('./ai');
 
   app.get('/api/ai/status', (req, res) => res.json(ai.status()));
+  app.get('/api/ai/auto-routing', async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    try { const preview = req.query.preview === '1'; await ai.prepareAutoRouting(req.query.refresh === '1', preview); res.json({ autoRouting: ai.autoRoutingStatus(preview) }); }
+    catch (_) { res.status(503).json({ error: 'Could not check automatic model availability.' }); }
+  });
   app.get('/api/ai/models', async (req, res) => {
     res.set('Cache-Control', 'no-store');
     try {
@@ -846,7 +853,9 @@ function createApp() {
   app.post('/api/ai/ask', sameOrigin, async (req, res) => {
     const st = settings.read();
     if (!st.aiEnabled || !st.aiConsent) return res.status(403).json({ error: 'Switch on AI sorting and accept the notice first.' });
-    const cfg = ai.pickProvider({});
+    await ai.prepareAutoRouting();
+    if (ai.remainingBudget() < 0.005) return res.status(429).json({ error: 'The monthly AI budget is reached.' });
+    const cfg = ai.pickProvider({ task: 'archive_answer', complex: true, request: { question: String(req.body?.question || '') } });
     if (!cfg) return res.status(503).json({ error: 'No AI provider is available right now.' });
     try { res.json(await require('./ai/ask').ask(cfg, (req.body || {}).question, { semanticCfg: ai.embedConfig() })); }
     catch (e) { res.status(500).json({ error: e.message }); }

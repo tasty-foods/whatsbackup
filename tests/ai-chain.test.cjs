@@ -32,10 +32,12 @@ function harness(t, work, { ids = ['a', 'b', 'c'], chain = [] } = {}) {
     './label': { eachCandidate: (fn) => records.forEach((r) => fn(r, 'image', null)), currentLabel: () => false, census: () => ({}), skipReason: () => null, kindOf: () => 'image',
       labelImage: async (cfg, rec) => { calls.push(cfg.provider + ':' + cfg.model + ':' + rec.id); return work(cfg, rec, calls.length); } },
     './arrange': {}, './probe': {}, './provider': { AiError },
+    './auto-router': require('../src/ai/auto-router'), './models': {getModels:async()=>({ok:true,models:['gpt-6-luna','gpt-6.1-terra','gpt-6.1-sol'].map(id=>({id,selectable:true}))})},
     './presets': { PRESETS: {
       test: { keyRequired: false, defaultModel: 'first', fallbacks: { vision: ['second'] } },
       spare: { keyRequired: false, defaultModel: 'spare-model' },
       anthropic: { keyRequired: true, defaultModel: 'claude-haiku-4-5' },
+      openai: {keyRequired:true,defaultModel:'gpt-5-mini',baseUrl:'https://api.openai.com/v1'},
     } },
     '../content/documents': { status: () => ({ running: false }) },
     './limits': limits,
@@ -164,4 +166,16 @@ test('a paid incomplete answer is recorded once and never retried on another pro
   },{ids:['a'],chain:['spare']});
   await h.runner.run({indexOnly:true});await idle(h.runner);
   assert.deepEqual(h.calls,['test:first:a']);assert.deepEqual(states(h.db),{error:1});assert.equal(h.ledger.spendCapSince(0),0.01);
+});
+
+test('queued Auto jobs use an available OpenAI choice and leave the retained manual model untouched',async t=>{
+  const h=harness(t,async()=>({}),{ids:['a','b']});Object.assign(h.prefs,{aiProvider:'openai',aiModel:'gpt-5-mini',aiBaseUrl:'https://api.openai.com/v1',aiOpenaiModelMode:'auto',aiMonthlyBudget:10});h.runner.setKeys({openai:'test-key'});
+  await h.runner.run({indexOnly:true});await idle(h.runner);
+  assert.deepEqual(h.calls,['openai:gpt-6-luna:a','openai:gpt-6-luna:b']);assert.deepEqual(states(h.db),{done:2});assert.equal(h.prefs.aiModel,'gpt-5-mini');
+});
+
+test('a later multipart timeout does not replay earlier paid pages on another model',async t=>{
+  const h=harness(t,async cfg=>{cfg.onUsage({usage:{in:100,out:100},cost:0.02,costCap:0.02});throw new AiError('Later page timed out',{kind:'timeout',retryable:true});},{ids:['a'],chain:['spare']});
+  await h.runner.run({indexOnly:true});await idle(h.runner);
+  assert.deepEqual(h.calls,['test:first:a']);assert.deepEqual(states(h.db),{error:1});assert.equal(h.ledger.spendCapSince(0),0.02);
 });

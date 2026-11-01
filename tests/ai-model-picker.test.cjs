@@ -2,7 +2,30 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { createValidationState, normalize, signature, normalizeCatalogue } = require('../public/ai-models');
-const saved = { provider: 'openai', model: 'gpt-6-luna', baseUrl: 'https://api.openai.com/v1', apiMode: 'auto', effort: 'auto' };
+const saved = { provider: 'openai', model: 'gpt-6-luna', modelMode: 'manual', baseUrl: 'https://api.openai.com/v1', apiMode: 'auto', effort: 'auto' };
+
+test('Auto can be saved without testing a model and retains the separate manual model ID', () => {
+  const state = createValidationState(); state.setSaved(saved);
+  const automatic = { ...saved, modelMode: 'auto' };
+  assert.equal(state.canSave(automatic), true); assert.equal(state.state(automatic), 'automatic');
+  assert.equal(state.canSave({ ...automatic, model: '' }), true);
+  assert.equal(normalize(automatic).model, saved.model);
+  assert.equal(normalize({ provider: 'openai', model: saved.model }).modelMode, 'manual');
+  assert.equal(normalize({ ...automatic, modelMode: 'unknown' }).modelMode, 'manual');
+  state.setSaved(automatic); assert.equal(state.saved().model, saved.model);
+  assert.equal(state.canSave(saved), true, 'returning to the retained manual choice requires no new test');
+  assert.equal(state.canSave({ ...saved, model: 'gpt-6.1-sol' }), false);
+});
+
+test('switching mode cancels a pending probe and Auto never validates an untested manual choice', () => {
+  const state = createValidationState(), candidate = { ...saved, model: 'gpt-6.1-terra' };
+  state.setSaved(saved); state.start(candidate); state.modeChanged();
+  assert.equal(state.pending(), null);
+  assert.equal(state.canSave({ ...candidate, modelMode: 'auto' }), true);
+  assert.equal(state.finish(candidate, candidate, true), false, 'a late test cannot apply after switching modes');
+  assert.equal(state.canSave(candidate), false);
+  assert.equal(state.canSave(saved), true); assert.deepEqual(state.saved(), saved);
+});
 
 test('a default OpenAI endpoint is equivalent to the preset address filled by the settings form',()=>{
   const state=createValidationState();state.setSaved({...saved,baseUrl:''});assert.equal(state.canSave(saved),true);

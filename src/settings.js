@@ -60,6 +60,7 @@ const DEFAULTS = {
   aiModel: 'claude-haiku-4-5',
   aiBaseUrl: '',
   aiOpenaiApiMode: 'auto',
+  aiOpenaiModelMode: 'manual',
   aiOpenaiReasoningEffort: 'auto',
   aiKeyEnc: '',              // DPAPI ciphertext; the plaintext key is never stored
   aiKeysEnc: {},             // provider -> DPAPI ciphertext, for the fallback chain

@@ -10,7 +10,7 @@ const settings = require('../settings');
 const messages = require('../messages');
 const aiMod = require('../ai');
 const { complete } = require('../ai/provider');
-const { costOf, capCostOf } = require('../ai/presets');
+const { createRequestMeter } = require('../ai/request-meter');
 
 const SCHEMA = {
   type: 'object',
@@ -32,14 +32,16 @@ function fillVars(tpl, now) {
 // Composes one status text. Throws with a human-readable reason when it can't.
 async function composeStatus({ promptOverride } = {}) {
   const s = settings.read();
-  const cfg = aiMod.config();
-  if (cfg.keyRequired && !aiMod.hasKey()) throw new Error('No AI key is set — add one under Settings → AI sorting.');
-
   const st = aiMod.status();
   if (st.budget && st.budgetUsed >= st.budget) throw new Error('The monthly AI budget is used up.');
 
   const userPrompt = fillVars(promptOverride || s.statusAiPrompt || '', new Date()).trim();
   if (!userPrompt) throw new Error('No writing instructions yet — set them in the Status view.');
+
+  await aiMod.prepareAutoRouting();
+  const cfg = aiMod.pickProvider({ task: 'status' });
+  if (!cfg) throw new Error('No configured AI provider is available. Check Settings → AI sorting.');
+  if (cfg.keyRequired && !aiMod.hasKey(cfg.provider)) throw new Error('No AI key is set — add one under Settings → AI sorting.');
 
   let context = '';
   if (s.statusAiChatAware && s.aiConsent) {
@@ -52,26 +54,15 @@ async function composeStatus({ promptOverride } = {}) {
   const user = `Instructions:\n${userPrompt}`
     + (context ? `\n\nRecent activity, for context only — never quote a person or name a chat:\n${context}` : '');
 
-  const runId = aiMod.store.startRun('status', cfg.model, cfg.provider);
-  let res, err = null;
+  const meter = createRequestMeter({ store: aiMod.store, kind: 'status', model: cfg.model, provider: cfg.provider });
+  let ok = false;
   try {
-    res = await complete(cfg, { system, user, schema: SCHEMA, schemaName: 'status', maxTokens: 400 });
-  } catch (e) { err = e; }
-  // complete() reports tokens; pricing them is the caller's job, as everywhere.
-  const tin = (res && res.usage && res.usage.in) || 0;
-  const tout = (res && res.usage && res.usage.out) || 0;
-  const cost = costOf(cfg.provider, cfg.model, tin, tout);
-  aiMod.store.updateRun(runId, {
-    items: 1, ok: err ? 0 : 1, failed: err ? 1 : 0, skipped: 0,
-    tokens_in: tin, tokens_out: tout,
-    cost_usd: cost == null ? 0 : cost, cost_cap_usd: capCostOf(cfg.provider, cfg.model, tin, tout),
-    finished_at: Date.now(), error: err ? err.message : null,
-  });
-  if (err) throw err;
-
-  const text = (res.json && res.json.text ? String(res.json.text) : String(res.text || '')).trim().slice(0, 300);
-  if (!text) throw new Error('The model returned nothing usable.');
-  return { text, cost: cost || 0 };
+    const res = await complete({ ...cfg, onUsage: meter.onUsage }, { system, user, schema: SCHEMA, schemaName: 'status', maxTokens: 400 });
+    const text = (res.json && res.json.text ? String(res.json.text) : String(res.text || '')).trim().slice(0, 300);
+    if (!text) throw new Error('The model returned nothing usable.');
+    ok = true;
+    return { text, cost: res.cost || 0 };
+  } finally { meter.finish({ ok }); }
 }
 
 module.exports = { composeStatus, fillVars };

@@ -40,6 +40,10 @@ const MAX_ATTEMPTS = 3;
 // provider -> key. The shell decrypts and hands these over in memory; the
 // plaintext never lands in settings.json, a log, or this repo.
 let apiKeys = {};
+let autoAvailability = { models: [], ready: false, checkedAt: 0, notice: 'Availability is checked when Auto starts working.' };
+let autoPreparing = null;
+let autoKeyVersion = 0;
+let lastAutoChoice = null;
 const setKeys = (map) => {
   const next = map && typeof map === 'object' ? { ...map } : {};
   // A provider whose key changed starts clean: a refused or exhausted key's
@@ -48,7 +52,13 @@ const setKeys = (map) => {
   for (const who of new Set([...Object.keys(apiKeys), ...Object.keys(next)])) {
     try { if (limits.noteKey(who, next[who] || '')) console.log(`[ai] ${who}: new key — its rests are cleared`); } catch (_) {}
   }
+  if (next.openai !== apiKeys.openai) {
+    autoKeyVersion++;
+    autoAvailability = { models: [], ready: false, checkedAt: 0, notice: 'Availability is checked when Auto starts working.' };
+    autoPreparing = null; lastAutoChoice = null;
+  }
   apiKeys = next;
+  if (settings.read().aiOpenaiModelMode === 'auto') Promise.resolve(prepareAutoRouting()).catch(() => {});
 };
 // An older shell sends one key with no provider; attribute it to the configured one.
 const setKey = (k) => { const who = settings.read().aiProvider; apiKeys = k && who ? { [who]: k } : {}; };
@@ -96,6 +106,51 @@ function chainProviders() {
   return [first, ...rest];
 }
 
+function remainingBudget() {
+  const limit = Number(settings.read().aiMonthlyBudget) || 0;
+  if (!limit) return Infinity;
+  const start = new Date(); start.setDate(1); start.setHours(0, 0, 0, 0);
+  const spent = ai.spendCapSince(start.getTime(), state.running ? state.runId : -1) + Math.max(state.cost || 0, state.costCap || 0);
+  return Math.max(0, limit - spent);
+}
+
+async function prepareAutoRouting(force = false, preview = false) {
+  if ((!preview && (settings.read().aiOpenaiModelMode !== 'auto' || !chainProviders().includes('openai'))) || !hasKey('openai')) return autoAvailability;
+  if (autoPreparing) return autoPreparing;
+  if (!force && autoAvailability.checkedAt && Date.now() - autoAvailability.checkedAt < (autoAvailability.ready ? 15 * 60 * 1000 : 60 * 1000)) return autoAvailability;
+  const version = autoKeyVersion, cfg = configFor('openai');
+  const work = (async () => {
+    try {
+      const result = await require('./models').getModels({ provider: 'openai', apiKey: cfg.apiKey, baseUrl: cfg.baseUrl, force });
+      if (version !== autoKeyVersion) return autoAvailability;
+      autoAvailability = { models: result.ok ? result.models : [], ready: !!result.ok, checkedAt: Date.now(), notice: result.ok ? '' : (result.error || 'OpenAI model availability could not be checked. Your queue is kept.') };
+    } catch (_) {
+      if (version === autoKeyVersion) autoAvailability = { models: [], ready: false, checkedAt: Date.now(), notice: 'OpenAI model availability could not be checked. Your queue is kept.' };
+    }
+    return autoAvailability;
+  })();
+  autoPreparing = work;
+  try { return await work; } finally { if (autoPreparing === work) autoPreparing = null; }
+}
+
+function autoPlan(needs = {}) {
+  const base = configFor('openai');
+  return require('./auto-router').plan({ task: needs.task, needs, request: needs.request, record: needs.record, models: autoAvailability.models, manualModel: base.model, budgetRemaining: remainingBudget() });
+}
+
+function autoRoutingStatus(preview = false) {
+  const enabled = settings.read().aiOpenaiModelMode === 'auto';
+  if (!enabled && !preview) return { enabled: false, routes: [], lastChoice: null };
+  const routes = [
+    { role: 'routine', label: 'Photos, short requests and routine tagging', task: 'label_image' },
+    { role: 'visual', label: 'Video scenes and scanned pages', task: 'label_video' },
+    { role: 'complex', label: 'Complex documents and archive questions', task: 'archive_answer', complex: true },
+  ].map(route => { const chosen = autoPlan(route)[0]; return { role: route.role, label: route.label, model: chosen?.model || null, available: !!chosen }; });
+  const budget = Number(settings.read().aiMonthlyBudget) || 0;
+  const notice = (autoAvailability.notice || 'Chooses a listed OpenAI model for each job.') + (budget ? ' Monthly AI budget: $' + budget + '.' : ' No monthly spending limit is set.');
+  return { enabled, preview, ready: autoAvailability.ready, checkedAt: autoAvailability.checkedAt || null, budget, notice, routes, lastChoice: lastAutoChoice };
+}
+
 // The next provider that could actually do this job: has a key if it needs one,
 // isn't benched, and has the ability the job needs — eyes for a photograph,
 // ears for a voice note, an embeddings model for vectors.
@@ -111,6 +166,10 @@ function candidates(needs = {}) {
     const fb = (PRESETS[who] && PRESETS[who].fallbacks) || {};
     const extra = (needs.needsAudio || needs.needsEmbed) ? []
       : needs.needsVision ? (fb.vision || []) : (fb.text || fb.vision || []);
+    if (who === 'openai' && settings.read().aiOpenaiModelMode === 'auto' && !needs.needsAudio && !needs.needsEmbed) {
+      for (const choice of autoPlan(needs)) out.push({ ...base, model: choice.model, openaiApiMode: 'auto', openaiReasoningEffort: 'auto', autoRole: choice.role, autoReason: choice.reason, automatic: true });
+      continue;
+    }
     const models = [base.model, ...extra].filter((m, i, a) => m && a.indexOf(m) === i);
     for (const model of models) out.push(model === base.model ? base : { ...base, model, fallback: true });
   }
@@ -147,13 +206,14 @@ function nextAvailable(needs = {}) {
 }
 const clock = (ms) => { const d = new Date(ms); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
 function waitMessage(next) {
+  if (!next && settings.read().aiOpenaiModelMode === 'auto' && hasKey('openai')) return autoAvailability.notice || 'Auto has no available model with enough budget headroom for this job. The queue is kept; check the monthly budget or switch to a manual model.';
   if (!next) return 'No provider in the AI chain has a working key yet. Add one in AI settings; the queue is kept.';
   const tomorrow = new Date(next.until).toDateString() !== new Date().toDateString();
   return `Waiting for free AI quota — ${next.provider} is back around ${clock(next.until)}${tomorrow ? ' tomorrow' : ''} (${next.why}). Nothing is lost; the queue resumes by itself.`;
 }
 function waitError(next) {
   const e = new AiError(waitMessage(next), { kind: 'wait', retryable: true });
-  e.until = next ? next.until : Date.now() + 15 * 60 * 1000;
+  e.until = next ? next.until : Date.now() + (settings.read().aiOpenaiModelMode === 'auto' ? 60 * 1000 : 15 * 60 * 1000);
   return e;
 }
 // A model name saved for one provider that plainly belongs to another (an
@@ -184,6 +244,7 @@ function configFor(who) {
     apiKey: keyFor(who),
     jsonSchema: s.aiJsonSchema !== false,
     openaiApiMode: s.aiOpenaiApiMode || 'auto',
+    openaiModelMode: who === 'openai' ? s.aiOpenaiModelMode || 'manual' : 'manual',
     openaiReasoningEffort: s.aiOpenaiReasoningEffort || 'auto',
     keyRequired: preset.keyRequired,
     local: !!preset.local,
@@ -225,6 +286,8 @@ function status() {
     configured: !!(s.aiProvider && (!config().keyRequired || hasKey())),
     provider: s.aiProvider,
     model: config().model,
+    modelMode: s.aiProvider === 'openai' ? s.aiOpenaiModelMode || 'manual' : 'manual',
+    autoRouting: autoRoutingStatus(),
     consent: !!s.aiConsent,
     mode: s.aiMode || 'assist',
     paused: !!s.aiPaused,
@@ -272,6 +335,7 @@ function status() {
         models,
         provider: who,
         model: c.model,
+        modelMode: c.openaiModelMode,
         hasKey: !hasKey(who) ? false : true,
         keyRequired: !!c.keyRequired,
         needsModel: !c.model,
@@ -294,7 +358,8 @@ function status() {
 function estimate() {
   const s = settings.read();
   const c = census();
-  const cfg = config();
+  const automatic = s.aiProvider === 'openai' && s.aiOpenaiModelMode === 'auto';
+  const cfg = automatic ? { ...config(), model: autoPlan({ task: 'estimate', complex: true })[0]?.model || 'gpt-6.1-sol' } : config();
   const cap = capabilities();
   const imgTodo = c.images.todo;
   const vidTodo = c.videos.todo;
@@ -340,7 +405,7 @@ function estimate() {
     cost,
     costKnown: cost !== null,
     audioSeconds, audioCost, audioBy: cap.audioBy, embeddingsBy: cap.embeddingsBy,
-    model: cfg.model,
+    model: automatic ? 'Auto (conservative estimate using ' + cfg.model + ')' : cfg.model,
     provider: cfg.provider,
     analyseImages: s.aiAnalyseImages !== false,
     analyseChats: s.aiAnalyseChats !== false,
@@ -438,11 +503,13 @@ function noteNewMessages(chatId) {
 const recordById = (id) => store.get(id);
 
 const needsOf = (job) => {
-  if (job.type === 'label_image' || job.type === 'label_video' || job.type === 'label_document') return { needsVision: true };
-  if (job.type === 'transcribe_audio') return { needsAudio: true };
-  if (job.type === 'embed') return { needsEmbed: true };
-  if (job.type === 'finals_set') { const set = ai.getFinalSet(job.ref_id); return { needsVision: !!set && set.kind === 'image' }; }
-  return {};
+  const context = { task: job.type, record: recordById(job.ref_id) };
+  if (job.type === 'label_document' && context.record) context.complex = /contract|agreement|reconcil|audit/i.test(context.record.docName || context.record.filename || '') || Number(context.record.size) > 2 * 1024 * 1024;
+  if (job.type === 'label_image' || job.type === 'label_video' || job.type === 'label_document') return { ...context, needsVision: true };
+  if (job.type === 'transcribe_audio') return { ...context, needsAudio: true };
+  if (job.type === 'embed') return { ...context, needsEmbed: true };
+  if (job.type === 'finals_set') { const set = ai.getFinalSet(job.ref_id); return { ...context, needsVision: !!set && set.kind === 'image' }; }
+  return context;
 };
 
 // Runs one job against the chain: the first provider that can take it, then
@@ -450,6 +517,7 @@ const needsOf = (job) => {
 // Errors that are about the item rather than the provider (a corrupt file, a
 // reply that isn't JSON) are not worth walking the chain for, and are thrown.
 async function runJobOnChain(job) {
+  await prepareAutoRouting();
   const needs = needsOf(job);
   const tried = [];
   let slow = 0, lastSlow = null;
@@ -468,16 +536,19 @@ async function runJobOnChain(job) {
       throw waitError(next);
     }
     const lane = cfg.provider + '|' + cfg.restModel;
+    if (cfg.automatic) lastAutoChoice = { model: cfg.model, role: cfg.autoRole, reason: cfg.autoReason, task: job.type, at: Date.now() };
     if (tried.includes(lane)) throw waitError(nextAvailable(needs));
     tried.push(lane);
     // Each timeout costs up to 90 s; after two models have been too slow for
     // this item, it is the item (a long document, say) and it takes its normal
     // retries instead of waiting through every model in the chain.
     if (slow >= 2 && lastSlow) { try { lastSlow.provider = lastSlow.provider || cfg.provider; } catch (_) {} throw lastSlow; }
+    let hadUsage = false;
     try {
-      const r = await runOneJob({ ...cfg, onUsage: recordUsage }, job);
+      const r = await runOneJob({ ...cfg, onUsage: receipt => { recordUsage(receipt); hadUsage = true; } }, job);
       return { ...r, provider: cfg.provider };
     } catch (e) {
+      if (hadUsage) { e.usageCharged = true; e.retryable = false; }
       if (e.usageCharged) { e.provider = cfg.provider; e.cfgUsed = cfg; throw e; }
       const status = e instanceof AiError ? e.status : 0;
       const kind = e instanceof AiError ? e.kind : '';
@@ -571,7 +642,8 @@ function budgetExceeded() {
   const s = settings.read();
   if (!s.aiMonthlyBudget) return false;
   const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
-  return ai.spendCapSince(monthStart.getTime(), state.running ? state.runId : -1) + Math.max(state.cost, state.costCap) >= s.aiMonthlyBudget;
+  const remaining = s.aiMonthlyBudget - ai.spendCapSince(monthStart.getTime(), state.running ? state.runId : -1) - Math.max(state.cost, state.costCap);
+  return remaining <= 0 || (s.aiProvider === 'openai' && s.aiOpenaiModelMode === 'auto' && remaining < 0.005);
 }
 
 const persistRun = () => { if (state.runId) ai.updateRun(state.runId, { items: state.done + state.failed + state.skipped, ok: state.done, failed: state.failed, skipped: state.skipped, tokens_in: state.tokensIn, tokens_out: state.tokensOut, cost_usd: state.cost, cost_cap_usd: state.costCap }); };
@@ -730,6 +802,7 @@ function entriesFor(kind) {
 }
 
 async function arrangeAll(cfg, s) {
+  await prepareAutoRouting();
   const notes = [];
   const passes = [
     ['media', s.aiAnalyseImages !== false || s.aiAnalyseDocuments !== false || s.aiAnalyseVideos !== false, 'albums'],
@@ -743,7 +816,11 @@ async function arrangeAll(cfg, s) {
     if (budgetExceeded()) { state.message = 'Stopped: the monthly budget cap was reached.'; break; }
     state.phase = 'arranging';
     state.current = word;
-    const r = await arrange.arrange({ ...cfg, onUsage: recordUsage }, kind, entriesFor(kind));
+    const entries = entriesFor(kind);
+    const chosen = cfg.provider === 'openai' && s.aiOpenaiModelMode === 'auto' ? pickProvider({ task: 'arrange', complex: entries.length > 40, request: { user: JSON.stringify(entries) } }) : cfg;
+    if (!chosen) { state.message = 'Waiting for an available model for archive organisation.'; break; }
+    if (chosen.automatic) lastAutoChoice = { model: chosen.model, role: chosen.autoRole, reason: chosen.autoReason, task: 'arrange', at: Date.now() };
+    const r = await arrange.arrange({ ...chosen, onUsage: recordUsage }, kind, entries);
     console.log(`[ai] ${word}: ${r.groups} groups, ${r.coverage || 0}% of items placed${r.note ? ' — ' + r.note : ''}`);
     notes.push(r.note || `${r.groups} ${word}`);
   }
@@ -835,6 +912,7 @@ const cancel = () => { cancelRequested = true; settings.write({ aiPaused: true }
 // anywhere it was not saved for). A pass lifts that provider's rests; a
 // refusal is read like any other and rests it for as long as it says.
 async function probeChain() {
+  await prepareAutoRouting();
   const out = [];
   for (const who of chainProviders()) {
     if (!who) continue;
@@ -850,7 +928,10 @@ async function probeChain() {
       if (limits.restingUntil(who, c.model) > Date.now()) continue;
       if (tried++ >= 6) break;
       let r;
-      try { r = await probe(c); } catch (e) { r = { reachable: { ok: false, detail: e.message } }; Object.defineProperty(r, 'error', { value: e, enumerable: false }); }
+      if (budgetExceeded()) { best = { provider: who, model: c.model, reachable: { ok: false, detail: 'The monthly AI budget is reached.' }, errorKind: 'budget' }; break; }
+      const meter = require('./request-meter').createRequestMeter({ store: ai, kind: 'probe', provider: who, model: c.model });
+      try { r = await probe({ ...c, onUsage: meter.onUsage }); } catch (e) { r = { reachable: { ok: false, detail: e.message } }; Object.defineProperty(r, 'error', { value: e, enumerable: false }); }
+      finally { meter.finish({ ok: !!(r?.reachable?.ok && r?.json?.ok) }); }
       if (r.visionVerdict === 'yes') noteVisionOk(c); else if (r.visionVerdict === 'no') noteVisionOff(c);
       if (r.reachable && r.reachable.ok) limits.clearWide(who);
       else if (r.error) limits.restAfter(r.error, c);
@@ -955,8 +1036,9 @@ async function searchCompletion(request) {
   searching = true;
   const tried = new Set();
   try {
+    await prepareAutoRouting();
     for (;;) {
-      const cfg = pickProvider();
+      const cfg = pickProvider({ task: request.schemaName === 'search_concepts' ? 'search_concepts' : 'archive_answer', complex: request.schemaName !== 'search_concepts', request });
       if (!cfg) {
         const next = nextAvailable({});
         throw new Error(next ? `Every AI provider is resting — ${next.provider} is back around ${clock(next.until)} (${next.why}). Searching on this PC still works.` : 'No configured AI provider is available. Check AI settings.');
@@ -964,15 +1046,18 @@ async function searchCompletion(request) {
       const lane = cfg.provider + '|' + cfg.restModel;
       if (tried.has(lane)) throw new Error('No configured AI provider is available. Check AI settings.');
       tried.add(lane);
+      if (cfg.automatic) lastAutoChoice = { model: cfg.model, role: cfg.autoRole, reason: cfg.autoReason, task: request.schemaName || 'search', at: Date.now() };
+      const meter = require('./request-meter').createRequestMeter({ store: ai, kind: 'search', model: cfg.model, provider: cfg.provider });
+      let answered = false;
       try {
-        const r = await require('./provider').complete(cfg, request);
-        const id = ai.startRun('search', cfg.model, cfg.provider);
-        ai.updateRun(id, { items: 1, ok: 1, tokens_in: r.usage.in, tokens_out: r.usage.out, cost_usd: r.cost || 0, cost_cap_usd: r.costCap || 0, finished_at: Date.now() });
+        const r = await require('./provider').complete({ ...cfg, onUsage: meter.onUsage }, request);
+        answered = true;
         return r;
       } catch (e) {
+        if (e.usageCharged) throw e;
         if (limits.restAfter(e, cfg)) continue;
         throw e;
-      }
+      } finally { meter.finish({ ok: answered }); }
     }
   } finally { searching = false; }
 }
@@ -992,7 +1077,7 @@ function embedConfig() {
 }
 
 module.exports = {
-  setKey, setKeys, hasKey, config, configFor, status, estimate, census, chainProviders, capabilities, embedConfig, pickProvider,
+  setKey, setKeys, hasKey, config, configFor, status, estimate, census, chainProviders, capabilities, embedConfig, pickProvider, prepareAutoRouting, autoRoutingStatus, remainingBudget,
   listModels: (options = {}) => {
     const who = options.provider || 'openai';
     const cfg = configFor(who);
@@ -1010,7 +1095,7 @@ module.exports = {
     const o = override || {};
     const target = o.provider ? configFor(o.provider) : saved;
     const elsewhere = !!(o.baseUrl && o.baseUrl !== target.baseUrl);
-    const cfg = {
+    let cfg = {
       ...target,
       ...(o.provider ? { provider: o.provider } : {}),
       ...(o.baseUrl ? { baseUrl: o.baseUrl } : {}),
@@ -1019,12 +1104,24 @@ module.exports = {
       ...(['auto', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(o.openaiReasoningEffort) ? { openaiReasoningEffort: o.openaiReasoningEffort } : {}),
       apiKey: elsewhere ? (o.key || '') : target.apiKey,
     };
+    if (cfg.provider === 'openai' && o.openaiModelMode === 'auto' && !elsewhere) {
+      await prepareAutoRouting(false, true);
+      const task = ['label_image', 'label_video', 'archive_answer'].includes(o.task) ? o.task : 'label_image';
+      const choice = autoPlan({ task, complex: task === 'archive_answer' })[0];
+      if (!choice) return { reachable: { ok: false, detail: autoAvailability.notice || 'No available Auto model has enough budget headroom.' }, errorKind: 'model' };
+      cfg = { ...cfg, model: choice.model, openaiApiMode: 'auto', openaiReasoningEffort: 'auto' };
+      lastAutoChoice = { model: choice.model, role: choice.role, reason: choice.reason, task: 'probe:' + task, at: Date.now() };
+    }
     if (typeof cfg.model !== 'string' || !cfg.model.trim() || cfg.model.length > 1024 || /^sk-/i.test(cfg.model)) return { reachable: { ok: false, detail: 'Enter a model ID, not an API key.' }, errorKind: 'model' };
     if (cfg.provider === 'openai') {
       const classification = require('./models').classifyModel(cfg.model);
       if (!classification || !classification.selectable) return { provider: cfg.provider, model: cfg.model, reachable: { ok: false, detail: classification?.reason || 'Enter a valid OpenAI model ID.' }, errorKind: 'model' };
     }
-    const r = await probe(cfg);
+    if (budgetExceeded()) return { reachable: { ok: false, detail: 'The monthly AI budget is reached.' }, errorKind: 'budget' };
+    const meter = require('./request-meter').createRequestMeter({ store: ai, kind: 'probe', provider: cfg.provider, model: cfg.model });
+    let r;
+    try { r = await probe({ ...cfg, onUsage: meter.onUsage }); }
+    finally { meter.finish({ ok: !!(r?.reachable?.ok && r?.json?.ok) }); }
     if (r.visionVerdict === 'yes') noteVisionOk(cfg); else if (r.visionVerdict === 'no') noteVisionOff(cfg);
     if (!elsewhere) {
       if (r.error) limits.restAfter(r.error, cfg); else if (r.visionError) limits.restAfter(r.visionError, cfg);

@@ -812,7 +812,7 @@ const FIELDS = {
   aiAnalyseVideos: 'bool', aiAnalyseDocuments: 'bool', aiVideoFrames: 'int', aiDocumentPages: 'int', aiOcrPages: 'int', aiResumeOnLaunch: 'bool', performanceMode: 'enum',
   aiTranscribeAudio: 'bool', aiTopics: 'bool', aiEmbeddings: 'bool', aiFinals: 'bool',
   aiProvider: 'text', aiModel: 'text', aiBaseUrl: 'text', aiMode: 'text', aiMonthlyBudget: 'int',
-  aiOpenaiApiMode: 'text', aiOpenaiReasoningEffort: 'text',
+  aiOpenaiApiMode: 'text', aiOpenaiReasoningEffort: 'text', aiOpenaiModelMode: 'text',
   chatgptEnabled: 'bool', chatgptScanHours: 'int', chatgptUploads: 'bool', chatgptGenerated: 'bool', chatgptSearchChats: 'bool',
   geminiEnabled: 'bool', geminiScanHours: 'int',
   googlePhotosEnabled: 'bool', googlePhotosScanHours: 'int',
@@ -922,7 +922,7 @@ async function loadSettings() {
   try {
     const d = await (await fetch('/api/settings')).json();
     for (const [key, type] of Object.entries(FIELDS)) writeField(key, type, d.settings[key]);
-    window.AiModels?.setSaved({ provider: d.settings.aiProvider, model: d.settings.aiModel, baseUrl: d.settings.aiBaseUrl, apiMode: d.settings.aiOpenaiApiMode || 'auto', effort: d.settings.aiOpenaiReasoningEffort || 'auto' });
+    window.AiModels?.setSaved({ provider: d.settings.aiProvider, model: d.settings.aiModel, modelMode: d.settings.aiOpenaiModelMode || 'manual', baseUrl: d.settings.aiBaseUrl, apiMode: d.settings.aiOpenaiApiMode || 'auto', effort: d.settings.aiOpenaiReasoningEffort || 'auto' });
     if (window.Workspace) window.Workspace.applyPreferences(d.settings);
     S.limit.value = d.settings.backfillLimit;
 
@@ -983,7 +983,8 @@ S.save.addEventListener('click', async () => {
   try {
     if (bridge) await bridge.setStartup(body.startWithWindows);
     const r = await requestJson('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    window.AiModels?.setSaved({ provider: r.settings.aiProvider, model: r.settings.aiModel, baseUrl: r.settings.aiBaseUrl, apiMode: r.settings.aiOpenaiApiMode || 'auto', effort: r.settings.aiOpenaiReasoningEffort || 'auto' });
+    window.AiModels?.setSaved({ provider: r.settings.aiProvider, model: r.settings.aiModel, modelMode: r.settings.aiOpenaiModelMode || 'manual', baseUrl: r.settings.aiBaseUrl, apiMode: r.settings.aiOpenaiApiMode || 'auto', effort: r.settings.aiOpenaiReasoningEffort || 'auto' });
+    if (r.settings.aiOpenaiModelMode === 'auto') window.AiModels?.refreshAutoSummary();
     S.saveStatus.innerHTML = '<span class="ok-text">Saved ✓</span>';
     S.restartNote.textContent = r.restartRequired
       ? 'Some changes (folders, port, timeouts) apply after a restart — use “Restart capture” on the App tab.'
@@ -1873,8 +1874,9 @@ const AI = (function () {
       if (s.aiModel) $$('set-aiModel').value = s.aiModel;
       if (s.aiBaseUrl) $$('set-aiBaseUrl').value = s.aiBaseUrl;
       $$('set-aiOpenaiApiMode').value = s.aiOpenaiApiMode || 'auto';
+      $$('set-aiOpenaiModelMode').value = s.aiOpenaiModelMode || 'manual';
       $$('set-aiOpenaiReasoningEffort').value = s.aiOpenaiReasoningEffort || 'auto';
-      window.AiModels?.setSaved({ provider: s.aiProvider, model: s.aiModel, baseUrl: s.aiBaseUrl, apiMode: s.aiOpenaiApiMode || 'auto', effort: s.aiOpenaiReasoningEffort || 'auto' });
+      window.AiModels?.setSaved({ provider: s.aiProvider, model: s.aiModel, modelMode: s.aiOpenaiModelMode || 'manual', baseUrl: s.aiBaseUrl, apiMode: s.aiOpenaiApiMode || 'auto', effort: s.aiOpenaiReasoningEffort || 'auto' });
       if (s.aiMode) $$('set-aiMode').value = s.aiMode;
       $$('set-aiEnabled').checked = !!s.aiEnabled;
       $$('set-aiConsent').checked = !!s.aiConsent;
@@ -1943,7 +1945,7 @@ const AI = (function () {
     $$('ai-model-list').innerHTML = (p.models || []).map((m) => `<option value="${m}">`).join('');
     if (!$$('set-aiModel').value && p.defaultModel) $$('set-aiModel').value = p.defaultModel;
     $$('ai-openai-options').classList.toggle('hidden', p.id !== 'openai');
-    window.AiModels?.providerChanged({ provider: p.id, model: $$('set-aiModel').value, baseUrl: $$('set-aiBaseUrl').value, apiMode: $$('set-aiOpenaiApiMode').value, effort: $$('set-aiOpenaiReasoningEffort').value });
+    window.AiModels?.providerChanged({ provider: p.id, model: $$('set-aiModel').value, modelMode: $$('set-aiOpenaiModelMode').value, baseUrl: $$('set-aiBaseUrl').value, apiMode: $$('set-aiOpenaiApiMode').value, effort: $$('set-aiOpenaiReasoningEffort').value });
     // With a model running on this machine nothing actually leaves it, and
     // saying otherwise would be the wrong kind of scary.
     const note = $$('ai-local-note');
@@ -1978,14 +1980,14 @@ const AI = (function () {
   /* --- probes --- */
   async function test() {
     const btn = $$('btn-ai-test');
-    const candidate = { provider: $$('set-aiProvider').value, model: $$('set-aiModel').value.trim(), baseUrl: $$('set-aiBaseUrl').value.trim(), apiMode: $$('set-aiOpenaiApiMode').value, effort: $$('set-aiOpenaiReasoningEffort').value };
+    const candidate = { provider: $$('set-aiProvider').value, model: $$('set-aiModel').value.trim(), modelMode: $$('set-aiOpenaiModelMode').value, baseUrl: $$('set-aiBaseUrl').value.trim(), apiMode: $$('set-aiOpenaiApiMode').value, effort: $$('set-aiOpenaiReasoningEffort').value };
     if (!candidate.model || /^sk-/i.test(candidate.model)) { $$('ai-test-status').textContent = 'Enter a model name in Model. API keys belong in the separate API key field.'; return; }
     btn.disabled = true;
     window.AiModels?.testStarted(candidate);
     $$('ai-test-status').textContent = 'Asking the service three questions…';
     $$('ai-probe').classList.add('hidden');
     try {
-      const r = await requestJson('/api/ai/probe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ provider: candidate.provider, model: candidate.model, baseUrl: candidate.baseUrl, openaiApiMode: candidate.apiMode, openaiReasoningEffort: candidate.effort }) });
+      const r = await requestJson('/api/ai/probe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ provider: candidate.provider, model: candidate.modelMode === 'auto' ? undefined : candidate.model, openaiModelMode: candidate.modelMode, baseUrl: candidate.baseUrl, openaiApiMode: candidate.apiMode, openaiReasoningEffort: candidate.effort }) });
       const line = (label, s) => s ? `<div class="probe-line ${s.ok ? 'ok' : 'bad'}"><b>${s.ok ? '✓' : '✕'} ${label}</b><span>${escapeHtml(s.detail || '')}</span></div>` : '';
       $$('ai-probe').innerHTML = line('Connected', r.reachable) + line('Structured replies', r.json) + line('Can see images', r.vision);
       $$('ai-probe').classList.remove('hidden');
@@ -2014,6 +2016,7 @@ const AI = (function () {
       aiModel: $$('set-aiModel').value.trim(),
       aiBaseUrl: $$('set-aiBaseUrl').value.trim(),
       aiOpenaiApiMode: $$('set-aiOpenaiApiMode').value,
+      aiOpenaiModelMode: $$('set-aiOpenaiModelMode').value,
       aiOpenaiReasoningEffort: $$('set-aiOpenaiReasoningEffort').value,
       aiMode: $$('set-aiMode').value,
       aiAnalyseImages: $$('set-aiAnalyseImages').checked,
@@ -2029,7 +2032,8 @@ const AI = (function () {
     };
     for (const k of ['aiTranscribeAudio', 'aiTopics', 'aiEmbeddings', 'aiFinals']) { const el = $$('set-' + k); if (el) body[k] = el.checked; }
     const saved = await requestJson('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    window.AiModels?.setSaved({ provider: saved.settings.aiProvider, model: saved.settings.aiModel, baseUrl: saved.settings.aiBaseUrl, apiMode: saved.settings.aiOpenaiApiMode || 'auto', effort: saved.settings.aiOpenaiReasoningEffort || 'auto' });
+    window.AiModels?.setSaved({ provider: saved.settings.aiProvider, model: saved.settings.aiModel, modelMode: saved.settings.aiOpenaiModelMode || 'manual', baseUrl: saved.settings.aiBaseUrl, apiMode: saved.settings.aiOpenaiApiMode || 'auto', effort: saved.settings.aiOpenaiReasoningEffort || 'auto' });
+    if (saved.settings.aiOpenaiModelMode === 'auto') window.AiModels?.refreshAutoSummary();
   }
 
   /* --- running --- */
@@ -3104,7 +3108,7 @@ const Chain = (function () {
       else if (c.restingUntil) tag = `<span class="st resting" title="${escapeHtml(c.restWhy || '')}">${escapeHtml(restLabel(c.restingUntil, c.restWhy))}</span>`;
       else if (c.blind) tag = '<span class="st blind">can’t see photos</span>';
       const first = i === 0;
-      const modelCell = c.editableModel
+      const modelCell = c.modelMode === 'auto' ? '<span class="mdl">Auto · chooses for each job</span>' : c.editableModel
         ? `<input class="mdl chain-model" value="${escapeHtml(c.model || '')}" placeholder="model name for this provider" spellcheck="false">`
         : `<span class="mdl">${escapeHtml(c.model || '')}</span>`;
       row.innerHTML = `<span class="ord">${i + 1}</span>

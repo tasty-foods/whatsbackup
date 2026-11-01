@@ -1,8 +1,34 @@
 # Choosing OpenAI models in WhatsBackUp
 
+## Auto: choose once for all jobs
+
+Open **Settings → AI & search → Service → Model selection**, choose **Auto
+(choose for each job)**, and save. You do not need to pick or test individual
+model names. Your previous manual model is retained for later.
+
+Auto checks your account's model catalogue and uses local rules about the job,
+input size and available budget. Routine photos, short text and tagging favour
+Luna; video scenes and scanned pages favour Terra; long or difficult documents,
+version comparisons and archive answers can use Sol. Older known-price models
+are alternatives when the preferred models are unavailable. Only listed,
+nonretired, known-price models enter Auto's pool. Astra, fine-tuned and unknown-
+price models remain available through manual selection rather than automatic
+spending decisions.
+
+Choosing the route does not make an additional AI request. Audio transcription
+and embeddings keep their dedicated models. Near the application budget limit,
+Auto narrows its choices to lower-cost models; already-paid work is not replayed
+on a stronger model after an error. The budget remains an application usage
+control rather than an OpenAI account billing limit.
+
+Auto changes model selection. It does not turn on background indexing, change
+privacy consent or unpause the queue.
+
+## Manual: choose a specific model
+
 1. Open **Settings → AI & search** and scroll to **Service**.
 2. Choose **OpenAI** as the provider and save your OpenAI API key if one is not already saved.
-3. Use **Models available to your OpenAI key** to search the live catalogue. **Refresh models** requests a fresh list from OpenAI.
+3. Choose **Choose a model myself**. Use **Models available to your OpenAI key** to search the live catalogue. **Refresh models** requests a fresh list from OpenAI.
 4. Select a model and click **Test selected model**. A successful text and structured-output test saves the choice. A failed test keeps the previous saved model.
 
 The model catalogue comes from OpenAI's authenticated Models API, rather than a fixed list bundled with this app. It is cached in memory for 15 minutes per credential. No API key is returned to the browser or written into the model catalogue.

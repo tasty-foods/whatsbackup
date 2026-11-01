@@ -23,7 +23,7 @@ test('workspace preferences persist, reject invalid options, and keep capture se
   const library = moduleLoad('library.js',{'./paths':{DATA_DIR:root}});
   const modelCalls=[];
   const createApp = moduleLoad('web.js',{
-    './ai':{listModels:async options=>{modelCalls.push(options);return {ok:true,provider:'openai',models:[{id:'gpt-6-luna',selectable:true}]};}},
+    './ai':{listModels:async options=>{modelCalls.push(options);return {ok:true,provider:'openai',models:[{id:'gpt-6-luna',selectable:true}]};},prepareAutoRouting:async()=>{},autoRoutingStatus:()=>({enabled:true,routes:[{role:'routine',model:'gpt-6-luna',available:true}]})},
     './config':cfg,'./paths':{DATA_DIR:root},'./settings':settings,'./library':library,
     './logger':{FILE:path.join(root,'log')},'./store':{get:id=>['located','offline'].includes(id)?{id}:null,listRecords:()=>[],hiddenIds:()=>new Set()},
     './media-locations':{locate:async record=>{
@@ -62,6 +62,8 @@ test('workspace preferences persist, reject invalid options, and keep capture se
   const switched=await(await post({aiProvider:'openai'})).json();
   assert.equal(switched.settings.aiKeysEnc,undefined);assert.equal(switched.settings.aiKeyEnc,undefined);
   assert.equal(settings.read().aiKeysEnc.anthropic,'private-ciphertext','Changing providers keeps the previous legacy key under its original provider');assert.equal(settings.read().aiKeyEnc,'');
+  const autoSetting=await(await post({aiOpenaiModelMode:'auto',aiMonthlyBudget:10})).json();assert.deepEqual(autoSetting.rejected,[]);assert.equal(autoSetting.settings.aiModel,'ft:gpt-4.1-mini:org:label:id');assert.equal(autoSetting.settings.aiMonthlyBudget,10);
+  const autoRoutes=await fetch(base+'/api/ai/auto-routing');assert.equal(autoRoutes.headers.get('cache-control'),'no-store');assert.equal((await autoRoutes.json()).autoRouting.routes[0].model,'gpt-6-luna');
   const locationResponse=await fetch(base+'/api/media/located/where');
   assert.equal(locationResponse.status,200);
   const location=await locationResponse.json();
