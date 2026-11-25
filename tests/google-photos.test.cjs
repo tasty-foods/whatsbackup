@@ -171,7 +171,7 @@ function connector(t, { fail = [], cancelAfter = 0, localCancelAfter = 0, failIn
   });
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/google-photos/index.js'), 'utf8'), context);
   vm.runInContext('launch = async () => fixtureBrowser; openPage = async () => ({}); requireSignIn = async () => { state.linked = true; }; closeBrowser = async () => {};', context);
-  return { api: context.module.exports, root, data, cfg, records, summaries, downloads, timers, nudges, setPrefs: value => { prefs = value; }, setItems: value => { items = value; }, setLastRun: run => summaries.push(run) };
+  return { context, api: context.module.exports, root, data, cfg, records, summaries, downloads, timers, nudges, setPrefs: value => { prefs = value; }, setItems: value => { items = value; }, setLastRun: run => summaries.push(run) };
 }
 
 test('a scan preserves original bytes, imports video locally, skips byte duplicates, and resumes without downloading saved items', async t => {
@@ -370,7 +370,8 @@ test('failed Google Photos account checks survive restart and a cached marker is
   assert.equal(state.hasSavedSession, true);
   assert.match(state.lastError, /Could not read/);
   assert.equal(state.lastScanAt, 123);
-  assert.equal(f.timers.length, 0);
+  // No startup scan after a failure, but a retry a day later (never, before 2.4.3).
+  assert.deepEqual(f.timers.map((x) => x.ms), [24 * 3600000]);
 });
 
 test('Google auth detects rejected login and accepts localized account controls or photo grids only at the Photos origin', async () => {
@@ -464,4 +465,18 @@ test('Google Photos API rejects unlinked or busy scans, validates schedules, and
   const summary = await (await fetch(base + '/api/sources/summary')).json();
   assert.deepEqual(summary.googlephotos, { count: 2, bytes: 50 });
   assert.deepEqual(summary.whatsapp, { count: 1, bytes: 10 });
+});
+
+test('after a failed run the browser import tries again a day later instead of never', t => {
+  const fixture = connector(t);
+  fixture.setPrefs({ googlePhotosEnabled: true, googlePhotosScanHours: 3 });
+  fixture.api.init();
+  const before = fixture.timers.length;
+  // A failed run leaves the connector in its error state.
+  require('node:vm').runInContext('state.status = "error"', fixture.context);
+  fixture.api.schedule();
+  const retry = fixture.timers.slice(before).find((timer) => !timer.cleared);
+  assert.ok(retry, 'a retry is scheduled');
+  assert.equal(retry.ms, 24 * 3600000);
+  assert.ok(fixture.api.getState().nextScanAt > 0);
 });

@@ -1,3 +1,17 @@
+# Google Photos browser import — 2.4.3
+
+The automatic Google Photos import had not read a single picture since
+October 2026. Its browser announced itself as automated (the default
+automation flag, and a "HeadlessChrome" user agent when running in the
+background), which Google answers by refusing sign-in or by serving no
+library. The Gemini and ChatGPT connectors already hide both; Google Photos
+now does the same. After one failed run the connector also stopped scheduling
+itself for good, so nothing was retried even once the cause went away. It now
+tries again after a day.
+
+261 automated checks pass. Signing in and reading the live library need the
+owner's Google account and were checked on the installed app.
+
 # Conversations in the cloud folder, deeper history, AI strength — 2.4.2
 
 - Conversations were up to date but looked stale: the chat list opened sorted

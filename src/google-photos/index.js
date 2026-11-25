@@ -35,10 +35,14 @@ async function launch({ headed = false } = {}) {
   const profile = require('../browser-profile');
   fs.mkdirSync(PROFILE_DIR, { recursive: true });
   profile.forgetTabs(PROFILE_DIR);
-  const args = ['--disable-gpu', '--lang=en-US', ...profile.QUIET_ARGS];
+  // Google refuses sign-in to, and serves no library to, a browser that
+  // announces itself as automated. These are the flags the Gemini and ChatGPT
+  // connectors already use; without them this connector could never sign in
+  // or read the library, and failed every scan from October 2026 on.
+  const args = ['--disable-gpu', '--lang=en-US', ...profile.QUIET_ARGS, '--disable-blink-features=AutomationControlled'];
   if (process.env.WB_NO_SANDBOX === '1') args.push('--no-sandbox', '--disable-setuid-sandbox');
   browser = await require('puppeteer').launch({
-    headless: !headed, args, userDataDir: PROFILE_DIR,
+    headless: !headed, args, userDataDir: PROFILE_DIR, ignoreDefaultArgs: ['--enable-automation'],
     defaultViewport: headed ? null : { width: 1280, height: 900 }, protocolTimeout: 120000,
     ...(cfg.CHROME_PATH ? { executablePath: cfg.CHROME_PATH } : {}),
   });
@@ -54,8 +58,14 @@ async function closeBrowser() {
   }
 }
 
+// A headless browser names itself "HeadlessChrome"; Google treats that as a bot.
+async function plainAgent(b, page) {
+  try { const ua = await b.userAgent(); if (/HeadlessChrome/.test(ua)) await page.setUserAgent(ua.replace('HeadlessChrome', 'Chrome')); } catch (_) {}
+}
+
 async function openPage(b, url = ORIGIN + '/?hl=en') {
   const page = await b.newPage();
+  await plainAgent(b, page);
   page.setDefaultTimeout(60000);
   await page.setExtraHTTPHeaders({ 'Accept-Language': 'en-US,en;q=0.9' });
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
@@ -246,6 +256,7 @@ async function scan({ reason = 'manual' } = {}) {
     staging = await fs.promises.mkdtemp(path.join(paths.DATA_DIR, 'googlephotos-download-'));
     downloader = await createDownloader(b, staging, cfg.DOWNLOAD_TIMEOUT_MS || 90000);
     const detail = await b.newPage();
+    await plainAgent(b, detail);
     detail.setDefaultTimeout(60000);
     await detail.setExtraHTTPHeaders({ 'Accept-Language': 'en-US,en;q=0.9' });
     const walked = await walkLibrary(grid, async item => {
@@ -339,10 +350,12 @@ function schedule() {
   clearTimeout(timer); clearTimeout(startupTimer); timer = startupTimer = null;
   const s = settings.read();
   state.nextScanAt = null;
-  // Do not repeatedly launch a browser after a known failed connection. The
-  // user can retry the experimental connector, or use the supported export.
-  if (!s.googlePhotosEnabled || !hasProfile() || state.busy || state.status === 'error') return;
-  const delay = Math.max(1, Math.min(168, parseInt(s.googlePhotosScanHours, 10) || 6)) * 3600000;
+  // After a failed run the next try waits a day rather than the usual
+  // interval, so a signed-out profile does not open a browser every few hours.
+  // It used to wait for ever: one failure and the library was never read again.
+  if (!s.googlePhotosEnabled || !hasProfile() || state.busy) return;
+  const every = Math.max(1, Math.min(168, parseInt(s.googlePhotosScanHours, 10) || 6)) * 3600000;
+  const delay = state.status === 'error' ? Math.max(every, 24 * 3600000) : every;
   state.nextScanAt = Date.now() + delay;
   timer = setTimeout(async () => { timer = null; if (settings.read().googlePhotosEnabled) { const result = await scan({ reason: 'scheduled' }); if (result.busy) schedule(); } }, delay);
   timer.unref?.();

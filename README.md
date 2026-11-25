@@ -1,5 +1,9 @@
 # WhatsBackUp
 
+Version 2.4.3 makes the automatic Google Photos import work: it now signs in
+and reads the library the same way the Gemini import does, and a failed run is
+tried again the next day instead of never. See [AUDIT.md](AUDIT.md).
+
 Version 2.4.2 can keep a daily copy of your conversations and the archive
 index in the cloud folder, imports a chat's history much further back, lets
 you transcribe a single voice note by hand, and adds one **AI strength**
