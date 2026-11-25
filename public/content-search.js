@@ -18,7 +18,11 @@ window.ContentSearch = (() => {
   const request = (url, body) => requestJson(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   async function query(value, understand = false) {
     const ticket = ++sequence;
-    term = value.trim().toLowerCase(); F.q = term; F.contentScope = $('content-scope').value; $('search').value = value;
+    // The search box itself is left alone: this runs a moment after typing
+    // stops, and writing the trimmed, lower-cased term back into it ate the
+    // space before the next word and threw the caret to the end. Callers that
+    // want different text in the box set it themselves.
+    term = value.trim().toLowerCase(); F.q = term; F.contentScope = $('content-scope').value;
     hits = new Map(); searching = !!term;
     if (!term) { searching = false; $('content-understand').disabled = false; $('content-result-status').textContent = 'Type in the search box above. Saved descriptions and document text are searched on your PC.'; render(allItems); return; }
     $('content-result-status').textContent = understand ? 'Interpreting your description…' : 'Searching your saved index…';

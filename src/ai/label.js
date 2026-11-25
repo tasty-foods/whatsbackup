@@ -151,25 +151,25 @@ function census({ analyseImages = true, analyseVideos = true, analyseDocuments =
     audio: { count: 0, bytes: 0, labelled: 0, todo: 0, skipped: {} },
     chats: { count: 0, labelled: 0, todo: 0 },
   };
-  {
-    const labels = new Map(ai.labelsOfKinds(['image', 'video', 'document', 'audio']).map(e => [e.refId, e]));
-    eachCandidate((rec, kind, reason) => {
-      const enabled = kind === 'image' ? analyseImages : kind === 'video' ? analyseVideos : kind === 'document' ? analyseDocuments : transcribeAudio;
-      const bucket = kind === 'video' ? out.videos : kind === 'document' ? out.documents : kind === 'audio' ? out.audio : out.images;
-      bucket.count++;
-      if (kind === 'image') out.images.bytes += rec.size || 0;
-      if (kind === 'audio') out.audio.bytes += rec.size || 0;
-      if (reason) { bucket.skipped = bucket.skipped || {}; bucket.skipped[reason] = (bucket.skipped[reason] || 0) + 1; return; }
-      if (currentLabel(labels.get(rec.id), settings)) bucket.labelled++;
-      else if (enabled) bucket.todo++;
-    });
-  }
+  // Whether a label is current is read from the store's in-memory marks: the
+  // dashboard asks for this count every few seconds, and parsing every label
+  // again each time held the engine up.
+  eachCandidate((rec, kind, reason) => {
+    const enabled = kind === 'image' ? analyseImages : kind === 'video' ? analyseVideos : kind === 'document' ? analyseDocuments : transcribeAudio;
+    const bucket = kind === 'video' ? out.videos : kind === 'document' ? out.documents : kind === 'audio' ? out.audio : out.images;
+    bucket.count++;
+    if (kind === 'image') out.images.bytes += rec.size || 0;
+    if (kind === 'audio') out.audio.bytes += rec.size || 0;
+    if (reason) { bucket.skipped = bucket.skipped || {}; bucket.skipped[reason] = (bucket.skipped[reason] || 0) + 1; return; }
+    if (currentLabel(ai.labelMark(kind, rec.id), settings)) bucket.labelled++;
+    else if (enabled) bucket.todo++;
+  });
   if (analyseChats) {
     const withText = messages.chatsWithText();
     for (const c of messages.listChats()) {
       out.chats.count++;
       if (!withText.has(c.chatId)) { out.chats.noText = (out.chats.noText || 0) + 1; continue; }
-      if (ai.getLabel('chat', c.chatId)) out.chats.labelled++;
+      if (ai.labelMark('chat', c.chatId)) out.chats.labelled++;
       else out.chats.todo++;
     }
   }
@@ -288,7 +288,17 @@ async function labelDocument(cfg, rec, { localOnly = false } = {}) {
         tags: tidyList(j.tags, 8).map((t) => t.toLowerCase()), version_hint: str(j.version_hint, 80), language: str(j.language, 8).toLowerCase(),
       });
       usage.in += r.usage.in; usage.out += r.usage.out; cost += r.cost || 0; costCap += r.costCap || 0;
-    } catch (e) { label.factsError = String(e.message || e).slice(0, 200); }
+    } catch (e) {
+      // "Not now" (out of quota, busy, a refused key, the network) is the
+      // runner's to deal with: it rests the model and brings this document
+      // back. Kept here, the document was stored as fully read, without its
+      // facts, for good — and every text document after it the same way,
+      // because the runner never heard the model was refusing. Only when
+      // scanned pages were already paid for is the text kept as it is.
+      const notNow = ['rate', 'busy', 'billing', 'auth', 'down', 'network', 'timeout', 'model', 'wait'].includes(e && e.kind);
+      if (notNow && !prepared.scans.length) throw e;
+      label.factsError = String(e.message || e).slice(0, 200);
+    }
   }
   if (localOnly && label.unreadPages) label.index_profile = 'local-text-only';
   if (!text.trim()) { label.summary = label.summary || 'No readable text (a scan or a picture of a page).'; label.doc_type = label.doc_type || 'other'; label.unreadable = true; }

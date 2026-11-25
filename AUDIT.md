@@ -1,3 +1,37 @@
+# Speed, stability and polish — 2.4.1
+
+Four read-only audits (engine and desktop shell, capture sources, AI layer,
+dashboard) and measurements on a synthetic archive of 30,000 files and
+300,000 messages. The dashboard drew quickly; the engine froze for seconds at
+a time on polls, which is why screens looked empty.
+
+- Speed: the chat list is read from the (chat_id, ts) index (1.6 s to 25 ms),
+  chats with text per chat (1.0 s to 17 ms), message counts cached, the AI
+  coverage count from in-memory label marks (up to 3 s to 30 ms), pending
+  vectors in bulk (3.8 s to 0.34 s), vectors kept between searches, two
+  indexes for name healing (about 1 s to 20 ms per sync; author naming 39 ms
+  to 4 ms each), transcript export formatters made once (25 s to 0.4 s),
+  shared backup status walks, one label download at start-up instead of four.
+- Data safety: "Remove sample images" could empty the whole index when one
+  line was damaged; group media from one sender in the same second shared a
+  file name and overwrote each other; a failed message batch was counted as
+  saved; backup status read "nothing backed up" two minutes after the cloud
+  drive dropped off; migration could leave the imported message database
+  reading empty; Settings could be saved blank after a failed load.
+- AI: a refusal on a document's facts call was swallowed and the document
+  stored without its facts; Fully automatic re-arranged the whole library on
+  every background pass; a paid reply could be replayed after a validation
+  error; a free-plan job failed for good after one rate limit.
+- Dashboard: the search box no longer rewrites what is typed; the viewer opens
+  items hidden by Library filters; Clean up shows set-aside thumbnails, reports
+  refused and failed actions, and accepts large selections; the Library's
+  first row is on the first screen; Search & ask has a full-width field; the
+  viewer is readable in the light theme.
+
+255 automated checks pass, 18 of them new. Browser checks used the seeded dev
+archive with the demo provider. The WhatsApp reconnect logic was not changed:
+its faults need the live link to verify.
+
 # Automatic OpenAI model selection — 2.4.0
 
 Added a single Auto/manual choice. Auto hides the long model catalogue and

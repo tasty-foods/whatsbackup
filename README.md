@@ -1,5 +1,11 @@
 # WhatsBackUp
 
+Version 2.4.1 makes large archives fast and safer. The engine no longer
+freezes for seconds on the chat list and AI coverage polls, two photos sent
+together to a group no longer overwrite each other, and "Remove sample images"
+can no longer empty the index. The Library, Search & ask and the media viewer
+are tidier. See [AUDIT.md](AUDIT.md).
+
 Version 2.4.0 adds **Auto** model selection within OpenAI. It chooses available
 models by task and budget, keeps the manual choice for later, and records
 standalone search/test usage including paid failures. See [AI_MODELS.md](AI_MODELS.md).

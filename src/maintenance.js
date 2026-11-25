@@ -6,21 +6,25 @@ const store = require('./store');
 
 // Clear gallery entries. Default: only welcome samples. { all:true } wipes every
 // image record + local image file. Video files in pCloud are left in place.
+//
+// It works from the store's reading of the index and removes through the
+// store. It used to parse the file itself, all lines in one try: a single
+// line that would not parse (a write cut short, a stray byte) made that give
+// up with nothing read, and "nothing" was then written back as the whole
+// index — every record gone, to remove six sample pictures.
 function clearGallery({ all = false } = {}) {
-  let records = [];
-  try { records = fs.readFileSync(cfg.INDEX_FILE, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)); } catch (_) {}
+  store.loadAll();                       // from the command line nothing is loaded yet
+  const records = store.everyRecord();
   const remove = records.filter((r) => all || r.sample);
-  const keep = records.filter((r) => !(all || r.sample));
   let deleted = 0;
   for (const r of remove) {
-    if (r.kind === 'image') {
+    if (r.kind === 'image' && r.filename && path.basename(r.filename) === r.filename) {
       const p = path.join(cfg.IMAGES_DIR, r.filename);
       try { if (fs.existsSync(p)) { fs.unlinkSync(p); deleted++; } } catch (_) {}
     }
   }
-  fs.writeFileSync(cfg.INDEX_FILE, keep.map((r) => JSON.stringify(r)).join('\n') + (keep.length ? '\n' : ''));
-  try { store.loadAll(); } catch (_) {} // re-sync in-memory index (also refreshes counts)
-  return { removed: remove.length, deleted, kept: keep.length };
+  if (remove.length) store.removeRecords(remove.map((r) => r.id));
+  return { removed: remove.length, deleted, kept: records.length - remove.length };
 }
 
 // Documents saved before their extension was worked out properly ended in the

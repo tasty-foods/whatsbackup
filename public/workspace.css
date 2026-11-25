@@ -304,3 +304,45 @@ html[data-theme=dark] .ai-model-picker{background:#17241f;border-color:#34483a}
 html[data-theme=dark] .ai-model-picker .ai-model-catalogue{background:#102018;color:#e0eade}
 @media(max-width:760px){.ai-model-heading{align-items:flex-start;flex-wrap:wrap}.ai-model-picker{padding:12px}.ai-model-actions .btn{flex:1}.ai-model-catalogue{font-size:11px!important}}
 @media(max-width:1000px){.ai-model-auto-routes{grid-template-columns:1fr}.ai-model-mode{flex-wrap:wrap}.ai-model-mode select{width:100%;min-width:0}}
+
+/* ===== 2.4.1 polish ====================================================== */
+/* The viewer is dark in both themes, so inside it the theme's colours are the
+   dark ones. Without this the light theme's dark text landed on the dark
+   panel: a document's facts and the version notes could not be read. */
+.lightbox { color-scheme:dark; --bg:#131a17; --panel:#1c2520; --panel2:#253129; --line:#405045; --line-soft:#2d3930; --text:#e8eee8; --text-dim:#bdcbbf; --muted:#a1b0a3; --accent:#92bc96; --accent2:#5c9268; --ok:#92bc96; --ok-soft:#293e2e; --warn:#ebbf68; --warn-soft:#3d3522; --bad:#f59b94; --bad-soft:#422929; }
+
+/* An empty section's one line of help is a sentence, not a card: it takes the
+   row instead of being folded into one grid column. */
+.ov-grid > p { grid-column:1/-1; margin:0; max-width:70ch; }
+
+/* The Library's first row of pictures belongs on the first screen. The
+   heading, search card and toolbar above it keep their content and lose
+   about a hundred pixels of padding between them. */
+.workspace-topbar { padding-top:18px; }
+.workspace-status { padding-bottom:14px; }
+.library-heading { padding:16px var(--ui-space) 10px; }
+.library-heading h2 { font-size:26px; margin:2px 0; }
+.library-heading p { display:none; }
+.content-search-panel { margin-bottom:12px; padding:12px 16px; border-radius:var(--r-lg); }
+.content-search-heading { margin-bottom:8px; }
+.content-search-heading > div { display:flex; align-items:baseline; flex-wrap:wrap; gap:4px 12px; }
+.content-search-heading p { margin:0; }
+.content-result-status { margin:6px 0; min-height:20px; }
+.content-index { padding-top:8px; }
+.toolbar { padding-bottom:10px; }
+.collection-browser { padding:9px 0; }
+.gallery .day-label:first-child { margin-top:10px; }
+
+/* The sidebar fits the default window without scrolling, and where
+   something does scroll the bar is a thin one in the theme's colours. */
+.workspace-brand { padding-bottom:20px; }
+.sidebar-section-label { padding:13px 12px 6px; }
+.workspace-nav,.sidebar-links { gap:2px; }
+.workspace-nav button,.sidebar-links button { min-height:38px; padding:8px 12px; }
+.app-sidebar,.chatlist,.thread-body,#settings .modal-body,#settings .settabs,.lb-meta,.albumbar,.tagbar { scrollbar-width:thin; scrollbar-color:var(--line) transparent; }
+/* With the labels hidden at this width, a button made of two text spans
+   (Documents & files) was left with nothing to show. */
+@media(max-width:700px) { .workspace-nav button > span[aria-hidden="true"] { display:inline; font-size:17px; } .workspace-nav button,.sidebar-links button { padding:10px 6px; } }
+@media(max-width:940px) { .workspace-nav button,.sidebar-links button { padding-inline:9px; } }
+/* The search card keeps the page's gutter at every width (it had a fixed 28 px). */
+.content-search-panel { margin-inline:var(--ui-space); }

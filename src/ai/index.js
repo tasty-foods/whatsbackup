@@ -441,14 +441,14 @@ function queueBacklog(ids, { includeChats = true } = {}) {
     if (reason) return;
     if (ids && !ids.has(rec.id)) return;
     if (!kindOn(s, kind)) return;
-    if (label.currentLabel(ai.getLabel(kind, rec.id), s)) return;
+    if (label.currentLabel(ai.labelMark(kind, rec.id), s)) return;
     jobs.push({ type: JOB_FOR_KIND[kind], refId: rec.id });
   });
   if (!ids && includeChats && (s.aiAnalyseChats !== false || s.aiTopics !== false)) {
     const withText = messages.chatsWithText();
     for (const c of messages.listChats()) {
       if (!withText.has(c.chatId)) continue;      // nothing to read, nothing to charge for
-      if (s.aiAnalyseChats !== false && !ai.getLabel('chat', c.chatId)) jobs.push({ type: 'label_chat', refId: c.chatId });
+      if (s.aiAnalyseChats !== false && !ai.labelMark('chat', c.chatId)) jobs.push({ type: 'label_chat', refId: c.chatId });
       if (s.aiTopics !== false) { try { if (topics().pendingWindows(c.chatId) > 0) jobs.push({ type: 'topics_chat', refId: c.chatId }); } catch (_) {} }
     }
   }
@@ -545,7 +545,11 @@ async function runJobOnChain(job) {
     if (slow >= 2 && lastSlow) { try { lastSlow.provider = lastSlow.provider || cfg.provider; } catch (_) {} throw lastSlow; }
     let hadUsage = false;
     try {
-      const r = await runOneJob({ ...cfg, onUsage: receipt => { recordUsage(receipt); hadUsage = true; } }, job);
+      // "Paid for" means money: a receipt of $0 (a free plan, a local model)
+      // leaves the job free to rest and come back like any other. Counted as
+      // paid, a free-plan job that was rate-limited after its first of several
+      // calls failed for good instead of waiting for the quota.
+      const r = await runOneJob({ ...cfg, onUsage: receipt => { recordUsage(receipt); if ((receipt.costCap || receipt.cost || 0) > 0) hadUsage = true; } }, job);
       return { ...r, provider: cfg.provider };
     } catch (e) {
       if (hadUsage) { e.usageCharged = true; e.retryable = false; }
@@ -737,7 +741,10 @@ async function drainQueue(cfg, selection = {}) {
           if (!waitUntil || e.until < waitUntil) { waitUntil = e.until; waitWhy = e.message; }
           return;
         }
-        const retryable = e instanceof AiError ? e.retryable : true;
+        // A reply that was paid for is never asked for again, whatever kind of
+        // error followed it (a plain Error from validating the reply used to
+        // slip past this and was replayed, and paid for, three times).
+        const retryable = e.usageCharged ? false : (e instanceof AiError ? e.retryable : true);
         if (retryable && job.attempts + 1 < MAX_ATTEMPTS) {
           ai.retryJob(job.id, e.message);
           await new Promise((r) => setTimeout(r, 1500 * (job.attempts + 1)));
@@ -824,8 +831,16 @@ async function arrangeAll(cfg, s) {
     console.log(`[ai] ${word}: ${r.groups} groups, ${r.coverage || 0}% of items placed${r.note ? ' — ' + r.note : ''}`);
     notes.push(r.note || `${r.groups} ${word}`);
   }
+  // What this arrange left without an album is the new baseline: see kick().
+  if (notes.length) { try { settings.write({ aiArrangedUnplaced: countUnplaced() }); } catch (_) {} }
   return notes.join(' · ');
 }
+
+// Labels that sit in no album. An arrange leaves some there on purpose, so
+// this number alone cannot be what calls for the next arrange.
+const countUnplaced = () => ai.db().prepare(`SELECT COUNT(*) c FROM ai_labels l
+  LEFT JOIN ai_group_members m ON m.kind = l.kind AND m.ref_id = l.ref_id
+  WHERE m.ref_id IS NULL`).get().c;
 
 async function run({ arrangeOnly = false, indexOnly = false, ids = null } = {}) {
   requeueStranded();
@@ -1002,12 +1017,16 @@ async function kick() {
       const more = await queueSecondPass();
       if (more) { state.total += more; why = await drainQueue(cfg); }
     }
-    // New items are placed one at a time; a full re-arrange waits until enough
-    // of them have piled up that it is worth the call.
-    const unplaced = ai.db().prepare(`SELECT COUNT(*) c FROM ai_labels l
-      LEFT JOIN ai_group_members m ON m.kind = l.kind AND m.ref_id = l.ref_id
-      WHERE m.ref_id IS NULL`).get().c;
-    if (why === 'done' && unplaced >= 25 && s.aiMode === 'auto' && !stopAsked() && !budgetExceeded()) await arrangeAll(cfg, s);
+    // A full re-arrange waits until enough new items have piled up to be
+    // worth the call: 25 more without an album than the last arrange left.
+    // (It used to ask only whether 25 were without an album. An arrange
+    // always leaves some unsorted, so in "fully automatic" every background
+    // pass — each ten minutes, each new message — re-arranged the whole
+    // library: up to three whole-library calls a time, albums rebuilt.)
+    const unplaced = countUnplaced();
+    let arrangedAt = Number(settings.read().aiArrangedUnplaced) || 0;
+    if (unplaced < arrangedAt) { arrangedAt = unplaced; settings.write({ aiArrangedUnplaced: unplaced }); }   // labels were wiped or sorted by hand
+    if (why === 'done' && unplaced - arrangedAt >= 25 && s.aiMode === 'auto' && !stopAsked() && !budgetExceeded()) await arrangeAll(cfg, s);
   } catch (e) {
     console.warn('[ai] background pass stopped:', e.message);
   } finally {

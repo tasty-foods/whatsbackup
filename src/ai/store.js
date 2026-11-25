@@ -11,6 +11,28 @@ let ftsOk = false;
 // content index) know when to look again.
 let revision = 0;
 
+// Two things the dashboard and search ask for constantly are kept in memory
+// rather than re-read from the database each time. Both belong to one open
+// database: a different handle (tests, a restore) starts them afresh.
+//
+// marks: for every label, the reader that made it (index_version and
+//   index_profile) — all the coverage count needs. Re-reading and re-parsing
+//   every label for each count took 150 ms per 27,000 labels, every few
+//   seconds. Every write to ai_labels goes through putLabel, wipe or
+//   changedOutside, which keep the map in step.
+// vectors: search by meaning compares the question with every vector. They
+//   are kept while searches keep coming and let go after an idle minute.
+let marks = null;
+let marksOf = null;
+let vectors = null;
+const VECTORS_IDLE_MS = 60000;
+const markKey = (kind, refId) => kind + '\n' + refId;
+const markFor = (kind, label) => ({ kind, label: label && typeof label === 'object' ? { index_version: label.index_version, index_profile: label.index_profile } : null });
+function forgetVectors() {
+  if (vectors && vectors.timer) clearTimeout(vectors.timer);
+  vectors = null;
+}
+
 function db() {
   const handle = messages.handle();
   if (!ready) {
@@ -198,7 +220,31 @@ function putLabel({ kind, refId, contentHash, label, model, provider, usage, cos
     .run(kind, refId, contentHash, JSON.stringify(label), model || '', provider || '',
       (usage && usage.in) || 0, (usage && usage.out) || 0, cost == null ? null : cost, Date.now());
   revision++;
+  if (marks) marks.set(markKey(kind, refId), markFor(kind, label));
   indexText(kind, refId, labelText(label));
+}
+// Every label's reader marks, by kind and id: { kind, label: { index_version,
+// index_profile } }, or label null where the stored text is not a label.
+function labelMarks() {
+  const handle = db();
+  if (!marks || marksOf !== handle) {
+    marks = new Map();
+    marksOf = handle;
+    for (const r of handle.prepare('SELECT kind, ref_id, label_json FROM ai_labels').all()) {
+      let label = null;
+      try { label = JSON.parse(r.label_json); } catch (_) {}
+      marks.set(markKey(r.kind, r.ref_id), markFor(r.kind, label));
+    }
+  }
+  return marks;
+}
+const labelMark = (kind, refId) => labelMarks().get(markKey(kind, refId)) || null;
+// For the one place that writes the AI tables with SQL of its own (folding
+// another archive in): what is held in memory is no longer the whole truth.
+function changedOutside() {
+  revision++;
+  marks = null;
+  forgetVectors();
 }
 // The same bytes already read under another id (a forward, a copy): its
 // label can be reused without a call.
@@ -432,15 +478,33 @@ function putEmbedding({ kind, refId, model, contentHash, vec }) {
   db().prepare(`INSERT INTO ai_embeddings (kind, ref_id, model, dims, content_hash, vec, created_at) VALUES (?,?,?,?,?,?,?)
     ON CONFLICT(kind, ref_id) DO UPDATE SET model=excluded.model, dims=excluded.dims, content_hash=excluded.content_hash, vec=excluded.vec, created_at=excluded.created_at`)
     .run(kind, refId, model, f32.length, contentHash, Buffer.from(f32.buffer, f32.byteOffset, f32.byteLength), Date.now());
+  forgetVectors();
 }
 const hasEmbedding = (kind, refId, contentHash) => {
   const r = db().prepare('SELECT content_hash FROM ai_embeddings WHERE kind = ? AND ref_id = ?').get(kind, refId);
   return !!r && r.content_hash === contentHash;
 };
-// All vectors of one model, as Float32Arrays, for the in-memory search.
+// The hash each stored vector was made from, by kind and id, in one read —
+// for deciding what still needs a vector without a query per item.
+const embeddingHashes = () => {
+  const out = new Map();
+  for (const r of db().prepare('SELECT kind, ref_id, content_hash FROM ai_embeddings').all()) out.set(markKey(r.kind, r.ref_id), r.content_hash);
+  return out;
+};
+// All vectors of one model, as Float32Arrays, for the in-memory search. Do
+// not change the array or its vectors: it is shared between searches.
 function allEmbeddings(model) {
-  return db().prepare('SELECT kind, ref_id, dims, vec FROM ai_embeddings WHERE model = ?').all(model)
-    .map((r) => ({ kind: r.kind, refId: r.ref_id, vec: new Float32Array(r.vec.buffer, r.vec.byteOffset, r.dims) }));
+  const handle = db();
+  if (!vectors || vectors.model !== model || vectors.handle !== handle) {
+    forgetVectors();
+    const rows = handle.prepare('SELECT kind, ref_id, dims, vec FROM ai_embeddings WHERE model = ?').all(model)
+      .map((r) => ({ kind: r.kind, refId: r.ref_id, vec: new Float32Array(r.vec.buffer, r.vec.byteOffset, r.dims) }));
+    vectors = { model, handle, rows, timer: null };
+  }
+  if (vectors.timer) clearTimeout(vectors.timer);
+  vectors.timer = setTimeout(forgetVectors, VECTORS_IDLE_MS);
+  if (vectors.timer.unref) vectors.timer.unref();
+  return vectors.rows;
 }
 const embeddingCount = () => (db().prepare('SELECT COUNT(*) c FROM ai_embeddings').get() || {}).c || 0;
 const embeddingModels = () => db().prepare('SELECT model, COUNT(*) c FROM ai_embeddings GROUP BY model ORDER BY c DESC').all();
@@ -543,6 +607,8 @@ function searchLabels(q, limit = 100, { mode = 'all' } = {}) {
 
 function wipe() {
   revision++;
+  marks = null;
+  forgetVectors();
   db().exec(`DELETE FROM ai_labels; DELETE FROM ai_group_members; DELETE FROM ai_groups;
              DELETE FROM ai_corrections; DELETE FROM ai_jobs; DELETE FROM ai_runs;
              DELETE FROM ai_embeddings; DELETE FROM ai_topics; DELETE FROM ai_topic_cursor; DELETE FROM ai_finals;`);
@@ -552,12 +618,13 @@ function wipe() {
 module.exports = {
   db, sha1, newId, UNFILED, labelText,
   getLabel, isLabelled, putLabel, labelsOfKinds, labelsWithGroups, labelCount, labelByHash, revision: () => revision,
+  labelMark, labelMarks, markKey, changedOutside,
   listGroups, groupOf, membersOf, createGroup, renameGroup, aliasesOf, setMember, clearAiMembers,
   pruneEmptyGroups, mergeDuplicateNames,
   addCorrection, recentCorrections,
   enqueue, enqueueMany, claim, claimType, releaseJobs, requeueStale, finishJob, retryJob, jobCounts, queuedByType, clearJobs, clearJobsOfType,
   startRun, updateRun, lastRun, spendSince, spendCapSince,
-  putEmbedding, hasEmbedding, allEmbeddings, embeddingCount, embeddingModels,
+  putEmbedding, hasEmbedding, embeddingHashes, allEmbeddings, embeddingCount, embeddingModels,
   putTopics, topicsOf, allTopics, getTopic, topicCount, topicCursor, setTopicCursor, deleteTopicsOf,
   setKeyFor, getFinalSet, getFinalSetById, putFinalSet, listFinalSets, decideFinalSet, finalSetKeys,
   markFinal, unmarkFinal, finalMark, allFinalMarks,

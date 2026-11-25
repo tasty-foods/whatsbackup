@@ -275,12 +275,17 @@ function prependNew(items) {
 /* ---------- Lightbox (tracked by id so it survives live updates) ---------- */
 function currentIndex() { return filteredCache.findIndex((r) => r.id === lbId); }
 let lightboxOpener = null;
-function openLightbox(r) { lightboxOpener = document.activeElement; lbId = r.id; els.lightbox.classList.remove('hidden'); showCurrent(); els.lbClose.focus(); }
-function closeLightbox() { els.lightbox.classList.add('hidden'); els.lbStage.innerHTML = ''; lbId = null; const opener = lightboxOpener; requestAnimationFrame(() => { if (opener?.isConnected && document.activeElement === document.body) opener.focus(); }); }
+// The record the viewer was opened on. Finals, Search and Topics open items
+// the Library's own filters may be hiding at that moment, so the viewer cannot
+// count on finding the item in the filtered list: without this it opened
+// empty, beside the previous item's details and buttons.
+let lbRecord = null;
+function openLightbox(r) { lightboxOpener = document.activeElement; lbId = r.id; lbRecord = r; els.lightbox.classList.remove('hidden'); showCurrent(); els.lbClose.focus(); }
+function closeLightbox() { els.lightbox.classList.add('hidden'); els.lbStage.innerHTML = ''; els.lbMeta.innerHTML = ''; lbId = null; lbRecord = null; const opener = lightboxOpener; requestAnimationFrame(() => { if (opener?.isConnected && document.activeElement === document.body) opener.focus(); }); }
 function showCurrent() {
   const i = currentIndex();
-  if (i < 0) return;
-  const r = filteredCache[i];
+  const r = i >= 0 ? filteredCache[i] : (lbRecord && lbRecord.id === lbId ? lbRecord : null);
+  if (!r) return;
   els.lbStage.innerHTML = '';
   let el;
   if (r.kind === 'image' || r.kind === 'sticker') { el = document.createElement('img'); el.src = r.serve; el.alt = r.caption || r.docName || `${r.chat || 'Saved'} photo`; }
@@ -344,7 +349,7 @@ function showCurrent() {
     qs.textContent = resp.ok ? '✓ In the status queue' : ('✗ ' + (resp.error || 'failed'));
   });
   els.lbPrev.style.visibility = i > 0 ? 'visible' : 'hidden';
-  els.lbNext.style.visibility = i < filteredCache.length - 1 ? 'visible' : 'hidden';
+  els.lbNext.style.visibility = i >= 0 && i < filteredCache.length - 1 ? 'visible' : 'hidden';
 }
 async function fillLightboxExtra(r) {
   let d = null;
@@ -676,7 +681,10 @@ const Cleanup = (function () {
   const mb = (b) => b >= 1e9 ? (b / 1e9).toFixed(2) + " GB" : b >= 1e6 ? (b / 1e6).toFixed(1) + " MB" : Math.round(b / 1024) + " KB";
   const thumb = (it) => !['image','sticker'].includes(it.kind)
     ? "<div class=" + q("cl-thumb vid") + ">&#9654;</div>"
-    : "<img class=" + q("cl-thumb") + " loading=" + q("lazy") + " decoding=" + q("async") + " src=" + q('/api/thumbnail/' + encodeURIComponent(it.id)) + " alt=" + q("") + ">";
+    // Something set aside is shown from where it now lies: it has no place in
+    // the thumbnail cache, and asking for one drew a blank square in the very
+    // list where "Delete forever" is chosen.
+    : "<img class=" + q("cl-thumb") + " loading=" + q("lazy") + " decoding=" + q("async") + " src=" + q(it.id ? '/api/thumbnail/' + encodeURIComponent(it.id) : it.serve) + " alt=" + q("") + ">";
   function q(s) { return String.fromCharCode(34) + s + String.fromCharCode(34); }
 
   function renderGroups() {
@@ -734,7 +742,10 @@ const Cleanup = (function () {
 
   async function load() {
     summary.textContent = "Checking your library…";
-    try { data = await (await fetch("/api/cleanup/suggest")).json(); } catch (e) { summary.textContent = "Couldn’t check the library — " + e.message; return; }
+    // requestJson, so an error reply is an error here too, not a list with no groups.
+    let fresh;
+    try { fresh = await requestJson("/api/cleanup/suggest"); } catch (e) { summary.textContent = "Couldn’t check the library — " + e.message; return; }
+    data = fresh;
     // Drop ticks for things that are no longer suggested.
     const live = new Set(); for (const g of data.groups) for (const it of g.items) live.add(it.id);
     for (const id of [...picked]) if (!live.has(id)) picked.delete(id);
@@ -763,22 +774,37 @@ const Cleanup = (function () {
     const any = pickedQ.size > 0; bRestore.disabled = !any; bPurge.disabled = !any;
   });
 
-  const post = (url, body) => fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then((r) => r.json());
+  // The engine can refuse an action (a duplicate scan is running, another
+  // action has not finished) and can fail on single items. Both used to pass
+  // silently: the ticks were cleared and nothing had happened. A refusal now
+  // says why and leaves the ticks alone; items that failed are counted.
+  const post = (url, body) => requestJson(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const leftOver = (r, what) => {
+    if (!r || !r.failed || !r.failed.length) return;
+    const why = r.failed[0] && (r.failed[0].error || r.failed[0].reason);
+    alert(r.failed.length + " couldn’t be " + what + ". The rest were." + (why ? String.fromCharCode(10, 10) + why : ""));
+  };
 
   bQuar.addEventListener("click", async () => {
     if (!picked.size) return;
     bQuar.disabled = true;
-    const r = await post("/api/cleanup/quarantine", { ids: [...picked], reason: "chosen" });
+    let r;
+    try { r = await post("/api/cleanup/quarantine", { ids: [...picked], reason: "chosen" }); }
+    catch (e) { summary.textContent = "Nothing was set aside — " + e.message; bQuar.disabled = false; return; }
     picked.clear();
-    if (r.failed && r.failed.length) alert(r.failed.length + " couldn’t be set aside. The rest were.");
+    leftOver(r, "set aside");
     load();
     if (typeof loadItems === "function") loadItems(true);
   });
   bRefresh.addEventListener("click", load);
   bRestore.addEventListener("click", async () => {
     if (!pickedQ.size) return;
-    await post("/api/cleanup/restore", { ids: [...pickedQ] });
-    pickedQ.clear(); load();
+    let r;
+    try { r = await post("/api/cleanup/restore", { ids: [...pickedQ] }); }
+    catch (e) { summary.textContent = "Nothing was brought back — " + e.message; return; }
+    pickedQ.clear();
+    leftOver(r, "brought back");
+    load();
     if (typeof loadItems === "function") loadItems(true);
   });
   bPurge.addEventListener("click", async () => {
@@ -786,8 +812,12 @@ const Cleanup = (function () {
     const n = pickedQ.size;
     if (!confirm("Delete " + n + " item" + (n === 1 ? "" : "s") + " forever?" + String.fromCharCode(10, 10) + "This cannot be undone.")) return;
     if (!confirm("Last check - really delete " + n + " forever?")) return;
-    await post("/api/cleanup/purge", { ids: [...pickedQ] });
-    pickedQ.clear(); loadQuar();
+    let r;
+    try { r = await post("/api/cleanup/purge", { ids: [...pickedQ] }); }
+    catch (e) { summary.textContent = "Nothing was deleted — " + e.message; return; }
+    pickedQ.clear();
+    leftOver(r, "deleted");
+    loadQuar();
   });
 
   return { enter: load };
@@ -918,10 +948,15 @@ const fmtBytes = (n) => {
   return (n / Math.pow(1024, i)).toFixed(i ? 1 : 0) + ' ' + u[i];
 };
 
+// Whether the form has ever been filled from the saved settings. Until it
+// has, its boxes are empty and its switches off, and saving it would write
+// exactly that: capture switched off and the folders blank.
+let settingsLoaded = false;
 async function loadSettings() {
   try {
     const d = await (await fetch('/api/settings')).json();
     for (const [key, type] of Object.entries(FIELDS)) writeField(key, type, d.settings[key]);
+    settingsLoaded = true;
     window.AiModels?.setSaved({ provider: d.settings.aiProvider, model: d.settings.aiModel, modelMode: d.settings.aiOpenaiModelMode || 'manual', baseUrl: d.settings.aiBaseUrl, apiMode: d.settings.aiOpenaiApiMode || 'auto', effort: d.settings.aiOpenaiReasoningEffort || 'auto' });
     if (window.Workspace) window.Workspace.applyPreferences(d.settings);
     S.limit.value = d.settings.backfillLimit;
@@ -974,6 +1009,13 @@ async function loadStorage() {
 
 S.save.addEventListener('click', async () => {
   if (window.AiModels && !window.AiModels.canSave()) { flashSaved('Test the selected model first, or keep the current model.', true); return; }
+  if (!settingsLoaded) {
+    // The form never received the saved values (the engine was not answering
+    // when Settings opened). Try once more; save only what was really loaded.
+    await loadSettings();
+    flashSaved(settingsLoaded ? 'Your settings have only now loaded. Check them, then save again.' : 'Nothing was saved: the settings could not be loaded. Try again in a moment.', true);
+    return;
+  }
   S.saveStatus.textContent = 'Saving…';
   const body = { backfillLimit: parseInt(S.limit.value, 10) || 400 };
   for (const [key, type] of Object.entries(FIELDS)) {
@@ -1686,13 +1728,35 @@ const AI = (function () {
   const $$ = (id) => document.getElementById(id);
 
   /* --- data --- */
-  async function loadLabels() {
+  // The label list is one large reply — megabytes on a big library. A caller
+  // that knows something changed (an album was assigned, a run finished) asks
+  // plainly and always gets a new read. One that only needs the labels to be
+  // there — start-up, opening the Overview — passes { shared: true } and takes
+  // a read already in flight or a few seconds old. Without that, start-up
+  // fetched and parsed the same list four times over.
+  let labelsReading = null;
+  let labelsReadAt = 0;
+  const LABELS_SHARED_MS = 3000;
+  function loadLabels({ shared = false } = {}) {
+    if (shared && labelsReading) return labelsReading;
+    // Nothing new to fetch, but what is drawn from the labels may predate the
+    // library's own load (start-up asks in that order), so it is drawn again.
+    if (shared && Date.now() - labelsReadAt < LABELS_SHARED_MS) { drawFromLabels(); return Promise.resolve(); }
+    const reading = readLabels().finally(() => { if (labelsReading === reading) labelsReading = null; });
+    labelsReading = reading;
+    return reading;
+  }
+  async function readLabels() {
     try {
       const rows = await (await fetch('/api/ai/labels?kind=media')).json();
       state.labels = new Map(rows.map((r) => [r.refId, r]));
       const g = await (await fetch('/api/ai/groups?kind=media')).json();
       state.groups = g.groups || [];
+      labelsReadAt = Date.now();
     } catch (e) { /* AI not set up */ }
+    drawFromLabels();
+  }
+  function drawFromLabels() {
     renderAlbumBar();
     // The menus are built from the labels, so they are rebuilt when the labels
     // change — a run that invents a new album or a new tag offers it straight
@@ -2038,8 +2102,13 @@ const AI = (function () {
 
   /* --- running --- */
   async function run(arrangeOnly) {
-    await saveAiSettings();
-    const r = await (await fetch('/api/ai/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ arrangeOnly }) })).json();
+    // A setting the engine rejects (an untested model, say) or an engine that
+    // is not answering used to leave the button looking dead: say what happened.
+    let r;
+    try {
+      await saveAiSettings();
+      r = await (await fetch('/api/ai/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ arrangeOnly }) })).json();
+    } catch (e) { $$('ai-run-status').innerHTML = `<span class="bad-text">Not started: ${escapeHtml(e.message || 'the app did not answer')}</span>`; return; }
     if (!r.ok) { $$('ai-run-status').innerHTML = `<span class="bad-text">${escapeHtml(r.message)}</span>`; return; }
     $$('ai-progress').classList.remove('hidden');
     watch();
@@ -2919,7 +2988,10 @@ const StatusView = (function () {
       row.className = 'st-qitem';
       const what = item.type === 'text'
         ? `“${escapeHtml(item.body.slice(0, 70))}”`
-        : `${item.type}: ${escapeHtml(decodeURIComponent(String(item.body).split(/[\\/]/).pop()))}`;
+        // A queued file is a plain path, not a URL: a name with a bare "%" in
+        // it made the decode throw, and this row and every one after it were
+        // never drawn (and could not be removed).
+        : `${item.type}: ${escapeHtml(String(item.body).split(/[\\/]/).pop())}`;
       row.innerHTML = `<span class="what">${what}</span><button title="Remove">✕</button>`;
       row.querySelector('button').addEventListener('click', async () => {
         await jpost('/api/status/queue/delete', { id: item.id });
@@ -3238,7 +3310,12 @@ const Backup = (function () {
     if (typeof Overview !== 'undefined') Overview.renderBackup();
     if (currentView === 'media' && changed) {
       if (F.backup) render(allItems);
-      else document.querySelectorAll('#gallery .tile').forEach(tile => { const rec = allItems.find(item => item.id === tile.dataset.id); if(rec && window.Workspace) window.Workspace.decorateTile(tile, rec); });
+      else {
+        // One map for all the tiles: a search through the whole library per
+        // tile took close to two seconds on a large one.
+        const byId = new Map(allItems.map(item => [item.id, item]));
+        document.querySelectorAll('#gallery .tile').forEach(tile => { const rec = byId.get(tile.dataset.id); if(rec && window.Workspace) window.Workspace.decorateTile(tile, rec); });
+      }
     }
   }
   function noteState(s) { lastStateSeen = s; renderPill(); renderBanner(); }
@@ -3465,7 +3542,7 @@ const Overview = (function () {
     finalSets = (f && f.sets) || [];
     if (typeof AI !== 'undefined') {
       try { await AI.ensureChatGroups(); } catch (e) {}
-      try { await AI.loadLabels(); } catch (e) {}
+      try { await AI.loadLabels({ shared: true }); } catch (e) {}
     }
     render();
   }
@@ -3873,7 +3950,7 @@ const SourceOverview = (() => {
    that has not been reached yet cannot be tested for with typeof. */
 loadItems(true).then(async () => {
   if (typeof Finals !== 'undefined') await Finals.refreshMarks();
-  await AI.loadLabels();
+  await AI.loadLabels({ shared: true });
   await AI.loadChatGroups();
   renderSourceBar();
   Backup.refresh();

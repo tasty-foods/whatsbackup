@@ -1,10 +1,15 @@
 /* ===== 2.0: search everywhere, topics, finals ============================ */
-.gsearch { flex: 1; min-width: 180px; max-width: 360px; }
+/* The search field is what this view is for: it sits under the heading, at a
+   width that takes a sentence. (It was written for the old top bar — 360 px,
+   and above its own heading once the view got one.) */
+.gsearch { display: block; max-width: 760px; margin: 14px 0 6px; }
 .gsearch input { width: 100%; background: var(--panel); border: 1px solid var(--line); color: var(--text);
-  border-radius: var(--r-pill); padding: 7px 14px; font: inherit; font-size: var(--fs-sm); outline: none; }
-.gsearch input:focus { border-color: var(--accent2); }
+  border-radius: var(--r-md); padding: 12px 16px; font: inherit; font-size: var(--fs-lg); outline: none; }
+.gsearch input:focus { border-color: var(--accent2); box-shadow: 0 0 0 3px var(--ok-soft); }
 
-.searchview, .topicsview, .finalsview { padding: 16px 20px 40px; max-width: 1280px; margin: 0 auto; }
+/* Same gutters and width as Overview and Clean up, so headings line up with
+   the title in the top bar on every view. */
+.searchview, .topicsview, .finalsview { padding: 28px var(--ui-space, 20px) 45px; max-width: 1500px; margin: 0 auto; }
 .sv-head h2 { margin: 0 0 4px; }
 .sv-filters { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0 4px; }
 .sv-filters:empty { display: none; }

@@ -200,7 +200,10 @@ function createApp() {
   app.get('/api/performance', localHostOnly, (req, res) => res.json(performance()));
   app.disable('x-powered-by');
   app.use(localHostOnly);
-  app.use(['/api/export/prepare', '/api/library/favorites'], express.json({ limit: '6mb' }));
+  // Routes that take a list of ids take thousands of them: "select all" in
+  // Clean up sends up to 5,000, which is three times the default 100 KB limit
+  // and was refused before the route ever saw it.
+  app.use(['/api/export/prepare', '/api/library/favorites', '/api/cleanup', '/api/ai/run'], express.json({ limit: '6mb' }));
   app.use(express.json());
 
   // Images: static (fast, safe). Videos and files: dynamic so we always serve
@@ -1043,7 +1046,12 @@ function createApp() {
             insertRows(tb, rows, ['ref_id']);
             out.ai[tb].after = count('main', tb);
           }
-        } finally { try { db.exec('DETACH DATABASE other'); } catch (_) {} }
+        } finally {
+          try { db.exec('DETACH DATABASE other'); } catch (_) {}
+          // Labels arrived by SQL, not through the store: what it holds in
+          // memory (and every cache keyed on its revision) must look again.
+          if (!dry) ai.store.changedOutside();
+        }
       }
       // 5. the records themselves, appended last so their files exist first
       if (!dry) for (const r of fresh) { if (store.addRecord(r)) out.records.added++; }

@@ -22,43 +22,49 @@ const QUERY_CACHE = new Map();         // query text -> vector, per model
 const QUERY_CACHE_MAX = 200;
 
 // One text per thing. The chat name and month go in front so that "the
-// supplier photos from March" works without a filter.
-function textFor(kind, refId) {
+// supplier photos from March" works without a filter. A caller going through
+// the whole library passes what it already holds (`known.label`,
+// `known.topic`, `known.chatNames`) so nothing is looked up twice.
+function textFor(kind, refId, known = {}) {
+  const chatName = (chatId) => (known.chatNames ? known.chatNames.get(chatId) : (messages.listChats().find((c) => c.chatId === chatId) || {}).chatName) || '';
+  const labelOf = (k) => ('label' in known ? known.label : (ai.getLabel(k, refId) || {}).label);
   if (kind === 'chat') {
-    const row = ai.getLabel('chat', refId);
-    if (!row || !row.label) return null;
-    const name = (messages.listChats().find((c) => c.chatId === refId) || {}).chatName || '';
-    return [`chat with ${name}`, ai.labelText(row.label)].filter(Boolean).join('\n');
+    const label = labelOf('chat');
+    if (!label) return null;
+    return [`chat with ${chatName(refId)}`, ai.labelText(label)].filter(Boolean).join('\n');
   }
   if (kind === 'topic') {
-    const t = ai.getTopic(refId);
+    const t = known.topic || ai.getTopic(refId);
     if (!t) return null;
-    const name = (messages.listChats().find((c) => c.chatId === t.chatId) || {}).chatName || '';
-    return [`${t.title} (${name}, ${new Date(t.toTs).toISOString().slice(0, 7)})`, t.summary, t.keywords.join(' '), t.decisions.join(' ')].filter(Boolean).join('\n');
+    return [`${t.title} (${chatName(t.chatId)}, ${new Date(t.toTs).toISOString().slice(0, 7)})`, t.summary, t.keywords.join(' '), t.decisions.join(' ')].filter(Boolean).join('\n');
   }
   const rec = store.get(refId);
-  const row = ai.getLabel(kind, refId);
-  if (!rec || !row || !row.label) return null;
+  const label = rec ? labelOf(kind) : null;
+  if (!rec || !label) return null;
   const when = new Date(rec.ts).toISOString().slice(0, 7);
   const head = `${kind} from ${rec.chat || 'unknown'}, ${when}` + (rec.docName ? `, file ${rec.docName}` : '') + (rec.caption ? `, caption: ${String(rec.caption).slice(0, 120)}` : '');
-  return [head, ai.labelText(row.label)].filter(Boolean).join('\n').slice(0, 6000);
+  return [head, ai.labelText(label)].filter(Boolean).join('\n').slice(0, 6000);
 }
 
 const hashFor = (text, model) => ai.sha1(model + '\n' + text);
 
-// Which labelled things still lack a vector for this model.
+// Which labelled things still lack a vector for this model. Read in bulk:
+// every label once, every stored hash once, the chat names once. (Asking the
+// database about each item in turn took 3.8 s on 27,000 labels.)
 function pending(model) {
   const out = [];
+  const held = ai.embeddingHashes();
+  const chatNames = new Map(messages.listChats().map((c) => [c.chatId, c.chatName]));
+  const lacks = (kind, refId, text) => held.get(ai.markKey(kind, refId)) !== hashFor(text, model);
   for (const kind of ['image', 'video', 'document', 'audio', 'chat']) {
     for (const row of ai.labelsOfKinds([kind])) {
-      const text = textFor(kind, row.refId);
-      if (!text) continue;
-      if (!ai.hasEmbedding(kind, row.refId, hashFor(text, model))) out.push({ kind, refId: row.refId });
+      const text = textFor(kind, row.refId, { label: row.label, chatNames });
+      if (text && lacks(kind, row.refId, text)) out.push({ kind, refId: row.refId });
     }
   }
   for (const t of ai.allTopics()) {
-    const text = textFor('topic', t.id);
-    if (text && !ai.hasEmbedding('topic', t.id, hashFor(text, model))) out.push({ kind: 'topic', refId: t.id });
+    const text = textFor('topic', t.id, { topic: t, chatNames });
+    if (text && lacks('topic', t.id, text)) out.push({ kind: 'topic', refId: t.id });
   }
   return out;
 }

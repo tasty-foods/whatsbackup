@@ -20,8 +20,13 @@ h1{font-size:20px}a{color:#53bdeb}.msg{max-width:75%;margin:6px 0;padding:8px 10
 .msg.out{background:#005c4b;float:right}.meta{font-size:11px;color:#8696a0;margin-top:3px}.day{clear:both;text-align:center;color:#8696a0;margin:16px 0;font-size:12px}
 .media{color:#8696a0;font-style:italic}.row{overflow:hidden}`;
 
-function dayLabel(ms) { return new Date(ms).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }); }
-function timeLabel(ms) { return new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
+// Two formatters made once. toLocaleDateString/TimeString build one per call,
+// and at two calls per message that was most of an export: 25 s for 300,000
+// messages against under half a second, with the same text.
+const DAY_FORMAT = new Intl.DateTimeFormat([], { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+const TIME_FORMAT = new Intl.DateTimeFormat([], { hour: '2-digit', minute: '2-digit' });
+function dayLabel(ms) { return DAY_FORMAT.format(new Date(ms)); }
+function timeLabel(ms) { return TIME_FORMAT.format(new Date(ms)); }
 
 function renderChat(name, rows) {
   let html = `<!doctype html><meta charset="utf-8"><title>${esc(name)}</title><style>${PAGE_CSS}</style><h1>${esc(name)}</h1><p><a href="index.html">← all chats</a></p>`;
@@ -52,6 +57,10 @@ function exportTranscript() {
   const chatsMeta = [];
   const usedNames = new Set();
   for (const [key, { name, rows: rr }] of byChat) {
+    // The rows arrive ordered by chat name first, and a chat saved under more
+    // than one name (it was "unknown" for a while) came out with its history
+    // in pieces. A transcript reads in the order things were said.
+    rr.sort((a, b) => a.ts - b.ts);
     let file = safeFile(name) + '.html';
     let i = 2; while (usedNames.has(file)) file = safeFile(name) + '-' + (i++) + '.html';
     usedNames.add(file);

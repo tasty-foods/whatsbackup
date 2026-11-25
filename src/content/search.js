@@ -43,7 +43,11 @@ function rank(entries, plan, { partial = false, scope = 'all' } = {}) {
       if (scope === 'content' && p.metadata) continue;
       if (scope === 'names' && !p.metadata) continue;
       if (plan.exclude.some(group => group.some(word => has(p.normalized, word)))) continue;
-      const matched = plan.groups.filter(group => group.some(word => has(p.normalized, word))).length;
+      // Every group must be present (unless partial matches are asked for), so
+      // the test stops at the first one that is not: this runs for every
+      // passage of every file on each search.
+      const groupHit = group => group.some(word => has(p.normalized, word));
+      const matched = partial ? plan.groups.filter(groupHit).length : (plan.groups.every(groupHit) ? plan.groups.length : 0);
       if (!matched || (!partial && matched < plan.groups.length)) continue;
       // A word explicitly negated in the evidence must not support a positive request.
       if (plan.groups.some(group => group.some(word => ['no ', 'not ', 'without '].some(prefix => has(p.normalized, prefix + word))))) continue;

@@ -164,7 +164,9 @@ function read() {
 function write(patch) {
   const next = { ...read(), ...patch };
   fs.mkdirSync(paths.DATA_DIR, { recursive: true });
-  const tmp = FILE + '.tmp';
+  // The desktop shell and the engine both write this file; a temporary name
+  // of its own per process keeps one from renaming the other's half-written copy.
+  const tmp = FILE + '.' + process.pid + '.tmp';
   fs.writeFileSync(tmp, JSON.stringify(next, null, 2));
   fs.renameSync(tmp, FILE);   // atomic — a crash mid-write can't truncate settings
   return next;

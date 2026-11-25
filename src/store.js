@@ -51,6 +51,21 @@ function loadAll() {
 
 function has(id) { return seen.has(id); }
 function get(id) { return byId.get(id) || null; }
+// Every record held, set-aside ones included — for maintenance, which has to
+// see the whole index and must take it from here rather than parse the file
+// itself (this read survives a damaged line; a parse of its own did not).
+const everyRecord = () => records.slice();
+// Whether any record, set aside or not, is already saved under this name.
+const hasFilename = (name) => records.some((r) => r.filename === name);
+
+// The one way the index is written anew: oldest first, to a temporary file
+// that then takes the index's place, so a crash mid-write cannot leave half
+// of it.
+function rewriteIndex() {
+  const tmp = cfg.INDEX_FILE + '.tmp';
+  fs.writeFileSync(tmp, records.slice().sort((a, b) => a.ts - b.ts).map((r) => JSON.stringify(r)).join('\n') + '\n');
+  fs.renameSync(tmp, cfg.INDEX_FILE);
+}
 
 function addRecord(rec) {
   if (seen.has(rec.id)) return false;
@@ -96,9 +111,7 @@ function retitleChat(chatId, name) {
     if (r.chat !== name && String(r.id).includes(needle) && (!r.source || r.source === 'whatsapp')) { r.chat = name; changed++; }
   }
   if (!changed) return 0;
-  const tmp = cfg.INDEX_FILE + '.tmp';
-  fs.writeFileSync(tmp, records.slice().sort((a, b) => a.ts - b.ts).map((r) => JSON.stringify(r)).join('\n') + '\n');
-  fs.renameSync(tmp, cfg.INDEX_FILE);
+  rewriteIndex();
   return changed;
 }
 function renameChat(chatId, name) {
@@ -108,9 +121,7 @@ function renameChat(chatId, name) {
     if (r.chat === 'unknown' && String(r.id).includes(needle)) { r.chat = name; changed++; }
   }
   if (!changed) return 0;
-  const tmp = cfg.INDEX_FILE + '.tmp';
-  fs.writeFileSync(tmp, records.slice().sort((a, b) => a.ts - b.ts).map((r) => JSON.stringify(r)).join('\n') + '\n');
-  fs.renameSync(tmp, cfg.INDEX_FILE);
+  rewriteIndex();
   return changed;
 }
 
@@ -125,9 +136,7 @@ function removeRecords(ids) {
   if (records.length === before) return 0;
   for (const id of drop) { seen.delete(id); byId.delete(id); hidden.delete(id); }
   saveHidden();
-  const tmp = cfg.INDEX_FILE + '.tmp';
-  fs.writeFileSync(tmp, records.slice().sort((a, b) => a.ts - b.ts).map((r) => JSON.stringify(r)).join('\n') + '\n');
-  fs.renameSync(tmp, cfg.INDEX_FILE);
+  rewriteIndex();
   return before - records.length;
 }
 
@@ -140,9 +149,7 @@ function clearCaptions(source) {
     if ((r.source || 'whatsapp') === source && r.caption) { r.caption = ''; changed++; }
   }
   if (!changed) return 0;
-  const tmp = cfg.INDEX_FILE + '.tmp';
-  fs.writeFileSync(tmp, records.slice().sort((a, b) => a.ts - b.ts).map((r) => JSON.stringify(r)).join('\n') + '\n');
-  fs.renameSync(tmp, cfg.INDEX_FILE);
+  rewriteIndex();
   return changed;
 }
 
@@ -157,10 +164,8 @@ function renameFile(id, newName, dir) {
   fs.renameSync(from, to);
   rec.filename = newName;
   rec.serve = rec.serve ? rec.serve.replace(/[^/]+$/, encodeURIComponent(newName)) : rec.serve;
-  const tmp = cfg.INDEX_FILE + '.tmp';
-  fs.writeFileSync(tmp, records.slice().sort((a, b) => a.ts - b.ts).map((r) => JSON.stringify(r)).join('\n') + '\n');
-  fs.renameSync(tmp, cfg.INDEX_FILE);
+  rewriteIndex();
   return true;
 }
 
-module.exports = { renameChat, retitleChat, ensureDirs, loadAll, has, get, addRecord, removeRecords, clearCaptions, renameFile, listRecords, counts, hide, unhide, hiddenIds };
+module.exports = { renameChat, retitleChat, ensureDirs, loadAll, has, get, everyRecord, hasFilename, addRecord, removeRecords, clearCaptions, renameFile, listRecords, counts, hide, unhide, hiddenIds };

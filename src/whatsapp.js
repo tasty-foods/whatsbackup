@@ -549,7 +549,10 @@ async function saveMediaMessage(msg, chatObj) {
   const number = (chat && chat.id && chat.id.user) || '';
 
   const ext = extFor(media.mimetype, msg.type === 'document' ? (msg._data && msg._data.filename) : '');
-  const filename = `${stamp(ts)}__${dir}__${sanitize(chatName)}__${id.replace(/[^A-Za-z0-9]/g, '').slice(-10)}.${ext}`;
+  // The tag comes from the message's own id, and a name another record holds
+  // is never taken: see media-name.js for the album that was being lost.
+  const mediaName = require('./media-name');
+  const filename = mediaName.unused(`${stamp(ts)}__${dir}__${sanitize(chatName)}__${mediaName.tagFor(msg, id)}.${ext}`, (name) => store.hasFilename(name));
   const buf = Buffer.from(media.data, 'base64');
 
   // Async writes so a slow cloud-drive write doesn't block the shared event loop
@@ -584,7 +587,9 @@ async function saveMediaMessage(msg, chatObj) {
     docName: msg.type === 'document' ? (msg._data && msg._data.filename) || '' : '',
     cloud: !!cloudTarget && destination === cloudTarget,
   };
-  store.addRecord(rec);
+  // The index not taking the record (disk full, drive gone) is a storage
+  // problem like the file write above, not a sign that WhatsApp changed.
+  try { store.addRecord(rec); } catch (e) { e.storage = true; throw e; }
   return rec;
 }
 

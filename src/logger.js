@@ -13,11 +13,17 @@ let stream = null;
 let written = 0;
 let maxBytes = 5 * 1024 * 1024;
 let rotating = false;
+// Lines printed while the file is being swapped. There is no stream to write
+// to for that moment, and they used to be dropped.
+let held = [];
 
 function open() {
   fs.mkdirSync(paths.LOGS_DIR, { recursive: true });
   try { written = fs.statSync(FILE).size; } catch (_) { written = 0; }
   stream = fs.createWriteStream(FILE, { flags: 'a' });
+  // A log that cannot be written (disk full, folder gone) must not take the
+  // engine down with an unhandled stream error.
+  stream.on('error', () => {});
 }
 
 // The rename has to wait for the write stream to actually close: on Windows the
@@ -37,6 +43,8 @@ function rotate() {
     try { fs.renameSync(FILE, PREV); } catch (_) {}
     open();                          // reopens a fresh FILE; written := 0
     rotating = false;
+    const lines = held; held = [];
+    for (const text of lines) { try { stream.write(text); written += Buffer.byteLength(text); } catch (_) {} }
   };
   try { closing.end(swap); } catch (_) { swap(); }
 }
@@ -56,6 +64,7 @@ function init({ maxMB } = {}) {
       original(...args);
       const text = `${new Date().toISOString()} ${level === 'log' ? 'info ' : level} ${args.map(render).join(' ')}\n`;
       try {
+        if (!stream) { if (held.length < 5000) held.push(text); return; }
         stream.write(text);
         written += Buffer.byteLength(text);
         if (written >= maxBytes) rotate();

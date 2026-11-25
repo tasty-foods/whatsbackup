@@ -132,6 +132,13 @@ async function run(from, home, onProgress = () => {}) {
     onProgress({ step: 'session', state: 'start', bytes: src.sessionBytes });
     steps.push(['session', await robocopy(path.join(from, '.wwebjs_auth'), targets.session, onProgress, 'session')]);
   }
+  // This install's engine has already opened a database of its own here and
+  // left its write-ahead files behind. Beside the database about to be copied
+  // in they belong to the wrong file: SQLite applied them to it, and the
+  // imported messages read as none (and were then truncated away).
+  if (fs.existsSync(path.join(from, 'data', 'messages.db'))) {
+    for (const leftover of ['messages.db-wal', 'messages.db-shm']) { try { fs.rmSync(path.join(targets.data, leftover), { force: true }); } catch (_) {} }
+  }
   steps.push(['data', await robocopy(path.join(from, 'data'), targets.data, onProgress, 'data')]);
   steps.push(['images', await robocopy(path.join(from, 'media', 'images'), targets.images, onProgress, 'images')]);
 

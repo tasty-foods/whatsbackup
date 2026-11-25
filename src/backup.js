@@ -102,7 +102,18 @@ async function onCloud(rec) {
   return on;
 }
 
-async function status({ ids = true } = {}) {
+// The walk below stats files for every record whose answer has expired, so
+// two callers asking at once (the dashboard's poll and an open Settings pane)
+// share one walk instead of doing it twice over.
+const statusRuns = new Map();
+function status({ ids = true } = {}) {
+  const key = ids ? 'ids' : 'counts';
+  if (!statusRuns.has(key)) statusRuns.set(key, readStatus({ ids }).finally(() => statusRuns.delete(key)));
+  return statusRuns.get(key);
+}
+const lastKnown = (rec) => { const hit = known.get(rec.id); return !!(hit && hit.on); };
+
+async function readStatus({ ids = true } = {}) {
   const configured = !!cfg.CLOUD_ROOT;
   const avail = await available();
   const hidden = store.hiddenIds();
@@ -115,8 +126,11 @@ async function status({ ids = true } = {}) {
     byKind[k] = byKind[k] || { total: 0, onCloud: 0 };
     byKind[k].total++;
     // With no drive configured nothing is on the cloud and that is the answer;
-    // with one configured but away, the last known answers stand.
-    const here = configured && await onCloud(r);
+    // with one configured but away, the last known answers stand — however
+    // old. Asking a drive that is not there answered "no" for every file, so
+    // two minutes after it dropped off the whole library read as not backed
+    // up, and stayed so for a while after it came back.
+    const here = configured && (avail ? await onCloud(r) : lastKnown(r));
     if (here) { on++; byKind[k].onCloud++; } else onlyHere.push(r.id);
   }
   return {

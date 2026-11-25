@@ -82,3 +82,37 @@ test('an unavailable cloud folder is not created by a status read', async t => {
   assert.equal(await f.api.available(), false);
   assert.equal(fs.existsSync(f.cfg.CLOUD_ROOT), false);
 });
+
+test('while the cloud folder is away the last known copies still count, and are checked again when it returns', async t => {
+  const f = fixture(t), one = f.add('one'), two = f.add('two');
+  await f.api.sweep();
+  assert.equal((await f.api.status()).onCloud, 2);
+  // The drive drops off.
+  const parked = f.cfg.CLOUD_ROOT + '-away';
+  fs.renameSync(f.cfg.CLOUD_ROOT, parked);
+  f.advance(31000);                                   // the availability probe looks again
+  let s = await f.api.status();
+  assert.deepEqual([s.available, s.onCloud, s.onlyHere], [false, 2, 0]);
+  f.advance(150000);                                  // well past how long a "yes" is trusted
+  s = await f.api.status();
+  assert.deepEqual([s.available, s.onCloud, s.onlyHere], [false, 2, 0]);
+  assert.deepEqual([...s.onlyHereIds], []);         // spread: the array comes from the sandbox's realm
+  // Back again, one copy gone meanwhile: the folder is asked once more.
+  fs.renameSync(parked, f.cfg.CLOUD_ROOT);
+  fs.unlinkSync(f.cloud(two));
+  f.advance(31000);
+  s = await f.api.status();
+  assert.deepEqual([s.available, s.onCloud, s.onlyHere], [true, 1, 1]);
+  assert.deepEqual([...s.onlyHereIds], [two.id]);
+  assert.equal(await f.api.onCloud(one), true);
+});
+
+test('two status requests at once share one walk of the library', async t => {
+  const f = fixture(t);
+  for (let i = 0; i < 300; i++) f.add('p' + i);
+  const [a, b, counts] = await Promise.all([f.api.status(), f.api.status(), f.api.status({ ids: false })]);
+  assert.equal(a, b);                                 // the same answer object, read once
+  assert.equal(a.onlyHere, 300);
+  assert.equal(counts.onlyHereIds, undefined);
+  assert.notEqual(await f.api.status(), a);           // a later request reads afresh
+});
