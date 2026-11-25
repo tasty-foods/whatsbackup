@@ -1,5 +1,11 @@
 # WhatsBackUp
 
+Version 2.4.2 can keep a daily copy of your conversations and the archive
+index in the cloud folder, imports a chat's history much further back, lets
+you transcribe a single voice note by hand, and adds one **AI strength**
+choice (Light, Balanced, Strong) for OpenAI Auto. The chat list opens on the
+most recent chat. See [AUDIT.md](AUDIT.md).
+
 Version 2.4.1 makes large archives fast and safer. The engine no longer
 freezes for seconds on the chat list and AI coverage polls, two photos sent
 together to a group no longer overwrite each other, and "Remove sample images"

@@ -82,6 +82,8 @@ const server = app.listen(cfg.PORT, '127.0.0.1', () => {
 
   // What is on pCloud is checked, not assumed; what is not gets copied.
   try { require('./backup').init(); } catch (e) { console.error('[backup] failed to start:', e.message); }
+  // The conversations and the index follow, once a day, when that is switched on.
+  try { require('./archive-backup').init(); } catch (e) { console.error('[archive-backup] failed to start:', e.message); }
 
   // Run the history import on a schedule when one is set. Checked every ten
   // minutes rather than timed exactly: the machine sleeps, and a missed hour

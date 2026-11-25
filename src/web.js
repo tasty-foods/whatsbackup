@@ -76,8 +76,9 @@ const SETTING_SPEC = {
   captureReceived: { type: 'bool' },
   captureGroups: { type: 'bool' },
   captureConversations: { type: 'bool' },
+  backupConversations: { type: 'bool' },
   excludedChats: { type: 'list' },
-  backfillLimit: { type: 'int', min: 50, max: 5000 },
+  backfillLimit: { type: 'int', min: 50, max: 100000 },
   autoImportHours: { type: 'int', min: 0, max: 168 },
   downloadTimeoutSec: { type: 'int', min: 10, max: 600, restart: true },
   startWithWindows: { type: 'bool' },
@@ -96,6 +97,7 @@ const SETTING_SPEC = {
   aiBaseUrl: { type: 'path' },
   aiOpenaiApiMode: { type: 'enum', values: ['auto', 'responses', 'chat'] },
   aiOpenaiModelMode: { type: 'enum', values: ['manual', 'auto'] },
+  aiOpenaiStrength: { type: 'enum', values: ['light', 'balanced', 'strong'] },
   aiOpenaiReasoningEffort: { type: 'enum', values: ['auto', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] },
   aiMode: { type: 'enum', values: ['manual', 'assist', 'auto'] },
   aiAnalyseImages: { type: 'bool' },
@@ -621,6 +623,14 @@ function createApp() {
   app.post('/api/backup/organize/preview',sameOrigin,async(_req,res)=>{try{res.json(await organizer.preview());}catch(e){res.status(400).json({error:e.message});}});
   for(const action of ['start','undo','stop'])app.post('/api/backup/organize/'+action,sameOrigin,(_req,res)=>{const r=organizer[action]();res.status(r.ok?200:409).json(r);});
 
+  // ---- Conversations and the index, copied to the cloud folder ----
+  const archiveBackup = require('./archive-backup');
+  app.get('/api/archive-backup', (req, res) => res.json(archiveBackup.status()));
+  app.post('/api/archive-backup/run', sameOrigin, async (req, res) => {
+    try { res.json(await archiveBackup.run({ force: !!(req.body && req.body.force), reason: 'asked' })); }
+    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+
   // ---- Clean up ----
   const cleanup = require('./cleanup');
   app.get('/api/cleanup/exact',(_req,res)=>res.json(cleanup.exactStatus()));
@@ -685,7 +695,8 @@ function createApp() {
   app.get('/api/content/item/:id', (req, res) => {
     const rec = store.get(req.params.id);
     if (!rec) return res.status(404).json({ error: 'File not found.' });
-    const row = ai.store.getLabel(rec.kind === 'document' ? 'document' : rec.kind === 'video' ? 'video' : 'image', rec.id);
+    // A voice note's label is filed under "audio"; looked up as an image it was never found.
+    const row = ai.store.getLabel(require('./ai/label').kindOf(rec), rec.id);
     res.json({ label: row?.label || null, current: require('./ai/label').currentLabel(row) });
   });
   app.get('/api/content/issues', (req, res) => res.json([...require('./content/documents').status().issues, ...ai.store.db().prepare("SELECT type,ref_id,state,error FROM ai_jobs WHERE state IN ('error','skipped') ORDER BY updated_at DESC LIMIT 25").all().map(row => ({ ...row, name: store.get(row.ref_id)?.docName || store.get(row.ref_id)?.chat || 'Archived item' }))].slice(0, 25)));

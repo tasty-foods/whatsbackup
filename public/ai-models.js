@@ -107,7 +107,7 @@
     originalAnchor = document.createComment('original model field position'); modelRow.after(originalAnchor);
     panel = document.createElement('section'); panel.id = 'ai-model-picker'; panel.className = 'ai-model-picker'; panel.hidden = true; panel.setAttribute('aria-label', 'OpenAI model selection');
     panel.innerHTML = `<label class="preference-row ai-model-mode"><span><b>Model selection</b></span><select id="set-aiOpenaiModelMode" class="txt"><option value="auto">Auto (choose for each job)</option><option value="manual" selected>Choose a model myself</option></select></label>
-      <div id="ai-model-auto-summary" class="ai-model-auto-summary" hidden><p>Chooses an available OpenAI model for each job. Keeps your manual choice for later.</p><div id="ai-model-auto-routes" class="ai-model-auto-routes"></div><p id="ai-model-auto-status" class="muted small" role="status">Availability is checked when work starts.</p><button id="ai-model-auto-refresh" type="button" class="btn small">Refresh routing summary</button></div>
+      <div id="ai-model-auto-summary" class="ai-model-auto-summary" hidden><p>Chooses an available OpenAI model for each job. Keeps your manual choice for later.</p><label class="preference-row ai-model-strength"><span><b>AI strength</b><small id="ai-model-strength-note">Each job on the cheapest model that does it well.</small></span><select id="set-aiOpenaiStrength" class="txt"><option value="light">Light · lowest cost</option><option value="balanced" selected>Balanced · recommended</option><option value="strong">Strong · best understanding</option></select></label><div id="ai-model-auto-routes" class="ai-model-auto-routes"></div><p id="ai-model-auto-status" class="muted small" role="status">Availability is checked when work starts.</p><button id="ai-model-auto-refresh" type="button" class="btn small">Refresh routing summary</button></div>
       <div id="ai-model-manual-choice"><div class="ai-model-heading"><label for="ai-model-search">Models available to your OpenAI key</label><button id="ai-model-refresh" type="button" class="btn small">Refresh models</button></div>
       <input id="ai-model-search" type="search" class="txt" placeholder="Search model names or types…" aria-label="Search available OpenAI models" autocomplete="off" spellcheck="false">
       <select id="ai-model-catalogue" class="txt ai-model-catalogue" size="7" aria-label="OpenAI model catalogue" aria-describedby="ai-model-catalogue-status"></select>
@@ -121,6 +121,17 @@
     $('ai-model-refresh').addEventListener('click', () => refresh(true));
     $('set-aiOpenaiModelMode').addEventListener('change', () => { changed(); if (!automatic() && catalogueProvider !== 'openai') refresh(); });
     $('ai-model-auto-refresh').addEventListener('click', () => { routingLoaded = false; refreshAutoSummary(); });
+    // The one choice that needs no knowledge of models: saved the moment it
+    // is changed, and the list below shows at once which model does what.
+    const STRENGTH_NOTES = { light: 'Lowest cost. Everyday photos and chats on the light model; the strongest model is never used.', balanced: 'Each job on the cheapest model that does it well. Stronger models only for video, scans, long documents and hard questions.', strong: 'Best understanding everywhere. Photos and chats cost about ten times more than Balanced; your monthly budget still applies.' };
+    const strengthNote = () => { $('ai-model-strength-note').textContent = STRENGTH_NOTES[$('set-aiOpenaiStrength').value] || STRENGTH_NOTES.balanced; };
+    $('set-aiOpenaiStrength').addEventListener('change', async () => {
+      strengthNote();
+      try { await requestJson('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ aiOpenaiStrength: $('set-aiOpenaiStrength').value }) }); $('ai-model-auto-status').textContent = 'Saved.'; }
+      catch (e) { $('ai-model-auto-status').textContent = 'Not saved: ' + e.message; return; }
+      routingLoaded = false; refreshAutoSummary();
+    });
+    new MutationObserver(strengthNote).observe($('ai-model-auto-summary'), { attributes: true, attributeFilter: ['hidden'] });
     $('ai-model-catalogue').addEventListener('change', () => {
       const choice = catalogue.find(model => model.id === $('ai-model-catalogue').value && model.selectable); if (!choice) return;
       input.value = choice.id; input.dispatchEvent(new Event('input', { bubbles: true })); changed();

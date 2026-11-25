@@ -126,8 +126,8 @@
         <div class="chipsrow" id="convo-projects"></div>
         <label class="sortlbl">Sort by
           <select id="convo-sort">
-            <option value="project">Project</option>
             <option value="recent">Most recent</option>
+            <option value="project">Project</option>
             <option value="name">Name A–Z</option>
           </select>
         </label>
@@ -685,7 +685,14 @@
             <div class="sec-title">Conversations</div>
             <label class="row toggle"><input type="checkbox" id="set-captureConversations" /><span class="switch"></span>
               <span>Store message text so you can read and search conversations</span></label>
-            <p class="muted small">Message text is kept <b>only on this PC</b> — never copied to your cloud folder.</p>
+            <p class="muted small" id="convo-where">Message text is kept <b>only on this PC</b> unless you switch on the copy below.</p>
+            <label class="row toggle"><input type="checkbox" id="set-backupConversations" /><span class="switch"></span>
+              <span>Keep a copy of conversations and the archive index in the cloud folder</span></label>
+            <p class="muted small">Once a day, into <b>Archive data</b> in your cloud folder, with the previous day's copy kept beside it. This is what lets a new PC get every message back, not only the files. Your settings and keys are never copied.</p>
+            <div class="row wrap">
+              <button id="btn-archive-backup" class="btn">Copy now</button>
+              <span id="archive-backup-status" class="muted small" role="status"></span>
+            </div>
             <p class="muted small">Messages that arrive while this PC is off are caught up on every connect and every twenty minutes after.</p>
             <div class="row wrap">
               <button id="btn-catchup" class="btn">Catch up now</button>
@@ -735,10 +742,10 @@
         <div class="pane hidden" data-pane="history">
           <div class="sec">
             <div class="sec-title">Import old images, videos &amp; conversations</div>
-            <p class="muted small">Pulls media and message history already in your chats, as far back as WhatsApp lets a linked device see. Safe to run anytime — anything already saved is skipped.</p>
+            <p class="muted small">Pulls media and message history already in your chats, as far back as WhatsApp lets a linked device see. Safe to run anytime — anything already saved is skipped. For a chat's whole history, enter a large number (such as 50000) and keep the phone online: WhatsApp fetches the older part from the phone, and a long chat can take minutes.</p>
             <div class="row">
               <label class="lbl">Scan up to
-                <input id="backfill-limit" type="number" min="50" max="5000" step="50" class="num" /> messages per chat
+                <input id="backfill-limit" type="number" min="50" max="100000" step="50" class="num" /> messages per chat
               </label>
             </div>
             <div class="row">

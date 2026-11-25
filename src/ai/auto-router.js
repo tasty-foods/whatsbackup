@@ -11,6 +11,8 @@ const MODELS = Object.freeze({
   'gpt-6-luna': { role: 'routine', label: 'Luna' },
   'gpt-6.1-terra': { role: 'visual', label: 'Terra' },
   'gpt-6.1-sol': { role: 'complex', label: 'Sol' },
+  // Same price as 6.1 Sol on OpenAI's pricing page (checked 2026-11-25); used first when the account lists it.
+  'gpt-6.2-sol': { role: 'complex', label: 'Sol 6.2' },
   'gpt-5-mini': { role: 'routine', label: 'GPT-5 Mini' },
   'gpt-5': { role: 'complex', label: 'GPT-5' },
 });
@@ -97,12 +99,19 @@ function describePlan(options = {}) {
   // price and compatibility have been verified, even if an alias looks similar.
   const routine = available.has('gpt-6-luna') ? ['gpt-6-luna'] : ['gpt-5-mini'];
   const visual = ['gpt-6.1-terra'];
-  const complex = available.has('gpt-6.1-sol') ? ['gpt-6.1-sol'] : ['gpt-5'];
-  const ordered = meta.role === 'complex' ? [...complex, ...visual, ...routine]
+  const sol = available.has('gpt-6.2-sol') || available.has('gpt-6.1-sol');
+  const complex = sol ? ['gpt-6.2-sol', 'gpt-6.1-sol'] : ['gpt-5'];
+  // One plain choice instead of a model list. Balanced is the routing above:
+  // each job on the cheapest model that does it well. Light never reaches for
+  // the strongest model; Strong moves every job one step up.
+  const strength = ['light', 'strong'].includes(options.strength) ? options.strength : 'balanced';
+  const ordered = strength === 'light' ? (meta.role === 'routine' ? [...routine, ...visual] : [...visual, ...routine])
+    : strength === 'strong' ? (meta.role === 'routine' ? [...visual, ...complex, ...routine] : [...complex, ...visual, ...routine])
+    : meta.role === 'complex' ? [...complex, ...visual, ...routine]
     : meta.role === 'visual' ? [...visual, ...routine, ...complex] : [...routine, ...visual, ...complex];
   const legacySuppressed = options.manualModel === 'gpt-5-mini' && available.has('gpt-6-luna')
-    || options.manualModel === 'gpt-5' && available.has('gpt-6.1-sol');
-  if (!legacySuppressed && Object.hasOwn(MODELS, options.manualModel) && available.has(options.manualModel)) ordered.push(options.manualModel);
+    || options.manualModel === 'gpt-5' && sol;
+  if (strength === 'balanced' && !legacySuppressed && Object.hasOwn(MODELS, options.manualModel) && available.has(options.manualModel)) ordered.push(options.manualModel);
   for (const id of [...new Set(ordered)]) {
     if (!available.has(id)) continue;
     const model = MODELS[id];
@@ -115,6 +124,8 @@ function describePlan(options = {}) {
     if (!Number.isFinite(estimated) || reserve > remaining) continue;
     if (budgetMode === 'careful' && model.role === 'complex' && reserve > remaining * 0.15) continue;
     let reason = model.role === meta.role ? meta.why : `An available ${model.label} alternative for this ${meta.role} task.`;
+    if (strength === 'light' && model.role !== meta.role) reason = `AI strength is set to Light, so ${model.label} does this instead of a dearer model.`;
+    if (strength === 'strong' && model.role !== meta.role) reason = `AI strength is set to Strong, so ${model.label} does this instead of a lighter model.`;
     if (id === 'gpt-5-mini') reason += ' Luna is unavailable; GPT-5 Mini is the known-price lower-cost alternative.';
     if (id === 'gpt-5') reason += ' Sol is unavailable; GPT-5 is the known-price reasoning alternative.';
     if (budgetMode === 'tight') reason += ' Low remaining budget keeps Auto on a lower-cost model.';

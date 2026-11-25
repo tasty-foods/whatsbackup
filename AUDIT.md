@@ -1,3 +1,29 @@
+# Conversations in the cloud folder, deeper history, AI strength — 2.4.2
+
+- Conversations were up to date but looked stale: the chat list opened sorted
+  by project. It now opens on Most recent.
+- New opt-in switch (Settings, What to save): once a day the conversations
+  database and the archive index are copied to "Archive data" in the cloud
+  folder, with the previous copy kept beside them. The database is read with
+  SQLite's online backup, written beside the old copy and renamed into place.
+  A nearly empty archive never replaces a much larger copy unless told to.
+  Settings and keys are not copied. There is no restore button; the folder
+  holds a READ ME with the manual steps.
+- History import accepts up to 100,000 messages per chat (was 5,000) and
+  allows a long chat up to 15 minutes. How far back WhatsApp serves a linked
+  device was not verified against a live link.
+- "Transcribe this recording" in the viewer works for one voice note or audio
+  file even when automatic transcription is off; an explicitly chosen file is
+  no longer skipped because its kind is switched off.
+- AI strength for OpenAI Auto: Light never uses the strongest model, Balanced
+  is the previous routing, Strong moves every job one step up. Saved on
+  change. gpt-6.2-sol is used ahead of gpt-6.1-sol when the account lists it
+  (same price on OpenAI's pricing page, checked 2026-11-25). Astra models are
+  still never chosen automatically. Budget rules are unchanged.
+
+260 automated checks pass. Browser checks used the seeded dev archive with a
+local folder standing in for the cloud drive; OpenAI itself was not called.
+
 # Speed, stability and polish — 2.4.1
 
 Four read-only audits (engine and desktop shell, capture sources, AI layer,

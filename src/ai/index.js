@@ -77,6 +77,10 @@ let state = {
   current: '',            // what the runner is on, for the progress line
 };
 let cancelRequested = false;
+// Files a person pointed at for this run ("Index this file", "Transcribe").
+// Asking for one by name overrides the switch that says its kind is not read
+// automatically.
+let askedFor = new Set();
 
 // What the last "Test connection" learned, and what a run learns the hard way.
 // Keyed by the exact endpoint, because the answer changes with the model name.
@@ -135,7 +139,7 @@ async function prepareAutoRouting(force = false, preview = false) {
 
 function autoPlan(needs = {}) {
   const base = configFor('openai');
-  return require('./auto-router').plan({ task: needs.task, needs, request: needs.request, record: needs.record, models: autoAvailability.models, manualModel: base.model, budgetRemaining: remainingBudget() });
+  return require('./auto-router').plan({ task: needs.task, needs, request: needs.request, record: needs.record, models: autoAvailability.models, manualModel: base.model, budgetRemaining: remainingBudget(), strength: settings.read().aiOpenaiStrength });
 }
 
 function autoRoutingStatus(preview = false) {
@@ -440,7 +444,7 @@ function queueBacklog(ids, { includeChats = true } = {}) {
   label.eachCandidate((rec, kind, reason) => {
     if (reason) return;
     if (ids && !ids.has(rec.id)) return;
-    if (!kindOn(s, kind)) return;
+    if (!ids && !kindOn(s, kind)) return;
     if (label.currentLabel(ai.labelMark(kind, rec.id), s)) return;
     jobs.push({ type: JOB_FOR_KIND[kind], refId: rec.id });
   });
@@ -579,7 +583,7 @@ async function runJobOnChain(job) {
 async function runOneJob(cfg, job) {
   const s = settings.read();
   const off = { label_image: 'image', label_video: 'video', label_document: 'document', transcribe_audio: 'audio' }[job.type];
-  if (off && !kindOn(s, off)) return { skipped: 'This content type is switched off in AI settings.' };
+  if (off && !kindOn(s, off) && !askedFor.has(job.ref_id)) return { skipped: 'This content type is switched off in AI settings.' };
   if (job.type === 'label_chat' && s.aiAnalyseChats === false) return { skipped: 'This content type is switched off in AI settings.' };
   if (job.type === 'topics_chat' && s.aiTopics === false) return { skipped: 'Topics are switched off in AI settings.' };
   if (job.type === 'label_image') {
@@ -852,6 +856,7 @@ async function run({ arrangeOnly = false, indexOnly = false, ids = null } = {}) 
   const cfg = config();
   if (cfg.keyRequired && !hasKey()) return { ok: false, message: 'No API key has been set.' };
   const selection = { ids: ids ? new Set(ids) : null, types: indexOnly || ids ? MEDIA_JOBS : null };
+  askedFor = selection.ids || new Set();
 
   cancelRequested = false;
   settings.write({ aiPaused: false });

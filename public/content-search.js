@@ -97,7 +97,9 @@ window.ContentSearch = (() => {
     const hit = F.q === term ? hits.get(rec.id) : null;
     const box = document.createElement('div'); box.className = 'content-viewer'; els.lbMeta.append(box);
     const button = document.createElement('button'); button.className = 'btn small'; button.textContent = 'Index this file'; button.onclick = () => index([rec.id]);
-    if (['image', 'video', 'document'].includes(rec.kind)) box.append(button);
+    const spoken = rec.kind === 'voice' || rec.kind === 'audio';
+    if (spoken) button.textContent = 'Transcribe this recording';
+    if (['image', 'video', 'document'].includes(rec.kind) || spoken) box.append(button);
     try {
       const data = await requestJson('/api/content/item/' + encodeURIComponent(rec.id));
       if (lbId !== rec.id || !box.isConnected) return;

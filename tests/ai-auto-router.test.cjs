@@ -66,7 +66,7 @@ test('only models present, selectable and not retired in the account catalogue a
 test('Astra, other providers, fine-tuned and unknown or unpriced snapshots never enter Auto', () => {
   const forbidden = [
     'gpt-6-astra', 'gpt-6-astra-pro', 'ft:gpt-6-luna:org:mine:123',
-    'gpt-6-luna-2099-01-01', 'gpt-6-sol', 'gpt-6.2-sol', 'gpt-6-luna-premium',
+    'gpt-6-luna-2099-01-01', 'gpt-6-sol', 'gpt-6.2-astra', 'gpt-6-luna-premium',
     'openai/gpt-6-luna', 'claude-sonnet-5', 'gemini-3.8-flash', 'gpt-image-1',
   ];
   for (const manualModel of forbidden) {
@@ -136,4 +136,24 @@ test('planning is local and leaves manual settings, request and account models u
     assert.equal(options.manualModel, 'gpt-6-astra', 'manual selection remains the caller\'s choice');
     assert.ok(Object.isFrozen(MODELS));
   } finally { global.fetch = originalFetch; }
+});
+
+test('AI strength moves every job a step down or up, and the newest Sol is used when the account lists it', () => {
+  const models = catalog('gpt-6-luna', 'gpt-6.1-terra', 'gpt-6.1-sol');
+  const first = (strength, input) => plan({ models, budgetRemaining: 50, strength, ...input })[0].model;
+  const photo = { task: 'label_image' }, video = { task: 'label_video' }, hard = { task: 'finals_set' };
+  // Balanced is unchanged, and is what any unknown value means.
+  assert.deepEqual([first('balanced', photo), first('balanced', video), first('balanced', hard)], ['gpt-6-luna', 'gpt-6.1-terra', 'gpt-6.1-sol']);
+  assert.deepEqual([first(undefined, photo), first('nonsense', hard)], ['gpt-6-luna', 'gpt-6.1-sol']);
+  // Light never reaches the strongest model.
+  assert.deepEqual([first('light', photo), first('light', video), first('light', hard)], ['gpt-6-luna', 'gpt-6.1-terra', 'gpt-6.1-terra']);
+  assert.ok(!plan({ models, budgetRemaining: 50, strength: 'light', ...hard }).some((c) => c.model === 'gpt-6.1-sol'));
+  // Strong: one step up everywhere.
+  assert.deepEqual([first('strong', photo), first('strong', video), first('strong', hard)], ['gpt-6.1-terra', 'gpt-6.1-sol', 'gpt-6.1-sol']);
+  // A low budget still wins over Strong.
+  assert.equal(plan({ models, budgetRemaining: 0.25, strength: 'strong', ...video })[0].model, 'gpt-6-luna');
+  // The newer Sol first where listed, the older one behind it.
+  const newer = catalog('gpt-6-luna', 'gpt-6.1-terra', 'gpt-6.1-sol', 'gpt-6.2-sol');
+  assert.deepEqual(plan({ models: newer, budgetRemaining: 50, ...hard }).map((c) => c.model).slice(0, 2), ['gpt-6.2-sol', 'gpt-6.1-sol']);
+  assert.equal(plan({ models: catalog('gpt-6-luna', 'gpt-6.2-sol'), budgetRemaining: 50, manualModel: 'gpt-5', ...hard })[0].model, 'gpt-6.2-sol');
 });

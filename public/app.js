@@ -832,7 +832,7 @@ const FIELDS = {
   uiReduceMotion: 'bool', uiVideoPreview: 'bool', uiShowCaptions: 'bool',
   captureImages: 'bool', captureVideos: 'bool', captureVoice: 'bool', captureAudio: 'bool',
   captureDocuments: 'bool', captureStickers: 'bool',
-  captureSent: 'bool', captureReceived: 'bool', captureGroups: 'bool', captureConversations: 'bool',
+  captureSent: 'bool', captureReceived: 'bool', captureGroups: 'bool', captureConversations: 'bool', backupConversations: 'bool',
   mirrorImages: 'bool', startWithWindows: 'bool', startMinimized: 'bool', closeToTray: 'bool',
   notifyOnProblem: 'bool', autoUpdate: 'bool',
   mediaRoot: 'text', cloudRoot: 'text', excludedChats: 'lines',
@@ -842,7 +842,7 @@ const FIELDS = {
   aiAnalyseVideos: 'bool', aiAnalyseDocuments: 'bool', aiVideoFrames: 'int', aiDocumentPages: 'int', aiOcrPages: 'int', aiResumeOnLaunch: 'bool', performanceMode: 'enum',
   aiTranscribeAudio: 'bool', aiTopics: 'bool', aiEmbeddings: 'bool', aiFinals: 'bool',
   aiProvider: 'text', aiModel: 'text', aiBaseUrl: 'text', aiMode: 'text', aiMonthlyBudget: 'int',
-  aiOpenaiApiMode: 'text', aiOpenaiReasoningEffort: 'text', aiOpenaiModelMode: 'text',
+  aiOpenaiApiMode: 'text', aiOpenaiReasoningEffort: 'text', aiOpenaiModelMode: 'text', aiOpenaiStrength: 'text',
   chatgptEnabled: 'bool', chatgptScanHours: 'int', chatgptUploads: 'bool', chatgptGenerated: 'bool', chatgptSearchChats: 'bool',
   geminiEnabled: 'bool', geminiScanHours: 'int',
   googlePhotosEnabled: 'bool', googlePhotosScanHours: 'int',
@@ -1133,6 +1133,34 @@ function watchBackfill() {
 (function bindSyncButtons() {
   const cu = $('btn-catchup'), sc = $('btn-sync-contacts'), out = $('sync-status');
   if (!cu || !sc) return;
+  // The copy of conversations in the cloud folder: when it was last made, and a button to make one now.
+  const ab = $('btn-archive-backup'), abOut = $('archive-backup-status');
+  const showArchiveBackup = async () => {
+    if (!abOut) return;
+    try {
+      const s = await requestJson('/api/archive-backup');
+      abOut.textContent = !s.configured ? 'Choose a cloud folder first (Settings → Where).'
+        : s.running ? 'Copying…'
+        : s.lastError ? 'Last attempt: ' + s.lastError
+        : s.lastAt ? 'Last copied ' + new Date(s.lastAt).toLocaleString() + ' · ' + s.dir
+        : s.enabled ? 'No copy yet. The first one is made within half an hour, or press Copy now.' : 'Not copied. Switch it on and save, or press Copy now for a single copy.';
+    } catch (e) { abOut.textContent = ''; }
+  };
+  if (ab) {
+    ab.addEventListener('click', async () => {
+      ab.disabled = true; abOut.textContent = 'Copying conversations and the index…';
+      const send = (force) => requestJson('/api/archive-backup/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ force }) });
+      try { await send(false); await showArchiveBackup(); }
+      catch (e) {
+        if (/much larger/.test(e.message) && confirm(e.message + String.fromCharCode(10, 10) + 'Replace the copy in the cloud folder with this PC\'s archive? The copy it replaces is kept as "previous".')) {
+          try { await send(true); await showArchiveBackup(); } catch (e2) { abOut.textContent = e2.message; }
+        } else abOut.textContent = e.message;
+      }
+      ab.disabled = false;
+    });
+    document.querySelectorAll('[data-settings-tab], #open-settings, .settabs button').forEach((b) => b.addEventListener('click', () => setTimeout(showArchiveBackup, 400)));
+    showArchiveBackup();
+  }
   cu.addEventListener('click', async () => {
     cu.disabled = true; out.textContent = 'Checking every chat that moved…';
     try {
@@ -1406,7 +1434,7 @@ const Convo = (function () {
   // and the select alike. The project sort is the grouped list with headings;
   // the others are flat.
   let project = '';
-  let sort = 'project';
+  let sort = 'recent';   // newest chat first, the way the phone lists them; "Project" is one choice away
   let lastChats = [];
   const projectOf = (id) => (typeof AI !== 'undefined' && AI.chatLabelFor(id)) || null;
 
@@ -1939,6 +1967,7 @@ const AI = (function () {
       if (s.aiBaseUrl) $$('set-aiBaseUrl').value = s.aiBaseUrl;
       $$('set-aiOpenaiApiMode').value = s.aiOpenaiApiMode || 'auto';
       $$('set-aiOpenaiModelMode').value = s.aiOpenaiModelMode || 'manual';
+      if ($$('set-aiOpenaiStrength')) $$('set-aiOpenaiStrength').value = s.aiOpenaiStrength || 'balanced';
       $$('set-aiOpenaiReasoningEffort').value = s.aiOpenaiReasoningEffort || 'auto';
       window.AiModels?.setSaved({ provider: s.aiProvider, model: s.aiModel, modelMode: s.aiOpenaiModelMode || 'manual', baseUrl: s.aiBaseUrl, apiMode: s.aiOpenaiApiMode || 'auto', effort: s.aiOpenaiReasoningEffort || 'auto' });
       if (s.aiMode) $$('set-aiMode').value = s.aiMode;
@@ -2081,6 +2110,7 @@ const AI = (function () {
       aiBaseUrl: $$('set-aiBaseUrl').value.trim(),
       aiOpenaiApiMode: $$('set-aiOpenaiApiMode').value,
       aiOpenaiModelMode: $$('set-aiOpenaiModelMode').value,
+      aiOpenaiStrength: $$('set-aiOpenaiStrength') ? $$('set-aiOpenaiStrength').value : 'balanced',
       aiOpenaiReasoningEffort: $$('set-aiOpenaiReasoningEffort').value,
       aiMode: $$('set-aiMode').value,
       aiAnalyseImages: $$('set-aiAnalyseImages').checked,

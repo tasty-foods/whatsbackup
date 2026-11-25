@@ -709,7 +709,10 @@ async function runBackfill(limitPerChat) {
     for (const chat of chats) {
       const name = (chat && chat.name) || (chat && chat.id && chat.id.user) || '?';
       let msgs = [];
-      try { msgs = await withTimeout(chat.fetchMessages({ limit }), 30000, 'fetch ' + name); }
+      // Reading far back means asking WhatsApp for one screenful after another:
+      // the time allowed grows with how much was asked for (30 s for the usual
+      // few hundred, up to 15 minutes for a chat's whole history).
+      try { msgs = await withTimeout(chat.fetchMessages({ limit }), Math.max(30000, Math.min(15 * 60000, limit * 40)), 'fetch ' + name); }
       catch (e) { noteSkip(e); console.warn(`[history] skip chat "${name}" (${describeError(e)})`); backfill.doneChats++; continue; }
       const wantConvo = captureConversations();
       const convoRows = [];

@@ -38,6 +38,10 @@ const DEFAULTS = {
   captureGroups: true,
   excludedChats: [],
   captureConversations: true,
+  // Also copy the conversations database and the index to the cloud folder.
+  // Off until asked for: it is the one thing that takes message text off this PC.
+  backupConversations: false,
+  lastArchiveBackupAt: 0,
 
   // History import
   backfillLimit: 400,
@@ -61,6 +65,7 @@ const DEFAULTS = {
   aiBaseUrl: '',
   aiOpenaiApiMode: 'auto',
   aiOpenaiModelMode: 'manual',
+  aiOpenaiStrength: 'balanced',   // light | balanced | strong: which model Auto gives each kind of job
   aiOpenaiReasoningEffort: 'auto',
   aiKeyEnc: '',              // DPAPI ciphertext; the plaintext key is never stored
   aiKeysEnc: {},             // provider -> DPAPI ciphertext, for the fallback chain

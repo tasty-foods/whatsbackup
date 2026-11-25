@@ -346,3 +346,6 @@ html[data-theme=dark] .ai-model-picker .ai-model-catalogue{background:#102018;co
 @media(max-width:940px) { .workspace-nav button,.sidebar-links button { padding-inline:9px; } }
 /* The search card keeps the page's gutter at every width (it had a fixed 28 px). */
 .content-search-panel { margin-inline:var(--ui-space); }
+/* The strength choice shows its whole label. */
+.ai-model-strength select { width:auto; min-width:235px; max-width:100%; }
+.ai-model-strength { margin:4px 0 6px; }
